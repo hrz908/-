@@ -21,6 +21,9 @@ server/.env.local
 # ===== 日志 / 临时文件 =====
 *.log
 
+# 设计稿截图（Ardot 导出的临时产物，不属于源码）
+.ardot-shots/
+
 # ===== 系统 / 编辑器 =====
 .DS_Store
 Thumbs.db
