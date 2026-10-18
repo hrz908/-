@@ -1,0 +1,14 @@
+{
+  "usingComponents": {
+    "t-navbar": "tdesign-miniprogram/navbar/navbar",
+    "t-chat-message": "tdesign-miniprogram/chat-message/chat-message",
+    "t-chat-sender": "tdesign-miniprogram/chat-sender/chat-sender",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-image": "tdesign-miniprogram/image/image",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-toast": "tdesign-miniprogram/toast/toast"
+  }
+}

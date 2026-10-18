@@ -1,0 +1,47 @@
+# 本地开发依赖：PostgreSQL + Redis
+#
+#   docker compose up -d      # 首次会建库并执行 migrations/ 下的 SQL
+#   docker compose down       # 停掉（数据保留在卷里）
+#   docker compose down -v    # 连数据一起清掉
+#
+# 端口映射到宿主机，与 config.go 里的默认 DSN / Redis 地址一致：
+#   postgres://postgres:postgres@localhost:5432/stock_agent?sslmode=disable
+#   127.0.0.1:6379
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stock-agent-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stock_agent
+      TZ: Asia/Shanghai
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 仅首次初始化（数据目录为空时）执行，之后改表请用新的迁移文件
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d stock_agent']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: stock-agent-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  redisdata:

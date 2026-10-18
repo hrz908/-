@@ -1,0 +1,60 @@
+/* 设计变量（取自 Ardot 设计稿） */
+page {
+  --c-bg: #F5F6F8;          /* 页面背景 */
+  --c-blue: #2559EB;        /* 主色：品牌蓝 */
+  --c-ink: #181A1C;         /* 主文字 */
+  --c-gray: #8A8F99;        /* 次要文字 */
+  --c-gray-light: #B0B4BC;  /* 弱文字/占位 */
+  --c-red: #E64545;         /* 涨（红） */
+  --c-green: #16A34A;       /* 跌（绿） */
+  --c-border: #E5E7EB;      /* 输入框描边 */
+  /* 卡片 / AI 气泡共用的浅色面：两处背景要求完全一致，抽出来避免各自写死跑偏。
+     要偏暖一点只改这一行（如 #FDFCFA / #FBF9F5），卡片和气泡会一起变 */
+  --c-card: #FFFFFF;
+  /* 用户气泡底色：比主蓝浅一档。不再更浅是因为气泡里要放白字，
+     淡蓝底配白字会完全看不清 */
+  --c-blue-bubble: #4E7CF3;
+
+  /* 子页面 navbar 返回箭头字号：TDesign 默认 24px，调大到 30px 更好点按。
+     这是 TDesign 官方预留的变量，改这里比用选择器硬改内部样式稳 */
+  --td-navbar-left-arrow-size: 30px;
+
+  height: 100%;
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 子页面 navbar 返回箭头：与右上角系统胶囊左右对称。
+   胶囊是微信画的，右边距固定 10px、不随机型变化；
+   而 TDesign 给返回箭头的默认左边距是 24rpx，rpx 会随屏宽变宽
+   （375px 屏 = 12px，414px 屏 = 13.8px），大屏上就明显比胶囊偏右。
+   这里改回固定 10px，与胶囊右边距一致，左右才对称。
+   用 !important 是因为要覆盖组件内部样式，且这里不该被别的规则影响 */
+.t-navbar__left {
+  margin-left: 10px !important;
+}
+
+/* 标题在整个页面居中。
+   TDesign 默认给标题区写了固定值：left = --td-navbar-right(95px)、
+   width = 187px，也就是居中区域恒为 [95px, 282px]、中心固定在 188.5px。
+   这是按 375px 屏标定的，只有屏宽恰好 375px 时才看着居中；
+   到了 414px 及以上的屏幕，页面中心是 207px，标题会明显偏左。
+
+   改成左右各缩进 --td-navbar-right（TDesign 运行时按真实胶囊宽度算出来的），
+   让标题区的左右边界关于屏幕中线对称，再借组件自带的 justify-content:center 居中。
+   这样任何屏宽下标题中心都正好落在页面中心线上。
+
+   注意：不能图省事写 left:0; right:0 让标题层铺满整行——
+   标题是 absolute，那样会盖在左侧返回箭头/菜单按钮上方，把它们全挡住点不了 */
+.t-navbar__center {
+  left: var(--td-navbar-right, 95px) !important;
+  right: var(--td-navbar-right, 95px) !important;
+  width: auto !important;
+  padding: 0 !important;
+}
+
+/* 不再全局重置 button：TDesign 的 t-button 依赖自身的组件样式，
+   页面级 button 选择器会穿透影响它的默认外观 */

@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/chat/chat",
+    "pages/watchlist/watchlist",
+    "pages/alerts/alerts",
+    "pages/settings/settings",
+    "pages/about/about",
+    "pages/tdiag/tdiag"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "backgroundColor": "#F5F6F8",
+    "backgroundColorTop": "#F5F6F8",
+    "backgroundColorBottom": "#F5F6F8",
+    "navigationBarTextStyle": "black"
+  },
+  "sitemapLocation": "sitemap.json"
+}

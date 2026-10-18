@@ -1,0 +1,23 @@
+{
+  "name": "stock-agent-miniapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "fix:npm": "node scripts/fix-marked.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "marked": "^4.0.0",
+    "tdesign-miniprogram": "^1.17.0",
+    "tinycolor2": "^1.6.0",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@babel/parser": "^8.0.7"
+  }
+}

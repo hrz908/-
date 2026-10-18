@@ -1,0 +1,296 @@
+/* ===== 页面骨架 ===== */
+.page {
+  display: flex;
+  flex-direction: column;
+  /* 用 100% 而非 100vh：vh 是固定像素，键盘弹起时重算会与键盘动画不同步导致跳变 */
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-bg);
+  /* 自身作为定位容器：输入栏用 absolute 而非 fixed，
+     页面转场动画期间不会因 fixed 元素单独定位而与页面错位 */
+  position: relative;
+}
+
+/* ===== 导航栏 ===== */
+.nav-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+}
+
+/* ===== 对话区 ===== */
+/* 高度由 JS 精算并固定为像素值：不随视口变化抖动，也不会被子元素撑开 */
+.chat-wrap {
+  flex: none;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chat-scroll {
+  height: 100%;
+}
+
+/* 水平留白放在滚动内容上，避免贴到屏幕边缘；
+   底部再补 24rpx 内边距，滚到底时最新气泡不至于贴着容器边。
+   overflow: hidden 让容器自成 BFC，子元素的 margin 不会溢出到容器外面 */
+.chat-inner {
+  padding: 0 24rpx 24rpx;
+  overflow: hidden;
+}
+
+/* 组件给每条消息加了 margin-bottom: 32rpx，这个尾巴会一直挂在最后一条下面，
+   导致「下方留白」永远比上方多一截（靠 :last-child 取消不可靠：
+   页面上 :last-child 能不能命中组件根节点，取决于 styleIsolation 的实际表现）。
+   干脆把间距改成 margin-top：
+   - 消息之间仍是 32rpx（只由相邻两条的上边距决定，观感不变）；
+   - 第一条上方是本容器的 32rpx 上边距，这就是它到导航栏的距离；
+   - 最后一条下方彻底为 0（不再是 32rpx），剩下的只有到输入栏的那点布局间距 */
+.chat-inner .t-chat-message {
+  margin-bottom: 0;
+  margin-top: 32rpx;
+}
+
+/* scroll-into-view 锚点：0 高度，仅用于把列表滚到底 */
+.chat-anchor {
+  height: 0;
+}
+
+/* ===== 用户气泡：浅蓝底 + 白字，且不占满整行 ===== */
+/* 组件默认是 .t-chat-message--base .t-chat-content 统一灰底、
+   再用 --base.assistant 覆盖成透明，用户侧沿用灰底；
+   这里只针对 user 侧覆写。多一层 .chat-inner 是为了压过组件内部那条
+   .t-chat-message--base.user .t-chat-content 的优先级
+   （chat-message.json 是 styleIsolation: shared，页面样式可作用于其内部节点） */
+.chat-inner .t-chat-message--base.user .t-chat-content {
+  background-color: var(--c-blue-bubble);
+  /* 只在右对齐（__content align-items: flex-end）下有效：
+     气泡宽度原本按内容一路撑到整行，给个上限后多出来的空间自动落在左侧。
+     想留更多/更少改这个百分比即可 */
+  max-width: 80%;
+  /* 只写 color 不够：真正渲染文字的是内部的 .t-chat-content__user，
+     它用 --td-chat-content-user-text-color 写死了主文本色，继承不到这里的 color。
+     改组件自己的 token 是最稳的做法，变量会继承给内部节点 */
+  --td-chat-content-user-text-color: #fff;
+  color: #fff;
+}
+
+/* 兜底：万一变量没透传下去，直接按内部节点类名再压一次 */
+.chat-inner .t-chat-content__user {
+  color: #fff;
+}
+
+/* ===== AI 气泡：套上 TDesign 的对话消息体 ===== */
+/* 组件对 base 变体的 assistant 侧写死了透明底 + 0 内边距（那是配合左侧头像的裸文本样式），
+   页面已去掉头像，AI 文字就直接糊在背景上了。
+   这里按它给 user 侧的同一套气泡规格补齐：24/32 内边距 + 左上角直角，
+   底色用 --c-card 与结构化卡片一致。
+   多一层 .chat-inner 同样是为了压过组件内部那条 assistant 规则的优先级 */
+.chat-inner .t-chat-message--base.assistant .t-chat-content {
+  /* 与结构化卡片同底：--c-card 就是 .card 的背景色，两者永远一致 */
+  background-color: var(--c-card);
+  padding: 24rpx 32rpx;
+  border-radius: 0 var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx);
+}
+
+/* ===== 结构化卡片：行情卡 / 日 K 表 ===== */
+/* 宽度占满一行：卡在 base 变体里是直接挂在 __detail 下的 slot，
+   外层 __content 是 flex:1（头像已去掉，即整行宽），这里铺满即可 */
+.card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24rpx;
+  /* 与 AI 气泡共用同一个值 */
+  background: var(--c-card);
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 24rpx rgba(24, 26, 28, 0.06);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.card-sub {
+  font-size: 22rpx;
+  color: var(--c-gray);
+}
+
+.card-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+.hero-price {
+  font-size: 48rpx;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.hero-change {
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.card-grid {
+  display: flex;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--c-border);
+}
+
+.grid-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.grid-label {
+  font-size: 22rpx;
+  color: var(--c-gray);
+}
+
+.grid-value {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.card-foot {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--c-border);
+  font-size: 22rpx;
+  color: var(--c-gray);
+}
+
+/* ===== 日 K 表格 ===== */
+.kline-table {
+  margin-top: 16rpx;
+}
+
+.kline-tr {
+  display: flex;
+  align-items: center;
+  height: 52rpx;
+  border-top: 1rpx solid var(--c-border);
+}
+
+.kline-td {
+  flex: 1;
+  font-size: 24rpx;
+  color: var(--c-ink);
+}
+
+/* 涨跌幅靠右对齐，数值等宽对齐更好读 */
+.kline-right {
+  text-align: right;
+}
+
+.kline-th {
+  font-size: 22rpx;
+  color: var(--c-gray);
+}
+
+.up {
+  color: var(--c-red);
+}
+
+.down {
+  color: var(--c-green);
+}
+
+/* ===== 输入栏 ===== */
+/* 绝对定位于页面容器内（等价于 fixed，但会随页面一起参与转场动画） */
+.sender-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* bottom 由页面按键盘高度驱动：卡片上移与对话区收窄共用同一份数据 */
+  bottom: 0;
+  background: var(--c-bg);
+  transition: bottom 0.25s ease;
+}
+
+/* ===== 侧边抽屉内容 ===== */
+/* popup 面板本体：popup 不提供宽度，需自定。
+   内部分组列表交由 TDesign cell-group 承载（自带卡片外边距与圆角） */
+.drawer-body {
+  width: 560rpx;
+  height: 100%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* padding-top 由内联样式提供（避让状态栏） */
+  padding: 0 0 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 32rpx;
+}
+
+/* TDesign image（Logo） */
+.drawer-logo {
+  flex: none;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.drawer-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawer-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.drawer-sub {
+  font-size: 12px;
+  color: var(--c-gray);
+}
+
+/* cell 的 note 插槽：大盘数值 */
+.market-note {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.market-note.up {
+  color: var(--c-red);
+}
+
+.market-note.down {
+  color: var(--c-green);
+}
+
+.drawer-version {
+  /* 版本号固定在面板底部 */
+  margin-top: auto;
+  padding-top: 16px;
+  font-size: 11px;
+  color: var(--c-gray-light);
+  text-align: center;
+}

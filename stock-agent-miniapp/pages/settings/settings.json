@@ -1,0 +1,13 @@
+{
+  "usingComponents": {
+    "t-navbar": "tdesign-miniprogram/navbar/navbar",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-toast": "tdesign-miniprogram/toast/toast"
+  },
+  "backgroundColor": "#F5F6F8",
+  "backgroundColorTop": "#F5F6F8",
+  "backgroundColorBottom": "#F5F6F8"
+}

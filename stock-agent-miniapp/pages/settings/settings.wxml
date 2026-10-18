@@ -1,0 +1,31 @@
+<!-- 页面结构完全基于 TDesign 布局组件：
+     navbar（导航，带占位）+ cell-group / cell（分组设置项）+ toast（轻提示） -->
+<view class="page">
+  <t-navbar title="设置" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
+
+  <scroll-view class="content" scroll-y>
+    <!-- 外观 -->
+    <t-cell-group theme="card" bordered="{{true}}" title="外观">
+      <t-cell title="深色模式" bordered="{{true}}">
+        <t-icon slot="left-icon" name="moon" size="40rpx" color="#2559EB" />
+        <t-switch slot="note" value="{{darkMode}}" bind:change="onToggleDark" />
+      </t-cell>
+
+      <t-cell title="字体大小" note="标准" arrow="{{true}}" bind:click="onFontSize">
+        <t-icon slot="left-icon" name="text" size="40rpx" color="#2559EB" />
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 关于 -->
+    <t-cell-group theme="card" bordered="{{true}}" title="关于">
+      <t-cell title="关于 Stock Agent" arrow="{{true}}" bordered="{{true}}" bind:click="goAbout">
+        <t-icon slot="left-icon" name="info-circle" size="40rpx" color="#2559EB" />
+      </t-cell>
+
+      <t-cell title="版本" note="1.2.0" />
+    </t-cell-group>
+  </scroll-view>
+
+  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
+  <t-toast id="t-toast" />
+</view>

@@ -1,0 +1,211 @@
+<view
+  class="page"
+  bindtouchstart="onSwipeStart"
+  bindtouchmove="onSwipeMove"
+  bindtouchend="onSwipeEnd"
+  bindtouchcancel="onSwipeEnd"
+>
+  <!-- 顶部导航栏：TDesign navbar，左侧菜单按钮走 left 插槽。
+       navbar 的 fixed 默认是 true、而 placeholder 默认 false，
+       意味着内容区 position: fixed 且不占位，对话区会顶到最上面被它遮住，
+       因此这里显式打开 placeholder 让它在文档流里预留出自身高度 -->
+  <t-navbar title="Stock Agent" placeholder="{{true}}">
+    <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
+      <t-icon name="view-list" size="44rpx" />
+    </view>
+  </t-navbar>
+
+  <!-- 对话区：页面自绘 scroll-view + TDesign chat-message。
+       t-chat-list 在内部 wx:for 里创建 chat-message，页面无法逐条注入 content 插槽，
+       而行情卡/日 K 表是结构化内容，markdown 表格只有通用版式、做不出设计稿的版式，
+       因此这里自己在页面层循环，卡片本体用 WXML 直接绘制 -->
+  <view class="chat-wrap" style="height: {{chatHeight}}px;">
+    <scroll-view
+      class="chat-scroll"
+      scroll-y="{{true}}"
+      enhanced="{{true}}"
+      show-scrollbar="{{false}}"
+      scroll-with-animation="{{true}}"
+      scroll-into-view="{{scrollIntoView}}"
+    >
+      <view class="chat-inner">
+        <block wx:for="{{messages}}" wx:for-item="msg" wx:key="index">
+          <!-- 对话单元：TDesign AI Chat 的 chat-message，variant="base" 即基础类型；
+               不传 avatar / name，头像容器与名称行会因内容为空自动折叠（组件内的 :empty 规则） -->
+          <t-chat-message
+            variant="base"
+            role="{{msg.role}}"
+            placement="{{msg.role === 'user' ? 'right' : 'left'}}"
+            content="{{msg.content}}"
+            status="{{msg.status || ''}}"
+          >
+            <!-- 行情卡片：content 为空数组时 chat-message 才会渲染 content 插槽 -->
+            <view wx:if="{{msg.card === 'quote'}}" slot="content" class="card">
+              <view class="card-head">
+                <view class="card-title">{{msg.quote.name}}</view>
+                <view class="card-sub">{{msg.quote.code}}</view>
+              </view>
+              <view class="card-hero">
+                <view class="hero-price {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.price}}</view>
+                <view class="hero-change {{msg.quote.up ? 'up' : 'down'}}">
+                  {{msg.quote.change}} {{msg.quote.pct}}
+                </view>
+              </view>
+              <view class="card-grid">
+                <view class="grid-item">
+                  <view class="grid-label">今开</view>
+                  <view class="grid-value">{{msg.quote.open}}</view>
+                </view>
+                <view class="grid-item">
+                  <view class="grid-label">最高</view>
+                  <view class="grid-value up">{{msg.quote.high}}</view>
+                </view>
+                <view class="grid-item">
+                  <view class="grid-label">最低</view>
+                  <view class="grid-value down">{{msg.quote.low}}</view>
+                </view>
+              </view>
+              <view class="card-foot">{{msg.quote.meta}}</view>
+            </view>
+
+            <!-- 日 K 走势表格：涨跌幅按符号着色 -->
+            <view wx:elif="{{msg.card === 'kline'}}" slot="content" class="card">
+              <view class="card-head">
+                <view class="card-title">日 K 走势</view>
+                <view class="card-sub">最近 10 个交易日 · 前复权</view>
+              </view>
+              <view class="kline-table">
+                <view class="kline-tr">
+                  <view class="kline-td kline-th">日期</view>
+                  <view class="kline-td kline-th">收盘</view>
+                  <view class="kline-td kline-th kline-right">涨跌幅</view>
+                </view>
+                <view
+                  class="kline-tr"
+                  wx:for="{{msg.kline}}"
+                  wx:for-item="k"
+                  wx:key="d"
+                >
+                  <view class="kline-td">{{k.d}}</view>
+                  <view class="kline-td">{{k.c}}</view>
+                  <view class="kline-td kline-right {{k.up ? 'up' : 'down'}}">{{k.p}}</view>
+                </view>
+              </view>
+            </view>
+          </t-chat-message>
+        </block>
+      </view>
+      <!-- scroll-into-view 的锚点：撑到最后一条消息之后，用于滚动到底 -->
+      <view id="chat-bottom" class="chat-anchor"></view>
+    </scroll-view>
+  </view>
+
+  <!-- 输入栏：TDesign chat-sender，自带发送按钮、加载态
+       custom-style 覆盖组件自带的 margin（24rpx 24rpx 80rpx 24rpx）：
+       - margin-top 归零：组件默认的 24rpx（=12px）会在最后一条消息和输入栏之间
+         垫出一条空隙（开发者工具盒模型里标的那段 12px 就是它）；
+         对话区要留多少间距统一由 chat.js 的 SENDER_GAP_RPX 控制，不靠组件外边距
+       - margin-bottom 12px：让输入栏下沉，并与组件键盘弹起时使用的
+         originalMarginBottom（12px）保持一致
+       键盘上移不用组件的 auto-rise-with-keyboard：它按自身拿到的键盘高度上顶卡片，
+       与页面这边的窗口收缩会重复计算，改由页面统一用 keyboardOffset 控制容器 bottom，
+       对话区收缩与卡片上移共用同一个值 -->
+  <view
+    class="sender-wrap"
+    style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
+  >
+    <t-chat-sender
+      value="{{input}}"
+      placeholder="问点什么，如：白酒还能拿吗？"
+      loading="{{sending}}"
+      render-presets="{{renderPresets}}"
+      auto-rise-with-keyboard="{{false}}"
+      custom-style="margin-top: 0; margin-bottom: 12px;"
+      bind:change="onInput"
+      bind:send="onSend"
+      bind:keyboardheightchange="onKeyboardHeightChange"
+    />
+  </view>
+
+  <!-- 侧边抽屉：TDesign popup 左侧滑出（drawer 的默认插槽在 70vh 菜单区之下的
+       footer 里，不适合承载整块自定义内容，故直接用 popup 自绘面板）
+       prevent-scroll-through 置为 false：遮罩层默认用 catchtouchmove 拦截滑动，
+       会导致抽屉打开后左滑手势无法冒泡到页面根节点，关闭手势失效
+       duration / durations 两个属性名字很像但不是一回事，改抽屉快慢要一起改：
+       - duration：写进 --td-popup-transition，控制面板和遮罩的 CSS 过渡时长（默认 240/300ms）
+       - durations：transition mixin 用 setTimeout 兜底收尾的时长，决定 leaved 事件何时抛出
+       只改 duration 的话，动画早就播完了 leaved 还要多等 100+ms，跳转才慢 -->
+  <t-popup
+    visible="{{drawerOpen}}"
+    placement="left"
+    show-overlay="{{true}}"
+    prevent-scroll-through="{{false}}"
+    duration="{{200}}"
+    durations="{{200}}"
+    bind:visible-change="onDrawerVisibleChange"
+    bind:leaved="onDrawerLeaved"
+  >
+    <view class="drawer-body" style="padding-top: {{drawerTop}}px;">
+      <!-- 品牌头部 -->
+      <view class="drawer-head">
+        <t-image src="/assets/logo.png" class="drawer-logo" mode="aspectFit" />
+        <view class="drawer-title-col">
+          <view class="drawer-title">Stock Agent</view>
+          <view class="drawer-sub">AI 股票助手</view>
+        </view>
+      </view>
+
+      <!-- 导航菜单：TDesign cell-group + cell -->
+      <t-cell-group theme="card" bordered="{{true}}" title="导航">
+        <t-cell
+          wx:for="{{menus}}"
+          wx:for-item="m"
+          wx:key="key"
+          title="{{m.label}}"
+          arrow="{{true}}"
+          hover="{{true}}"
+          data-menu="{{m.key}}"
+          bind:click="onMenuSelect"
+        >
+          <!-- 图标颜色固定：选中与否都不变色（原来选中会切成品牌蓝），
+               选中态只作为「点击当前项直接收起抽屉」的判断依据 -->
+          <t-icon
+            slot="left-icon"
+            name="{{m.icon}}"
+            size="40rpx"
+            color="#5A5F66"
+          />
+          <view wx:if="{{m.badge}}" slot="note">
+            <t-tag theme="{{m.badgeTheme}}" variant="light" size="small">{{m.badge}}</t-tag>
+          </view>
+        </t-cell>
+      </t-cell-group>
+
+      <!-- 今日大盘 -->
+      <t-cell-group theme="card" bordered="{{true}}" title="今日大盘 · 15:00 收盘">
+        <t-cell wx:for="{{markets}}" wx:for-item="k" wx:key="name" title="{{k.name}}">
+          <view slot="note" class="market-note {{k.up ? 'up' : 'down'}}">{{k.value}}</view>
+        </t-cell>
+      </t-cell-group>
+
+      <!-- 通知设置 -->
+      <t-cell-group theme="card" bordered="{{true}}">
+        <t-cell
+          title="开启通知"
+          description="第一时间收到价格提醒"
+          arrow="{{true}}"
+          hover="{{true}}"
+          data-name="通知"
+          bind:click="onTodo"
+        >
+          <t-icon slot="left-icon" name="notification" size="40rpx" color="#2559EB" />
+        </t-cell>
+      </t-cell-group>
+
+      <view class="drawer-version">Stock Agent v1.2.0</view>
+    </view>
+  </t-popup>
+
+  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
+  <t-toast id="t-toast" />
+</view>

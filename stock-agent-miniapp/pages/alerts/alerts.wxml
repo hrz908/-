@@ -1,0 +1,79 @@
+<!-- 页面结构完全基于 TDesign 布局组件：
+     navbar（导航，带占位）+ grid（概览宫格）+ tabs（状态筛选）
+     + cell-group / cell（列表分区）+ empty（空态）+ toast（轻提示） -->
+<view class="page">
+  <t-navbar title="提醒" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
+
+  <!-- 页面分两段：概览宫格与筛选 tabs 固定，只有提醒列表在下面的容器里滚动 -->
+  <view class="content">
+    <!-- 提醒概览：TDesign grid 宫格（card 主题） -->
+    <t-grid column="{{3}}" theme="card" hover="{{false}}" class="overview-grid">
+      <t-grid-item wx:for="{{stats}}" wx:for-item="s" wx:key="key">
+        <view slot="text" class="g-num {{s.cls}}">{{s.num}}</view>
+        <view slot="description" class="g-label">{{s.label}}</view>
+      </t-grid-item>
+    </t-grid>
+
+    <!-- 状态筛选：TDesign tabs（受控模式，value + change） -->
+    <t-tabs value="{{filter}}" bind:change="onTabsChange" class="filter-tabs">
+      <t-tab-panel
+        wx:for="{{filters}}"
+        wx:for-item="f"
+        wx:key="key"
+        label="{{f.label}}"
+        value="{{f.key}}"
+      />
+    </t-tabs>
+
+    <!-- 提醒列表：只有这一个容器内部滚动，底边停在「新增提醒」按钮上方
+         （预留量在 wxss 的 .list-scroll，含安全区），概览与筛选不参与滚动 -->
+    <scroll-view class="list-scroll" scroll-y>
+      <t-cell-group wx:if="{{filtered.length > 0}}" title="价格与涨幅提醒" bordered="{{true}}">
+      <t-cell
+        wx:for="{{filtered}}"
+        wx:for-item="item"
+        wx:key="id"
+        title="{{item.title}}"
+        bordered="{{true}}"
+      >
+        <t-icon
+          slot="left-icon"
+          name="{{item.iconType === 'trend-up' ? 'trending-up' : 'chart-bar'}}"
+          size="40rpx"
+          color="{{item.enabled ? '#E64545' : '#B0B4BC'}}"
+        />
+
+        <view slot="description" class="a-desc-wrap">
+          <view class="a-desc">{{item.desc}}</view>
+          <view class="a-tags">
+            <t-tag
+              theme="{{item.enabled ? 'success' : 'default'}}"
+              variant="light"
+              size="small"
+            >{{item.enabled ? '已启用' : '已暂停'}}</t-tag>
+            <text class="a-time">{{item.time}}</text>
+          </view>
+        </view>
+
+        <t-switch
+          slot="note"
+          value="{{item.enabled}}"
+          data-index="{{item.index}}"
+          bind:change="toggleSwitch"
+        />
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 空态 -->
+    <t-empty wx:else image="" description="暂无该状态的提醒" />
+    </scroll-view>
+  </view>
+
+  <!-- 底部操作区 -->
+  <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
+    <t-button theme="primary" block="{{true}}" icon="add" bindtap="onAdd">新增提醒</t-button>
+  </view>
+
+  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
+  <t-toast id="t-toast" />
+</view>

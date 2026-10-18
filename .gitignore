@@ -1,0 +1,28 @@
+# ===== 小程序 =====
+# npm 依赖
+stock-agent-miniapp/node_modules/
+
+# npm 构建产物：由开发者工具「构建 npm」生成，不入库
+stock-agent-miniapp/miniprogram_npm/
+
+# 开发者工具个人配置（本地编译选项等，每人不同，不应共享）
+stock-agent-miniapp/project.private.config.json
+
+# ===== Go 后端 =====
+# 编译产物
+server/stock-agent-server
+server/stock-agent-server.exe
+server/tmp/
+
+# 本地环境变量（目前配置都有默认值，若后续新增再放开）
+server/.env
+server/.env.local
+
+# ===== 日志 / 临时文件 =====
+*.log
+
+# ===== 系统 / 编辑器 =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

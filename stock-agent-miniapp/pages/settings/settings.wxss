@@ -1,0 +1,17 @@
+/* ===== 页面骨架 ===== */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-bg);
+  position: relative;
+  will-change: transform;
+}
+
+/* ===== 内容区 ===== */
+.content {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 0;
+}

@@ -1,0 +1,164 @@
+/* 页面只保留骨架与少量视觉微调，列表/分组/筛选全部交给 TDesign 组件 */
+
+/* ===== 页面骨架 ===== */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-bg);
+  /* 底部按钮用 absolute 而非 fixed，转场时随页面整体移动 */
+  position: relative;
+  will-change: transform;
+}
+
+/* 中段骨架：概览 + 筛选固定不动，剩余高度全部给列表滚动区 */
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 列表滚动区：页面里唯一内部滚动的地方。
+   底边让开悬浮的「添加股票」按钮（absolute 定位，不在文档流）：
+   预留 = 按钮距底 20 + 按钮高 52 + 与按钮的间距 16 = 88，再加安全区；
+   env() 不支持时第二条声明失效，会退回上面那个固定值 */
+.stock-scroll {
+  flex: 1;
+  /* 高度必须能被算出来，否则 scroll-view 会被内容撑开、内部滚动失效，
+     超出的部分又被 .page 的 overflow:hidden 裁掉——表现就是「被遮挡且滚不动」。
+     height:0 配合 flex:1，把高度完全交给 flex 分配；
+     min-height:0 兜住 flex item 默认的「最小内容尺寸」限制 */
+  height: 0;
+  min-height: 0;
+  /* 底部让开悬浮的「添加股票」按钮：按钮距底 20 + 按钮高 52 + 与按钮间距 16 = 88，再加安全区。
+     这里必须用 margin 而不是 padding：padding 会计入 scroll-view 的滚动内容高度，
+     结果只有一只股票也会被这 88px 撑出可滚动距离（能空拖一段）。
+     margin 只是在容器外部让出位置，不影响内部内容高度 */
+  margin-bottom: 88px;
+  margin-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+/* ===== 筛选 tabs ===== */
+.filter-tabs {
+  display: block;
+  margin-top: 12px;
+  background: #ffffff;
+}
+
+/* ===== 自选列表容器 ===== */
+.stock-list {
+  margin-top: 12px;
+  background: #ffffff;
+}
+
+/* cell 的 title 插槽：总浮动金额强调。
+   颜色由 profitClass 决定：盈利红、亏损绿（A 股习惯：红涨绿跌） */
+.hero-amount {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.hero-amount.is-up {
+  color: var(--c-red);
+}
+
+.hero-amount.is-down {
+  color: var(--c-green);
+}
+
+.hero-desc {
+  font-size: 12px;
+  color: var(--c-gray);
+}
+
+.hero-tags {
+  display: flex;
+  gap: 6px;
+}
+
+/* cell 的 note 插槽：价格与涨跌幅 */
+.price-note {
+  text-align: right;
+}
+
+.p1 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.p2 {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.up {
+  color: var(--c-red);
+}
+
+.down {
+  color: var(--c-green);
+}
+
+/* ===== 底部按钮（承载 TDesign button） ===== */
+.bottom-btn {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  height: 52px;
+}
+
+/* swipe-cell 右侧删除按钮 */
+.delete-action {
+  background: var(--c-red) !important;
+  color: #ffffff;
+  /* 与所在行等高。
+     TDesign 的 .t-swipe-cell__content 默认是 inline-flex 且上下 padding 为 0，
+     高度只跟着文字走，红色块会矮于整行、上下露白边。
+     父级 .t-swipe-cell__right 是 height:100%，这里跟着设 100% 即可撑满；
+     文字的垂直居中由组件自带的 align-items:center 保证 */
+  height: 100%;
+}
+
+/* ===== 添加自选表单（承载 TDesign input） ===== */
+/* input 自带 32rpx 纵向内边距，这里只补弹窗底部的收口 */
+.add-form {
+  padding-bottom: 8rpx;
+}
+
+/* ===== 弹窗缩放已关掉，见 wxml 里 t-dialog 的 custom-style ===== */
+/* 原来这里用 .t-dialog__wrapper.t-dialog-enter / --leave-to 覆盖 transform，
+   但页面 wxss 能否作用到 popup 内部节点取决于 styleIsolation，离场态经常盖不住，
+   结果是关闭时仍会瞬时缩到 scale(.6) 再淡出 —— 「小一号的弹窗闪一下」。
+   改由 t-dialog 的 custom-style 写进行内样式（优先级高于任何类名规则），
+   这里不再重复覆盖，也避免连删除确认弹窗一起被改掉 */
+
+/* ===== 添加自选弹窗提示：一行一个交易所 ===== */
+.add-note {
+  margin-top: 16rpx;
+}
+
+.note-title {
+  font-size: 22rpx;
+  color: var(--c-gray);
+}
+
+.note-row {
+  display: flex;
+  align-items: baseline;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+/* 标签列固定宽度，代码前缀才能上下对齐 */
+.note-label {
+  flex: 0 0 88rpx;
+  color: var(--c-ink);
+}
+
+.note-codes {
+  flex: 1;
+  color: var(--c-gray);
+}

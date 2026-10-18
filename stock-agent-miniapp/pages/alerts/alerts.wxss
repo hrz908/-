@@ -1,0 +1,99 @@
+/* 页面只保留骨架与少量视觉微调，概览/筛选/列表全部交给 TDesign 组件 */
+
+/* ===== 页面骨架 ===== */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-bg);
+  /* 底部按钮用 absolute 而非 fixed，转场时随页面整体移动 */
+  position: relative;
+  will-change: transform;
+}
+
+/* 中段骨架：概览宫格 + 筛选固定不动，剩余高度全部给列表滚动区 */
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 列表滚动区：页面里唯一内部滚动的地方。
+   底边让开悬浮的「新增提醒」按钮（absolute 定位，不在文档流）：
+   预留 = 按钮距底 20 + 按钮高 52 + 与按钮的间距 16 = 88，再加安全区；
+   env() 不支持时第二条声明失效，会退回上面那个固定值 */
+.list-scroll {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 88px;
+  margin-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+/* ===== 概览宫格（TDesign grid） ===== */
+.overview-grid {
+  display: block;
+  margin-top: 12px;
+  background: #ffffff;
+}
+
+.g-num {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.g-num.ink {
+  color: var(--c-ink);
+}
+
+.g-num.blue {
+  color: var(--c-blue);
+}
+
+.g-num.red {
+  color: var(--c-red);
+}
+
+.g-label {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--c-gray);
+}
+
+/* ===== 筛选 tabs ===== */
+.filter-tabs {
+  display: block;
+  margin-top: 12px;
+  background: #ffffff;
+}
+
+/* ===== cell 的 description 插槽内容（TDesign cell） ===== */
+.a-desc-wrap {
+  padding-top: 4px;
+}
+
+.a-desc {
+  font-size: 12px;
+  color: var(--c-gray);
+}
+
+.a-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.a-time {
+  font-size: 11px;
+  color: var(--c-gray-light);
+}
+
+/* ===== 底部按钮（承载 TDesign button） ===== */
+.bottom-btn {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  height: 52px;
+}
