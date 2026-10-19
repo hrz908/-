@@ -307,7 +307,7 @@
 /* popup 面板本体：popup 不提供宽度，需自定。
    内部分组列表交由 TDesign cell-group 承载（自带卡片外边距与圆角） */
 .drawer-body {
-  width: 560rpx;
+  width: 520rpx;
   height: 100%;
   background: var(--c-card);
   display: flex;
@@ -334,7 +334,7 @@
   flex: none;
   width: 104rpx;
   height: 104rpx;
-  border-radius: 28rpx;
+  border-radius: 50%;
   overflow: hidden;
 }
 

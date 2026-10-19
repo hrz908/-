@@ -9,9 +9,9 @@
        navbar 的 fixed 默认是 true、而 placeholder 默认 false，
        意味着内容区 position: fixed 且不占位，对话区会顶到最上面被它遮住，
        因此这里显式打开 placeholder 让它在文档流里预留出自身高度 -->
-  <t-navbar title="Stock Agent" placeholder="{{true}}">
+  <t-navbar title="股票助手" placeholder="{{true}}">
     <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
-      <t-icon name="view-list" size="44rpx" />
+      <t-icon name="view-list" size="52rpx" />
     </view>
   </t-navbar>
 
@@ -183,9 +183,9 @@
     <view class="drawer-body" style="padding-top: {{drawerTop}}px;">
       <!-- 品牌头部 -->
       <view class="drawer-head">
-        <t-image src="/assets/logo.png" class="drawer-logo" mode="aspectFit" />
+        <t-image src="/assets/logo.png" class="drawer-logo" mode="aspectFill" />
         <view class="drawer-title-col">
-          <view class="drawer-title">Stock Agent</view>
+          <view class="drawer-title">股票助手</view>
           <view class="drawer-sub">AI 股票助手</view>
         </view>
       </view>

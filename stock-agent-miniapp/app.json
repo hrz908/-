@@ -3,8 +3,7 @@
     "pages/chat/chat",
     "pages/watchlist/watchlist",
     "pages/alerts/alerts",
-    "pages/settings/settings",
-    "pages/about/about"
+    "pages/settings/settings"
   ],
   "window": {
     "navigationStyle": "custom",

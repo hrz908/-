@@ -1,4 +1,4 @@
-/* ===== 页面骨架（与 about / watchlist / alerts 三页一致） ===== */
+/* ===== 页面骨架（与 watchlist / alerts 两页一致） ===== */
 .page {
   display: flex;
   flex-direction: column;

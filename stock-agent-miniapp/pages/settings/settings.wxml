@@ -1,4 +1,4 @@
-<!-- 页面骨架与其它子页面（about / watchlist / alerts）保持一致：
+<!-- 页面骨架与其它子页面（watchlist / alerts）保持一致：
      navbar + scroll-view(content) + TDesign cell-group(theme=card)。
      content 本身不加内边距，卡片的外边距与圆角对齐 t-cell-group--card
      （左右 32rpx、圆角 18rpx），个人信息卡与退出登录是自绘块，同一套边距 -->

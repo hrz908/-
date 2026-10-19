@@ -8,16 +8,14 @@ import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 const MENUS = [
   { key: 'watchlist', label: '自选股', icon: 'star' },
   { key: 'alerts', label: '提醒', icon: 'notification' },
-  { key: 'settings', label: '我的', icon: 'user' },
-  { key: 'about', label: '关于', icon: 'info-circle' }
+  { key: 'settings', label: '我的', icon: 'user' }
 ];
 
 // 抽屉导航项 → 子页面路由，key 与 MENUS 一一对应
 const ROUTES = {
   watchlist: '/pages/watchlist/watchlist',
   alerts: '/pages/alerts/alerts',
-  settings: '/pages/settings/settings',
-  about: '/pages/about/about'
+  settings: '/pages/settings/settings'
 };
 
 // 今日大盘（TDesign cell 列表）
@@ -166,7 +164,7 @@ Page({
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
-      assistantMsg('早上好，我是 Stock Agent。今天白酒板块集体走强，要我帮你看持仓吗？'),
+      assistantMsg('早上好，我是 股票助手。今天白酒板块集体走强，要我帮你看持仓吗？'),
       userMsg('帮我查一下贵州茅台的行情，顺便看下日 K。'),
       assistantMsg('已更新 600519 的实时行情，以及最近 10 个交易日的日 K 走势：'),
       quoteCard(QUOTE),
