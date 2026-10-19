@@ -184,7 +184,7 @@ func (p *AgentProxy) pumpNDJSON(runCtx context.Context, body io.Reader, events c
 			// 定时器只触发一次，因此最多发一条，不会刷屏。
 			if !firstReceived {
 				select {
-				case events <- Event{Event: EventStatus, Data: map[string]string{"msg": "正在思考…"}}:
+				case events <- Event{Event: EventStatus, Data: map[string]string{"stage": "thinking", "label": "正在思考…"}}:
 				case <-runCtx.Done():
 					errs <- runCtx.Err()
 					return

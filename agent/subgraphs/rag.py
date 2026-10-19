@@ -5,11 +5,12 @@ r"""RAG 混合检索子图。
 
 sufficiency_check: 最高分 < RAG_THRESHOLD 或有效片段 < 2 -> escalate，
 把 intent 改成 "mcp"，由主图条件边重路由到行情工具子图。
-generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发射 citations 事件。
+generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发射 sources 事件
+（数据格式 {"docs": [{title, chunk_id, score}]}，与前端和 Go 事件协议一致）。
 """
 from datetime import datetime
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 
 from llm import get_llm
@@ -40,6 +41,7 @@ async def hybrid_retrieve(state: dict) -> dict:
         "content": d.page_content,
         "title": d.metadata.get("title", ""),
         "source_path": d.metadata.get("source_path", ""),
+        "chunk_id": str(d.metadata.get("id", "")),
         "score": d.metadata.get("score", 0.0),
     } for d in docs]
     return {"retrieved": retrieved}
@@ -78,16 +80,26 @@ async def generate_with_citations(state: dict) -> dict:
             "index": i,
             "title": r.get("title", ""),
             "source_path": r.get("source_path", ""),
+            "chunk_id": r.get("chunk_id", ""),
             "score": r.get("score", 0.0),
         })
     contexts = "\n\n".join(ctx_lines) if ctx_lines else "（无检索资料）"
 
     prompt = render("rag.xml", now=now, query=query, contexts=contexts)
-    # 引用列表走独立 custom 事件，不混入 token 流
-    emit("citations", citations)
+    # 引用来源走独立 custom 事件（sources），不混入 token 流
+    emit("sources", {"docs": [{
+        "title": c.get("title", ""),
+        "chunk_id": c.get("chunk_id", ""),
+        "score": c.get("score", 0.0),
+    } for c in citations]})
+
+    # 带上最近对话历史（最近 6 条，排除末尾当前 query），让回答能衔接上下文
+    messages = [SystemMessage(content=prompt)]
+    messages.extend(list(state.get("messages", []))[-7:-1])
+    messages.append(HumanMessage(content=state.get("query", "") or query))
 
     llm = get_llm(streaming=True, temperature=0.3)
-    ai = await llm.ainvoke([SystemMessage(content=prompt)])
+    ai = await llm.ainvoke(messages)
     return {"messages": [ai], "citations": citations}
 
 

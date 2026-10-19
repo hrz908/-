@@ -1,13 +1,18 @@
 """数据库操作层：使用 psycopg async 操作 PostgreSQL。"""
 import json
 import logging
-import uuid
 from typing import Optional
 
 import psycopg
+import psycopg.errors
 from psycopg.rows import dict_row
 
 logger = logging.getLogger(__name__)
+
+
+def _vec_literal(embedding: list) -> str:
+    """list[float] -> pgvector 文本字面量 '[v0,v1,...]'（配合 ::vector 强转使用）。"""
+    return "[" + ",".join(f"{float(x):.8f}" for x in embedding) + "]"
 
 
 class Store:
@@ -36,42 +41,21 @@ class Store:
             logger.info("数据库连接池已关闭")
 
     async def ensure_tables(self):
-        """确保 documents 和 chunks 表存在（自动建表）"""
-        async with self._pool.connection() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS documents (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    source_path TEXT NOT NULL UNIQUE,
-                    title TEXT NOT NULL DEFAULT '',
-                    mime_type TEXT NOT NULL DEFAULT '',
-                    content_hash TEXT NOT NULL DEFAULT '',
-                    embed_model TEXT NOT NULL DEFAULT '',
-                    chunk_count INT NOT NULL DEFAULT 0,
-                    status TEXT NOT NULL DEFAULT 'active',
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                );
-            """)
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS chunks (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-                    seq INT NOT NULL,
-                    content TEXT NOT NULL,
-                    token_count INT NOT NULL DEFAULT 0,
-                    heading_path TEXT NOT NULL DEFAULT '',
-                    embedding vector(1024),
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                );
-            """)
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
-            """)
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
-            """)
-            await conn.commit()
-            logger.info("数据库表已就绪")
+        """
+        校验 documents 和 chunks 表已存在。
+
+        表结构由 server/migrations/005_agent.sql 管理，ingest 不自建表，
+        这里只做启动前置检查，缺表时快速失败并给出提示。
+        """
+        try:
+            async with self._pool.connection() as conn:
+                await conn.execute("SELECT 1 FROM documents LIMIT 1")
+                await conn.execute("SELECT 1 FROM chunks LIMIT 1")
+        except psycopg.errors.UndefinedTable as e:
+            raise RuntimeError(
+                "数据库表不存在，请先执行 server/migrations/005_agent.sql 迁移"
+            ) from e
+        logger.info("数据库表校验通过（schema 由 migration 005 管理）")
 
     async def upsert_document(
         self,
@@ -85,7 +69,7 @@ class Store:
         """
         UPSERT documents 表。
         
-        幂等逻辑：如果 content_hash + embed_model + status('active') 三者全同，
+        幂等逻辑：如果 content_hash + embed_model + status('ok') 三者全同，
         表示文档无变化，返回 None 跳过后续处理。
         否则更新记录并返回 document_id。
         """
@@ -101,41 +85,38 @@ class Store:
             )
             row = await cur.fetchone()
 
-            if row:
+            if row and (
+                row["content_hash"] == content_hash
+                and row["embed_model"] == embed_model
+                and row["status"] == "ok"
+            ):
                 # 幂等判断：三者全同则跳过
-                if (
-                    row["content_hash"] == content_hash
-                    and row["embed_model"] == embed_model
-                    and row["status"] == "active"
-                ):
-                    logger.debug("文档无变化，跳过: %s", source_path)
-                    return None
+                logger.debug("文档无变化，跳过: %s", source_path)
+                return None
 
-                # 有变化，更新
-                doc_id = str(row["id"])
-                await conn.execute(
-                    """
-                    UPDATE documents
-                    SET title = %s, mime_type = %s, content_hash = %s,
-                        embed_model = %s, chunk_count = %s, status = 'active',
-                        updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (title, mime_type, content_hash, embed_model, chunk_count, doc_id),
-                )
-            else:
-                # 新插入
-                doc_id = str(uuid.uuid4())
-                await conn.execute(
-                    """
-                    INSERT INTO documents (id, source_path, title, mime_type, content_hash, embed_model, chunk_count, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'active')
-                    """,
-                    (doc_id, source_path, title, mime_type, content_hash, embed_model, chunk_count),
-                )
-
+            # ON CONFLICT upsert，RETURNING id
+            cur = await conn.execute(
+                """
+                INSERT INTO documents
+                    (source_path, title, mime_type, content_hash,
+                     embed_model, status, chunk_count, error, updated_at)
+                VALUES (%s, %s, %s, %s, %s, 'ok', %s, NULL, now())
+                ON CONFLICT (source_path) DO UPDATE SET
+                    content_hash = EXCLUDED.content_hash,
+                    embed_model  = EXCLUDED.embed_model,
+                    title        = EXCLUDED.title,
+                    mime_type    = EXCLUDED.mime_type,
+                    chunk_count  = EXCLUDED.chunk_count,
+                    status       = 'ok',
+                    error        = NULL,
+                    updated_at   = now()
+                RETURNING id
+                """,
+                (source_path, title, mime_type, content_hash, embed_model, chunk_count),
+            )
+            row = await cur.fetchone()
             await conn.commit()
-            return doc_id
+            return str(row["id"])
 
     async def delete_chunks(self, document_id: str):
         """删除文档的所有旧 chunks"""
@@ -152,6 +133,9 @@ class Store:
         
         chunks 格式: [{"seq": 0, "content": "...", "token_count": N, 
                        "metadata": {"heading_path": "..."}, "embedding": [...]}]
+
+        对齐 005 schema：chunks.id 为 BIGSERIAL 自增，不手动指定；
+        tsv 为 GENERATED 列，不写入；heading_path 存入 metadata JSONB。
         """
         if not chunks:
             return
@@ -160,17 +144,17 @@ class Store:
             # 使用 executemany 批量插入
             await conn.executemany(
                 """
-                INSERT INTO chunks (document_id, seq, content, token_count, heading_path, embedding)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
                 """,
                 [
                     (
                         document_id,
                         chunk["seq"],
                         chunk["content"],
-                        chunk.get("token_count", 0),
-                        chunk.get("metadata", {}).get("heading_path", ""),
-                        json.dumps(chunk.get("embedding", [])),
+                        chunk.get("token_count"),
+                        json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
+                        _vec_literal(chunk["embedding"]),
                     )
                     for chunk in chunks
                 ],
@@ -202,9 +186,10 @@ class Store:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 """
-                SELECT id, source_path, title, mime_type, embed_model, chunk_count
+                SELECT id, source_path, title, mime_type, content_hash,
+                       embed_model, status, chunk_count, error, updated_at
                 FROM documents
-                WHERE embed_model != %s AND status = 'active'
+                WHERE embed_model != %s AND status = 'ok'
                 ORDER BY updated_at ASC
                 """,
                 (current_model,),
@@ -243,30 +228,32 @@ class Store:
                     if (
                         row["content_hash"] == content_hash
                         and row["embed_model"] == embed_model
-                        and row["status"] == "active"
+                        and row["status"] == "ok"
                     ):
                         logger.debug("文档无变化，跳过事务写入: %s", source_path)
                         return None
-                    doc_id = str(row["id"])
-                    await conn.execute(
-                        """
-                        UPDATE documents
-                        SET title = %s, mime_type = %s, content_hash = %s,
-                            embed_model = %s, chunk_count = %s, status = 'active',
-                            updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (title, mime_type, content_hash, embed_model, len(chunks), doc_id),
-                    )
-                else:
-                    doc_id = str(uuid.uuid4())
-                    await conn.execute(
-                        """
-                        INSERT INTO documents (id, source_path, title, mime_type, content_hash, embed_model, chunk_count, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'active')
-                        """,
-                        (doc_id, source_path, title, mime_type, content_hash, embed_model, len(chunks)),
-                    )
+
+                # upsert（幂等跳过已在上方处理），RETURNING id
+                cur = await conn.execute(
+                    """
+                    INSERT INTO documents
+                        (source_path, title, mime_type, content_hash,
+                         embed_model, status, chunk_count, error, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, 'ok', %s, NULL, now())
+                    ON CONFLICT (source_path) DO UPDATE SET
+                        content_hash = EXCLUDED.content_hash,
+                        embed_model  = EXCLUDED.embed_model,
+                        title        = EXCLUDED.title,
+                        mime_type    = EXCLUDED.mime_type,
+                        chunk_count  = EXCLUDED.chunk_count,
+                        status       = 'ok',
+                        error        = NULL,
+                        updated_at   = now()
+                    RETURNING id
+                    """,
+                    (source_path, title, mime_type, content_hash, embed_model, len(chunks)),
+                )
+                doc_id = str((await cur.fetchone())["id"])
 
                 # 2. 删除旧 chunks
                 await conn.execute(
@@ -274,21 +261,21 @@ class Store:
                     (doc_id,),
                 )
 
-                # 3. 批量插入新 chunks
+                # 3. 批量插入新 chunks（id 自增、tsv 生成列均不写入）
                 if chunks:
                     await conn.executemany(
                         """
-                        INSERT INTO chunks (document_id, seq, content, token_count, heading_path, embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
+                        VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
                         """,
                         [
                             (
                                 doc_id,
                                 chunk["seq"],
                                 chunk["content"],
-                                chunk.get("token_count", 0),
-                                chunk.get("metadata", {}).get("heading_path", ""),
-                                json.dumps(chunk.get("embedding", [])),
+                                chunk.get("token_count"),
+                                json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
+                                _vec_literal(chunk["embedding"]),
                             )
                             for chunk in chunks
                         ],

@@ -6,4 +6,6 @@ import "github.com/gin-gonic/gin"
 // 调用方负责挂鉴权中间件（router.New 里 authorized 组统一挂了 Auth）
 func Register(g *gin.RouterGroup) {
 	g.GET("/stocks/search", SearchStock)
+	g.GET("/stock/quote", GetQuote)
+	g.GET("/stock/kline", GetKline)
 }

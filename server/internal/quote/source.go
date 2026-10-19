@@ -102,33 +102,39 @@ func fetchFromTencent(ctx context.Context, codes []string) []*StockSnapshot {
 		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		tencentQuoteURL+strings.Join(symbols, ","), nil)
+	body, err := fetchTencentRaw(ctx, tencentQuoteURL+strings.Join(symbols, ","))
 	if err != nil {
-		log.Printf("build quote request failed: %v", err)
+		log.Printf("fetch tencent quotes failed: %v", err)
 		return nil
+	}
+	return parseTencentQuotes(body)
+}
+
+// fetchTencentRaw GET 腾讯接口并返回转码后的正文。
+// 腾讯行情系接口一律返回 GBK，必须先转 UTF-8，否则中文股票名是乱码；
+// 批量行情与单只详情（kline.go 的 FetchDetail）共用这一段
+func fetchTencentRaw(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("build quote request failed: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (stock-agent-miniapp)")
 
 	resp, err := quoteHTTP.Do(req)
 	if err != nil {
-		log.Printf("request quote api failed: %v", err)
-		return nil
+		return "", fmt.Errorf("request quote api failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("quote api http %d", resp.StatusCode)
-		return nil
+		return "", fmt.Errorf("quote api http %d", resp.StatusCode)
 	}
 
-	// 腾讯返回 GBK，必须先转 UTF-8，否则中文股票名是乱码
 	body, err := io.ReadAll(io.LimitReader(simplifiedchinese.GBK.NewDecoder().Reader(resp.Body), maxBodyBytes))
 	if err != nil {
-		log.Printf("decode quote body failed: %v", err)
-		return nil
+		return "", fmt.Errorf("decode quote body failed: %w", err)
 	}
-	return parseTencentQuotes(string(body))
+	return string(body), nil
 }
 
 // parseTencentQuotes 解析腾讯行情文本。

@@ -1,16 +1,22 @@
-"""收尾节点：滚动摘要、免责声明、用量统计。
+"""收尾节点：滚动摘要、免责声明、用量统计；另提供 agent_runs 审计落库能力。
 
 在主图末尾（子图之后、END 之前）执行：
 1. messages token 数超阈值 -> 用小模型滚动摘要，写入 Redis（按 thread_id）。
 2. 涉及个股判断 -> 在最后一条 assistant 消息末尾追加免责声明（按 id 覆盖更新）。
 3. 统计 usage 写回 state。
+log_agent_run 供 main.py 在 done 事件前调用，把一轮运行写入 agent_runs 审计表。
 所有步骤都容错，任何一步失败都不阻断响应。
 """
+import logging
+
+import psycopg
 import redis.asyncio as aioredis
 from langchain_core.messages import AIMessage, HumanMessage
 
-from config import REDIS_URL, SUMMARY_TOKEN_LIMIT
+from config import DATABASE_URL, REDIS_URL, SUMMARY_TOKEN_LIMIT
 from llm import get_small_llm
+
+logger = logging.getLogger("stocka.agent")
 
 _DISCLAIMER = "\n\n> 以上信息仅供参考，不构成任何投资建议。市场有风险，投资需谨慎。"
 
@@ -80,6 +86,37 @@ async def _roll_summary(state: dict) -> None:
             await r.set(f"agent:summary:{state.get('thread_id','')}", summary, ex=7 * 24 * 3600)
     except Exception:  # noqa: BLE001
         pass
+
+
+async def log_agent_run(
+    user_id,
+    thread_id: str,
+    intent: str = None,
+    confidence: float = None,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    ttft_ms: int = None,
+    total_ms: int = None,
+    tool_calls: int = 0,
+    error_code: str = None,
+) -> None:
+    """写一行 agent_runs 审计记录。失败只记日志，绝不阻断响应流。"""
+    try:
+        async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
+            await conn.execute(
+                """
+                INSERT INTO agent_runs (user_id, thread_id, intent, confidence,
+                                        tokens_in, tokens_out, ttft_ms, total_ms,
+                                        tool_calls, error_code)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (user_id, thread_id, intent, confidence,
+                 tokens_in or 0, tokens_out or 0, ttft_ms, total_ms,
+                 tool_calls or 0, error_code),
+            )
+            await conn.commit()
+    except Exception as e:  # noqa: BLE001 - 审计失败不影响主流程
+        logger.warning("log_agent_run failed: %s", e)
 
 
 async def post(state: dict) -> dict:

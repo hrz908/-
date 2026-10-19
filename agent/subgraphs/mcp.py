@@ -5,22 +5,24 @@ r"""MCP 行情工具子图。
 
 - tool_call: LLM 绑定工具，决定是否/如何调用工具。
 - tool_execute: 并发执行工具（每个工具已内置 8s 超时 + 重试 + 失败降级），
+  每个工具调用前后发射 tool_start / tool_end 事件，
   产出 ToolMessage 与结构化 tool_results。
 - synthesize: 用 prompts/mcp.xml + tool_results 流式生成最终回答，
   并把行情/K线结构化数据以 card/table 事件独立发射。
 """
 import asyncio
 import json
+import time
 from datetime import datetime
 
-from langchain_core.messages import SystemMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 
 from llm import get_llm
 from state import AgentState
 from tools import get_tools
 from prompts.parse import render
-from subgraphs import emit_card, emit_table
+from subgraphs import emit, emit_card, emit_table
 
 _TOOL_SYSTEM = (
     "你是股票行情助手，可调用工具获取实时数据。规则：\n"
@@ -29,6 +31,13 @@ _TOOL_SYSTEM = (
     "3. 一次性把需要的工具都调用齐（可并行多个 tool_call）。\n"
     "4. 拿到足够数据后停止调用工具，直接回答。"
 )
+
+# 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）
+_TOOL_LABELS = {
+    "get_quote": "实时行情",
+    "get_kline": "K线数据",
+    "symbol_search": "股票搜索",
+}
 
 # 工具名 -> 结构化事件构造器
 _TOOLS = None
@@ -43,6 +52,21 @@ def _tools():
 
 def _tools_by_name():
     return {t.name: t for t in _tools()}
+
+
+def _recent_history(state: dict, limit: int = 6) -> list:
+    """取最近 limit 条对话历史（排除末尾的当前 query）。
+
+    裁剪开头的 ToolMessage 与带 tool_calls 的 AIMessage，
+    避免孤儿 ToolMessage / 残缺 tool_call 对导致 LLM 接口报错。
+    """
+    history = list(state.get("messages", []))[-(limit + 1):-1]
+    while history and (
+        isinstance(history[0], ToolMessage)
+        or (isinstance(history[0], AIMessage) and getattr(history[0], "tool_calls", None))
+    ):
+        history.pop(0)
+    return history
 
 
 async def tool_call(state: dict) -> dict:
@@ -72,13 +96,21 @@ async def tool_execute(state: dict) -> dict:
     async def _run(tc):
         tool = by_name.get(tc["name"])
         args = tc.get("args", {}) or {}
+        name = tc["name"]
+        label = _TOOL_LABELS.get(name, name)
         if tool is None:
-            return tc["id"], tc["name"], {"ok": False, "error": f"unknown tool {tc['name']}"}
+            return tc["id"], name, {"ok": False, "error": f"unknown tool {name}"}
+        # 调用前：通知前端开始取数（emit 为同步函数，内部拿不到 writer 时静默降级）
+        emit("tool_start", {"tool": name, "label": f"正在获取{label}"})
+        t0 = time.monotonic()
         try:
             result = await tool.ainvoke(args)
         except Exception as e:  # noqa: BLE001 - 工具本身已降级，这里再兜一层
             result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-        return tc["id"], tc["name"], result
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        # 调用后：回传成功与否及耗时
+        emit("tool_end", {"tool": name, "ok": bool(result.get("ok")), "ms": elapsed_ms})
+        return tc["id"], name, result
 
     outcomes = await asyncio.gather(*[_run(tc) for tc in ai.tool_calls])
 
@@ -122,8 +154,13 @@ async def synthesize(state: dict) -> dict:
     # 结构化数据走独立事件
     _emit_structured(tool_results)
 
+    # 带上最近对话历史，让回答能衔接上下文
+    messages = [SystemMessage(content=prompt)]
+    messages.extend(_recent_history(state))
+    messages.append(HumanMessage(content=state.get("query", "") or query))
+
     llm = get_llm(streaming=True, temperature=0.4)
-    ai = await llm.ainvoke([SystemMessage(content=prompt)])
+    ai = await llm.ainvoke(messages)
     return {"messages": [ai]}
 
 

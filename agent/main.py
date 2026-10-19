@@ -4,7 +4,8 @@
 - token : {"event":"token","data":{"delta":"..."}}         仅来自回答生成节点
 - card  : {"event":"card","data":{"type":..,"payload":..}}  结构化卡片
 - table : {"event":"table","data":{"type":..,"payload":..}} 结构化表格
-- citations: 引用来源（RAG）
+- sources: 引用来源（RAG，{"docs": [{title, chunk_id, score}]}）
+- tool_start / tool_end: MCP 工具调用进度
 - error : {"event":"error","data":{"message":"..."}}
 - done  : {"event":"done","data":{"thread_id":..,"usage":{..}}}
 
@@ -12,6 +13,7 @@
 """
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -23,6 +25,8 @@ from langchain_core.messages import HumanMessage
 from state import initial_state
 from graph import get_graph
 from checkpointer import close_checkpointer
+from nodes import log_agent_run
+from tools import close_http_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("stocka.agent")
@@ -41,6 +45,7 @@ async def lifespan(app: FastAPI):
         logger.warning("graph warmup failed: %s", e)
     yield
     await close_checkpointer()
+    await close_http_client()
 
 
 app = FastAPI(title="StockA Agent", lifespan=lifespan)
@@ -59,11 +64,15 @@ def _line(event: str, data: dict) -> str:
 
 async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGenerator[str, None]:
     usage: dict = {}
+    t0 = time.monotonic()
+    ttft_ms = None
+    error_code = None
+    graph = None
+    config = {"configurable": {"thread_id": thread_id}}
     try:
         graph = await get_graph()
         inp = initial_state(user_id=user_id, thread_id=thread_id, query=query)
         inp["messages"] = [HumanMessage(content=query)]
-        config = {"configurable": {"thread_id": thread_id}}
 
         async for item in graph.astream(
             inp, config=config, stream_mode=["messages", "custom", "updates"]
@@ -80,6 +89,8 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
                 if node in _TOKEN_NODES:
                     content = getattr(msg, "content", "")
                     if isinstance(content, str) and content:
+                        if ttft_ms is None:
+                            ttft_ms = int((time.monotonic() - t0) * 1000)
                         yield _line("token", {"delta": content})
 
             elif mode == "custom":
@@ -92,12 +103,49 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
                     post_update = data.get("post")
                     if isinstance(post_update, dict) and post_update.get("usage"):
                         usage = post_update["usage"]
+                    # 护栏/分类节点写入的 error 作为审计错误码
+                    for node_update in data.values():
+                        if isinstance(node_update, dict) and node_update.get("error"):
+                            error_code = str(node_update["error"])[:100]
 
     except Exception as e:  # noqa: BLE001 - 任何异常都转成 error 事件，不让流崩掉
         logger.exception("event_generator failed")
+        error_code = type(e).__name__
         yield _line("error", {"message": f"{type(e).__name__}: {e}"})
 
     finally:
+        total_ms = int((time.monotonic() - t0) * 1000)
+        # 审计落库：从 checkpointer 里的最终 state 提取字段，失败不阻断 done
+        try:
+            intent = confidence = None
+            tool_calls = 0
+            if graph is not None:
+                snapshot = await graph.aget_state(config)
+                values = (snapshot.values if snapshot else None) or {}
+                intent = values.get("intent") or None
+                confidence = values.get("confidence")
+                tool_calls = len(values.get("tool_results") or [])
+                if not usage and isinstance(values.get("usage"), dict):
+                    usage = values["usage"]
+            # agent_runs.user_id 是 BIGINT，非数字时置空避免插入报错
+            try:
+                uid = int(user_id)
+            except (TypeError, ValueError):
+                uid = None
+            await log_agent_run(
+                user_id=uid,
+                thread_id=thread_id,
+                intent=intent,
+                confidence=confidence,
+                tokens_in=usage.get("input_tokens", 0),
+                tokens_out=usage.get("output_tokens", 0),
+                ttft_ms=ttft_ms,
+                total_ms=total_ms,
+                tool_calls=tool_calls,
+                error_code=error_code,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("agent run audit failed", exc_info=True)
         yield _line("done", {"thread_id": thread_id, "usage": usage})
 
 
