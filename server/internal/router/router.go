@@ -10,7 +10,9 @@ import (
 	"stock-agent-server/internal/module/alert"
 	authapi "stock-agent-server/internal/module/auth"
 	"stock-agent-server/internal/module/stock"
+	"stock-agent-server/internal/module/user"
 	"stock-agent-server/internal/module/watchlist"
+	"stock-agent-server/internal/upload"
 	"stock-agent-server/internal/ws"
 )
 
@@ -38,6 +40,10 @@ func New() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "message": "success", "data": gin.H{"status": "ok"}})
 	})
 
+	// 上传的静态文件（头像）。目录与写入用的是同一个 upload.Dir，
+	// 不会出现「写到 A 目录、从 B 目录读」的错位
+	r.Static("/uploads", upload.Dir)
+
 	api := r.Group("/api/v1")
 
 	// 公开路由：登录
@@ -50,6 +56,7 @@ func New() *gin.Engine {
 		watchlist.Register(authorized)
 		alert.Register(authorized)
 		stock.Register(authorized)
+		user.Register(authorized)
 
 		// WebSocket 长连接：握手无法带自定义头，token 走 query
 		authorized.GET("/ws", ws.Serve)

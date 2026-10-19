@@ -13,11 +13,11 @@
     <!-- 版本信息 -->
     <t-cell-group theme="card" bordered="{{true}}">
       <t-cell title="版本" note="1.2.0" bordered="{{true}}">
-        <t-icon slot="left-icon" name="info-circle" size="40rpx" color="#2559EB" />
+        <t-icon slot="left-icon" name="info-circle" size="40rpx" color="var(--c-blue)" />
       </t-cell>
 
       <t-cell title="检查更新" arrow="{{true}}" bind:click="onCheckUpdate">
-        <t-icon slot="left-icon" name="refresh" size="40rpx" color="#2559EB" />
+        <t-icon slot="left-icon" name="refresh" size="40rpx" color="var(--c-blue)" />
       </t-cell>
     </t-cell-group>
 

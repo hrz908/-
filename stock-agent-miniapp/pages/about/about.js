@@ -1,7 +1,6 @@
 import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 
 Page({
-  data: {},
 
   goBack() {
     // 立即出栈，不做任何自绘前置动画

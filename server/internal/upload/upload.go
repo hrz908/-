@@ -1,0 +1,25 @@
+// Package upload 管理上传文件的落盘目录。
+// 目录由 main 启动时注入，router 用同一个变量挂静态路由，
+// 保证「存到哪」和「从哪读」始终是同一个地方
+package upload
+
+import (
+	"os"
+	"path/filepath"
+)
+
+// Dir 上传根目录，默认 ./uploads；静态路由前缀固定为 /uploads
+var Dir = "./uploads"
+
+// Init 注入目录并建好子目录
+func Init(dir string) error {
+	if dir != "" {
+		Dir = dir
+	}
+	return os.MkdirAll(filepath.Join(Dir, "avatars"), 0o755)
+}
+
+// AvatarPath 头像落盘的绝对路径
+func AvatarPath(name string) string {
+	return filepath.Join(Dir, "avatars", name)
+}

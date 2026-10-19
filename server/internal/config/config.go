@@ -14,6 +14,9 @@ type Config struct {
 	RedisDB       int
 	JWTSecret     string
 	QuoteAPI      string // 行情接口基地址；为空时返回演示数据
+	WechatAppID   string // 小程序 appid；与 Secret 同时为空时，登录退化为演示账号
+	WechatSecret  string // 小程序 secret
+	UploadDir     string // 上传文件落盘目录，静态路由前缀固定为 /uploads
 }
 
 func Load() Config {
@@ -25,6 +28,9 @@ func Load() Config {
 		RedisDB:       envInt("REDIS_DB", 0),
 		JWTSecret:     env("JWT_SECRET", "please-change-me"),
 		QuoteAPI:      env("QUOTE_API", ""),
+		WechatAppID:   env("WECHAT_APPID", ""),
+		WechatSecret:  env("WECHAT_SECRET", ""),
+		UploadDir:     env("UPLOAD_DIR", "./uploads"),
 	}
 }
 
