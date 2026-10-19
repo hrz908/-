@@ -38,7 +38,9 @@ function currentConfig() {
 
 const config = currentConfig();
 
-// wsBase 目前还没有消费方：后端的 WebSocket 通道已建（server/internal/ws），
-// 前端还没接实时推送。留着这张表，将来接 WS 时直接从这里取即可
 export const apiBase = config.apiBase;
 export const wsBase = config.wsBase;
+
+// AI 对话的 WebSocket 通道（server 侧 agent ws），握手无法带自定义头，
+// token / session_id 走 query 参数（见 services/agent.js）
+export const agentWsPath = '/api/v1/ws/agent';

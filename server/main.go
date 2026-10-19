@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"stock-agent-server/internal/agent"
 	"stock-agent-server/internal/auth"
 	"stock-agent-server/internal/config"
 	"stock-agent-server/internal/db"
@@ -63,6 +64,10 @@ func main() {
 	if err := upload.Init(cfg.UploadDir); err != nil {
 		log.Fatalf("init upload dir: %v", err)
 	}
+
+	// Agent 网关：注入 Redis（三道限流闸门）与 Python Agent 服务地址。
+	// 必须在 router.New 之前完成，否则路由 handler 取到的 limiter/proxy 为 nil
+	agent.Init(rdb, cfg.AgentBaseURL)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

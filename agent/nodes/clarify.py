@@ -1,0 +1,38 @@
+"""澄清 / 降级节点。
+
+两种入口：
+- intent == "clarify"：问题含糊或低置信度，反问用户补全关键信息。
+- state["error"] 非空（如护栏拦截）：给出安全的降级回复，不进入任何工具/检索链路。
+统一产出一条 AIMessage，随后进入 post 收尾。
+"""
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+from llm import get_small_llm
+
+_BLOCK_REPLY = "抱歉，我无法处理该请求。如果你有股票行情或投研相关的问题，欢迎换个方式告诉我。"
+
+_FALLBACK = "为了给你准确的答案，能补充一下具体是哪只股票、以及想看的时间范围或指标吗？"
+
+_CLARIFY_SYSTEM = (
+    "你是股票投研助手。用户的问题信息不足，需要反问澄清。"
+    "用一句友好的中文，指出缺少哪些关键信息（如具体标的、时间范围、指标口径），"
+    "并给出 1-2 个可直接点击的示例问法。不要编造数据，不要冗长。"
+)
+
+
+async def clarify(state: dict) -> dict:
+    # 护栏拦截：直接安全降级，不调模型
+    if state.get("error") == "guardrail_blocked":
+        return {"messages": [AIMessage(content=_BLOCK_REPLY)]}
+
+    query = state.get("rewritten") or state.get("query", "") or ""
+    try:
+        llm = get_small_llm(streaming=True, temperature=0.3)
+        resp = await llm.ainvoke([
+            SystemMessage(content=_CLARIFY_SYSTEM),
+            HumanMessage(content=f"用户问题：{query}"),
+        ])
+        text = (resp.content or "").strip()
+    except Exception:  # noqa: BLE001 - 模型异常时用固定兜底话术
+        text = ""
+    return {"messages": [AIMessage(content=text or _FALLBACK)]}

@@ -1,7 +1,8 @@
-// design data（来自 Ardot「stock agent / 主页 - AI对话」）
+// 对话页：消息收发走 Agent WebSocket（services/agent.js 单例），流式 token 逐字追加；
 // 纯文本走 TDesign chat-message 的 text 内容，行情/K 线这类结构化数据走自绘卡片消息
 
 import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
+import agentSocket from '../../services/agent';
 
 // 侧边抽屉导航项（TDesign cell-group / cell）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去
@@ -18,35 +19,11 @@ const ROUTES = {
   settings: '/pages/settings/settings'
 };
 
-// 今日大盘（TDesign cell 列表）
+// 今日大盘（TDesign cell 列表）。抽屉里的静态装饰数据，与对话消息无关，
+// 后续接真实指数行情时再替换
 const MARKETS = [
   { name: '上证指数', value: '3,024.16  +0.68%', up: true },
   { name: '深证成指', value: '9,512.34  -0.42%', up: false }
-];
-
-const QUOTE = {
-  name: '贵州茅台',
-  code: 'SH 600519 · 白酒',
-  price: '1,684.50',
-  change: '+18.60',
-  pct: '+1.12%',
-  open: '1,672.30',
-  high: '1,690.10',
-  low: '1,668.00',
-  meta: '已收盘 · 06-12 15:00'
-};
-
-const KLINE_ROWS = [
-  { d: '06-01', c: '1,652.10', p: '+0.42%' },
-  { d: '06-02', c: '1,641.30', p: '-0.65%' },
-  { d: '06-05', c: '1,668.40', p: '+1.65%' },
-  { d: '06-06', c: '1,655.90', p: '-0.75%' },
-  { d: '06-07', c: '1,679.20', p: '+1.41%' },
-  { d: '06-08', c: '1,690.40', p: '+0.67%' },
-  { d: '06-09', c: '1,673.80', p: '-0.98%' },
-  { d: '06-12', c: '1,684.50', p: '+0.64%' },
-  { d: '06-13', c: '1,692.10', p: '+0.45%' },
-  { d: '06-14', c: '1,684.50', p: '-0.45%' }
 ];
 
 // 触发抽屉开关的最小横向滑动距离（px）
@@ -164,12 +141,10 @@ Page({
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
-      assistantMsg('早上好，我是 股票助手。今天白酒板块集体走强，要我帮你看持仓吗？'),
-      userMsg('帮我查一下贵州茅台的行情，顺便看下日 K。'),
-      assistantMsg('已更新 600519 的实时行情，以及最近 10 个交易日的日 K 走势：'),
-      quoteCard(QUOTE),
-      klineCard(KLINE_ROWS)
-    ]
+      assistantMsg('你好，我是股票助手。你可以问我行情、K 线、研报等问题。')
+    ],
+    // 状态提示（「正在思考…」「正在查询…」）：挂在消息列表底部，done/error 后清空
+    statusText: ''
   },
 
   onLoad() {
@@ -209,6 +184,12 @@ Page({
     this._senderGap = SENDER_GAP_RPX * rpx;
     this._measureTimer = 0;
     this._kbHeight = 0;
+    // 流式输出追踪：当前 streaming 消息在 messages 里的下标（-1 表示无）、
+    // 累计文本、已落到视图层的文本、合批定时器
+    this._streamIndex = -1;
+    this._streamText = '';
+    this._streamFlushed = '';
+    this._streamTimer = 0;
 
     // 抽屉内容避让状态栏与菜单按钮
     const drawerTop = statusBarHeight + 44;
@@ -232,8 +213,153 @@ Page({
       };
       wx.onWindowResize(this._onResize);
     }
+
+    // 接入 Agent WS：先挂监听再连接，免得漏掉 onOpen 后立即到达的事件
+    this._initAgentSocket();
   },
 
+  // ===== Agent WebSocket =====
+  // agentSocket 是单例，连接跨页面生命周期复用；这里只负责挂/摘本页的监听
+  _initAgentSocket() {
+    // 流式 token：逐字追加到当前 streaming 状态的 assistant 消息。
+    // 性能约束：token 频率很高，不能每次都把整个 messages 回传给视图层——
+    // 增量先积在 _streamText 里，按帧（约 100ms）合批后用路径级 setData
+    // （messages[i].content[0].data）只更新那一段文本
+    agentSocket.on('token', (data) => {
+      const delta = (data && data.delta) || '';
+      if (!delta) return;
+      this._appendToken(delta);
+    });
+
+    // 行情卡片：结构化数据，直接复用现有的 quoteCard 渲染。
+    // 插入卡片后要把当前流式消息收尾（_finishStreaming）：
+    // 后端常见的节奏是「文字 → 卡片 → 文字」，不断流的话
+    // 卡片之后的 token 会被追加到卡片上方的旧消息里，顺序就乱了
+    agentSocket.on('card', (data) => {
+      if (!data || data.type !== 'quote_card' || !data.payload) return;
+      this._flushStream();
+      this._finishStreaming();
+      this.setData({ messages: this.data.messages.concat([quoteCard(data.payload)]) });
+      this.scrollToBottom();
+    });
+
+    // K 线表格：payload 约定为 { rows: [...] }，兼容直接给数组
+    agentSocket.on('table', (data) => {
+      if (!data || data.type !== 'kline_table' || !data.payload) return;
+      const rows = data.payload.rows || data.payload;
+      if (!Array.isArray(rows) || !rows.length) return;
+      this._flushStream();
+      this._finishStreaming();
+      this.setData({ messages: this.data.messages.concat([klineCard(rows)]) });
+      this.scrollToBottom();
+    });
+
+    // 后端主动推的状态提示
+    agentSocket.on('status', (data) => {
+      this.setData({ statusText: (data && data.label) || '' });
+    });
+
+    // 工具调用：开始查行情/研报时给个可读的提示，结束后清掉
+    agentSocket.on('tool_start', (data) => {
+      this.setData({ statusText: (data && data.label) || '正在查询...' });
+    });
+
+    agentSocket.on('tool_end', () => {
+      this.setData({ statusText: '' });
+    });
+
+    // 错误：复位发送态并提示，不往消息列表里塞错误气泡
+    agentSocket.on('error', (data) => {
+      this._flushStream();
+      this._finishStreaming();
+      this.setData({ sending: false, statusText: '' });
+      wx.showToast({
+        icon: 'none',
+        title: (data && data.msg) || '服务异常',
+        duration: 2000
+      });
+    });
+
+    // 本轮回答结束：流式消息转 complete，解锁发送按钮
+    agentSocket.on('done', () => {
+      this._flushStream();
+      this._finishStreaming();
+      this.setData({ sending: false, statusText: '' });
+    });
+
+    // 断连：连接层会自动重连，这里只在正在等回答时给个提示
+    agentSocket.on('disconnected', () => {
+      if (this.data.sending) {
+        this.setData({ statusText: '连接已断开，正在重连...' });
+      }
+    });
+
+    agentSocket.connect();
+  },
+
+  // 把增量文本积进缓冲；首个 token 到达时确定目标消息（没有 streaming 消息
+  // 就新建一条）并立即刷一帧，后续 token 只积缓冲，由定时器合批刷新
+  _appendToken(delta) {
+    if (this._streamIndex < 0) {
+      const messages = this.data.messages;
+      const last = messages[messages.length - 1];
+      if (last && last.role === 'assistant' && last.status === 'streaming') {
+        this._streamIndex = messages.length - 1;
+        this._streamText = (last.content[0] && last.content[0].data) || '';
+      } else {
+        this._streamIndex = messages.length;
+        this._streamText = '';
+        this.setData({
+          messages: messages.concat([
+            {
+              role: 'assistant',
+              status: 'streaming',
+              content: [{ type: 'text', data: '' }]
+            }
+          ]),
+          statusText: ''
+        });
+      }
+    }
+    this._streamText += delta;
+    if (!this._streamTimer) {
+      // 合批：窗口内连续到达的 token 只安排一次刷新，到点后落视图并跟随滚动
+      const first = this._streamFlushed === '';
+      this._streamTimer = setTimeout(() => {
+        this._streamTimer = 0;
+        this._flushStream();
+        this.scrollToBottom();
+      }, first ? 0 : 100);
+    }
+  },
+
+  // 把缓冲区落到视图：只更新目标消息的文本字段（路径级 setData）
+  _flushStream() {
+    if (this._streamTimer) {
+      clearTimeout(this._streamTimer);
+      this._streamTimer = 0;
+    }
+    if (this._streamIndex === undefined || this._streamIndex < 0) return;
+    if (this._streamFlushed === this._streamText) return;
+    this._streamFlushed = this._streamText;
+    const patch = {};
+    patch['messages[' + this._streamIndex + '].content[0].data'] = this._streamText;
+    this.setData(patch);
+  },
+
+  // 流式消息收尾：status 转 complete，复位流式追踪状态。
+  // done 和卡片插入都走这里：后者是为了让卡片之后的 token 另起一条消息，
+  // 两者都不碰 sending（是否解锁发送按钮只由 done / error 决定）
+  _finishStreaming() {
+    const idx = this._streamIndex;
+    this._streamIndex = -1;
+    this._streamText = '';
+    this._streamFlushed = '';
+    if (idx < 0) return;
+    const patch = {};
+    patch['messages[' + idx + '].status'] = 'complete';
+    this.setData(patch);
+  },
 
   onReady() {
     // 导航栏高度与输入栏高度都按胶囊位置 / 组件样式反算，机型间有出入，
@@ -246,12 +372,23 @@ Page({
     if (this._onResize && wx.offWindowResize) wx.offWindowResize(this._onResize);
     if (this._scrollTimer) clearTimeout(this._scrollTimer);
     if (this._measureTimer) clearTimeout(this._measureTimer);
+    if (this._streamTimer) clearTimeout(this._streamTimer);
     // 录音/播放器：走的时候停干净，否则后台还能听到声音
     if (this._recordTimer) clearTimeout(this._recordTimer);
     if (this._audio) {
       this._audio.stop();
       this._audio.destroy();
     }
+    // 摘掉本页在 agent 单例上挂的全部监听；连接本身保留（单例跨页面复用）
+    agentSocket.off('token');
+    agentSocket.off('card');
+    agentSocket.off('table');
+    agentSocket.off('status');
+    agentSocket.off('tool_start');
+    agentSocket.off('tool_end');
+    agentSocket.off('error');
+    agentSocket.off('done');
+    agentSocket.off('disconnected');
   },
 
   // placeholder 撑出的高度就是导航栏实际占用的高度（含状态栏）
@@ -306,23 +443,20 @@ Page({
     const text = (this.data.input || '').trim();
     if (!text || this.data.sending) return;
 
+    // 上一轮流式状态先复位（正常情况下 done 已经收过尾，这里是兜底）
+    this._flushStream();
+    this._finishStreaming();
+
     this.setData({
       messages: this.data.messages.concat([userMsg(text)]),
       input: '',
-      sending: true
+      sending: true,
+      statusText: '正在思考...'
     });
     this.scrollToBottom();
 
-    // 演示：模拟 AI 流式返回
-    setTimeout(() => {
-      const reply =
-        '好的，正在为你检索「' + text + '」相关行情。当前为演示 UI，暂未接入真实行情数据。';
-      this.setData({
-        messages: this.data.messages.concat([assistantMsg(reply)]),
-        sending: false
-      });
-      this.scrollToBottom();
-    }, 600);
+    // 通过 WS 发送；未连接时 agentSocket 内部会先缓存并触发连接
+    agentSocket.sendMessage(text);
   },
 
   // 键盘弹起后的布局：输入栏容器整体上移 kb，对话区同步收窄 kb，
@@ -454,21 +588,13 @@ Page({
   sendVoice(path, seconds) {
     this.setData({ messages: this.data.messages.concat([voiceMsg(path, seconds)]) });
     this.scrollToBottom();
-    this.replyToVoice(seconds);
-  },
-
-  // 演示回复：真实场景这一步是把语音送去识别，再用识别出的文字走一遍问答
-  replyToVoice(seconds) {
-    this.setData({ sending: true });
+    // 语音识别服务还没接：识别成文字后才能走 agentSocket.sendMessage，
+    // 先给个明确提示，不假装在回答
+    this.setData({ sending: true, statusText: '语音识别中...' });
     setTimeout(() => {
-      this.setData({
-        messages: this.data.messages.concat([
-          assistantMsg('收到 ' + seconds + ' 秒语音。当前为演示 UI，语音还没接识别服务。')
-        ]),
-        sending: false
-      });
-      this.scrollToBottom();
-    }, 600);
+      this.setData({ sending: false, statusText: '' });
+      wx.showToast({ icon: 'none', title: '语音识别功能开发中', duration: 1500 });
+    }, 800);
   },
 
   // 点语音气泡：点正在播的那条就停，点别的就切过去播

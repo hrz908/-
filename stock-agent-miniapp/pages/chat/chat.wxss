@@ -57,6 +57,58 @@
   height: 0;
 }
 
+/* ===== 状态提示（正在思考 / 工具查询 / 重连） ===== */
+/* 与 AI 气泡同一套视觉语言：白底卡片、左上直角，挂在列表底部；
+   不放进 chat-message 是因为它不是消息，done/error 后整块直接消失 */
+.status-tip {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  width: fit-content;
+  max-width: 80%;
+  margin-top: var(--gap-block);
+  padding: var(--sp-2) var(--sp-3);
+  background-color: var(--c-card);
+  border-radius: 0 var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx);
+  font-size: 26rpx;
+  color: var(--c-gray);
+}
+
+/* 三个跳动小点：代替 loading 图标，错相延迟形成波浪感 */
+.status-dots {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex: none;
+}
+
+.status-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background-color: var(--c-gray-light);
+  animation: status-blink 1.2s infinite ease-in-out;
+}
+
+.status-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.status-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes status-blink {
+  0%, 60%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4rpx);
+  }
+}
+
 /* ===== 用户气泡：浅蓝底 + 白字，且不占满整行 ===== */
 /* 组件默认是 .t-chat-message--base .t-chat-content 统一灰底、
    再用 --base.assistant 覆盖成透明，用户侧沿用灰底；
@@ -92,6 +144,15 @@
   background-color: var(--c-card);
   padding: var(--sp-3) var(--sp-4);
   border-radius: 0 var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx);
+}
+
+/* AI 正文保留换行：组件只给 user/system 侧的 ._pre 开了 pre-wrap，
+   assistant 侧没开，流式回复里的 \n 会被当成普通空白合并成一坨。
+   chat-content 是 apply-shared，页面样式能作用到它内部的 ._pre 节点 */
+.chat-inner .t-chat-content__assistant ._pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ===== 结构化卡片：行情卡 / 日 K 表 ===== */

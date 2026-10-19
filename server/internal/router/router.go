@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"stock-agent-server/internal/agent"
 	"stock-agent-server/internal/middleware"
 	"stock-agent-server/internal/module/alert"
 	authapi "stock-agent-server/internal/module/auth"
@@ -69,6 +70,11 @@ func New(allowOrigins string) *gin.Engine {
 		// WebSocket 长连接：握手无法带自定义头，token 走 query
 		// （只有这一个路由允许 ?token=，普通接口一律走 Header）
 		authorized.GET("/ws", middleware.AuthAllowQueryToken(), ws.Serve)
+
+		// Agent AI 对话：WS 主通道 + SSE 兜底（H5 / 不支持 WS 的环境）。
+		// WS 握手同样无法带自定义头，复用 ?token= 鉴权变体
+		authorized.GET("/ws/agent", middleware.AuthAllowQueryToken(), agent.ServeWS)
+		authorized.POST("/agent/stream", agent.ServeSSE)
 	}
 
 	return r

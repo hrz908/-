@@ -117,6 +117,16 @@
           </t-chat-message>
         </block>
       </view>
+      <!-- 状态提示：发送后等待回答期间显示（正在思考 / 工具查询 / 重连），
+           放在滚动内容里、底部锚点之前，跟随列表一起滚到底 -->
+      <view wx:if="{{statusText}}" class="status-tip">
+        <view class="status-dots">
+          <view class="status-dot"></view>
+          <view class="status-dot"></view>
+          <view class="status-dot"></view>
+        </view>
+        <text>{{statusText}}</text>
+      </view>
       <!-- scroll-into-view 的锚点：撑到最后一条消息之后，用于滚动到底 -->
       <view id="chat-bottom" class="chat-anchor"></view>
     </scroll-view>

@@ -20,6 +20,7 @@ type Config struct {
 	UploadDir     string // 上传文件落盘目录，静态路由前缀 /uploads/avatars
 	Env           string // dev（默认）/ prod。prod 下强制要求 JWT_SECRET 与微信凭据
 	AllowOrigins  string // CORS 允许的 Origin，逗号分隔；* 表示全部（默认）
+	AgentBaseURL  string // Python Agent 服务基地址，网关反向代理到该地址的 /run/stream
 }
 
 func Load() Config {
@@ -36,6 +37,7 @@ func Load() Config {
 		UploadDir:     env("UPLOAD_DIR", "./uploads"),
 		Env:           env("ENV", "dev"),
 		AllowOrigins:  env("ALLOW_ORIGINS", "*"),
+		AgentBaseURL:  env("AGENT_BASE_URL", "http://127.0.0.1:8000"),
 	}
 }
 
