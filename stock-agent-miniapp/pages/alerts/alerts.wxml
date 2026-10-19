@@ -125,7 +125,7 @@
       <!-- 已选中股票时显示选中状态（新增模式可点右侧 x 清除） -->
       <view wx:if="{{selectedStock}}" class="selected-stock {{editMode ? 'is-readonly' : ''}}" bindtap="onClearStock">
         <text class="selected-stock-text">{{selectedStock.name}} ({{selectedStock.market}}{{selectedStock.code}})</text>
-        <t-icon wx:if="{{!editMode}}" name="close-circle-filled" size="36rpx" color="var(--c-gray-light)" />
+        <t-icon wx:if="{{!editMode}}" name="close" size="36rpx" color="var(--c-gray-light)" />
       </view>
 
       <!-- ===== 区域 2：选择触发条件（带标题的选择器） ===== -->

@@ -117,7 +117,7 @@
           label="股票代码"
           placeholder="代码 / 名称 / 拼音"
           value="{{addCode}}"
-          clearable="{{true}}"
+          clearable="{{ { name: 'close', size: 24 } }}"
           always-embed="{{true}}"
           status="{{codeError ? 'error' : 'default'}}"
           tips="{{codeError}}"

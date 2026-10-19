@@ -174,8 +174,8 @@ Page({
     // overlay 节点保留（只是透明），点空白仍可关闭；
     // 走 overlayProps.backgroundColor 会写成行内样式，比 CSS 变量更可靠
     pickerPopupProps: { overlayProps: { backgroundColor: 'transparent' } },
-    // 清除图标（x）小一档：TDesign 默认约 48rpx，这里显式给 32rpx
-    clearIconCfg: { name: 'close-circle-filled', size: 24 },
+    // 清除图标用极简的纯 x（close），size 24 比 TDesign 默认小一档
+    clearIconCfg: { name: 'close', size: 24 },
     threshold: '',              // 阈值（字符串，提交前转 number）
     thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
     thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,

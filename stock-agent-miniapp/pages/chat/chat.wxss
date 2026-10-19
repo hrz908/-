@@ -322,33 +322,36 @@
 .drawer-head {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: 0 var(--pad-page);
+  gap: var(--sp-4);
+  /* 上下留白加大，让品牌头部整体更突出 */
+  padding: var(--sp-3) var(--pad-page);
+  /* 整块（连同下方菜单）相对顶部再下移一点 */
+  margin-top: var(--sp-2);
 }
 
 /* TDesign image（Logo） */
 .drawer-logo {
   flex: none;
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 24rpx;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 28rpx;
   overflow: hidden;
 }
 
 .drawer-title-col {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 
 .drawer-title {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--c-ink);
 }
 
 .drawer-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--c-gray);
 }
 

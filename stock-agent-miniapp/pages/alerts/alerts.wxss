@@ -204,12 +204,9 @@
    - 标题到框体上边缘 = dialog 的 --td-spacer-3（48rpx）
    底部单独处理：见下面 margin-bottom 的说明 */
 .alert-form {
-  /* 表单底部到「取消 / 确认添加」的距离要等于「新增提醒」标题到「选择股票」的距离，
-     也就是最后一行自身的 32rpx 下内边距。
-     默认会多出 dialog footer 的 48rpx 上内边距（footer 没有单独的 padding 变量，
-     只有四边统一的 --td-spacer-3，改它会连标题上边距一起变），
-     所以用负 margin 把 footer 拉上来 48rpx 抵消掉 */
-  margin-bottom: -48rpx;
+  /* 表单底部到「取消 / 确认添加」按键的间距：footer 默认 48rpx 上内边距 + 额外 16rpx，
+     共 64rpx 空隙，让最后一条表单与下方按键之间留更明显的间隔 */
+  margin-bottom: 16rpx;
 }
 
 /* 分区不再自带间距：上一个控件的 32rpx 下内边距就是行距，
