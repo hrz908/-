@@ -28,7 +28,13 @@
     <!-- 提醒列表：只有这一个容器内部滚动，底边停在「新增提醒」按钮上方
          （预留量在 wxss 的 .list-scroll，含安全区），概览与筛选不参与滚动 -->
     <scroll-view class="list-scroll" scroll-y>
-      <t-cell-group wx:if="{{filtered.length > 0}}" title="价格与涨幅提醒" bordered="{{true}}">
+      <t-cell-group
+        wx:if="{{filtered.length > 0}}"
+        title="价格与涨幅提醒"
+        bordered="{{true}}"
+        class="list-group"
+        t-class-title="list-title"
+      >
       <t-cell
         wx:for="{{filtered}}"
         wx:for-item="item"

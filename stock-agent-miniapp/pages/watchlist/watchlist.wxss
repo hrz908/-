@@ -20,6 +20,12 @@
   flex-direction: column;
 }
 
+/* 分组标题与它自己的卡片之间的距离，规则见 app.wxss 的 --gap-title：
+   比区块间距小一档，标题才「属于」下面的卡片 */
+.watch-title {
+  margin-bottom: var(--gap-title);
+}
+
 /* 列表滚动区：页面里唯一内部滚动的地方。
    底边让开悬浮的「添加股票」按钮（absolute 定位，不在文档流）：
    预留 = 按钮距底 20 + 按钮高 52 + 与按钮的间距 16 = 88，再加安全区；
@@ -43,14 +49,14 @@
 /* ===== 筛选 tabs ===== */
 .filter-tabs {
   display: block;
-  margin-top: 12px;
-  background: #ffffff;
+  margin-top: var(--gap-block);
+  background: var(--c-card);
 }
 
 /* ===== 自选列表容器 ===== */
 .stock-list {
-  margin-top: 12px;
-  background: #ffffff;
+  margin-top: var(--gap-block);
+  background: var(--c-card);
 }
 
 /* cell 的 title 插槽：总浮动金额强调。
@@ -75,7 +81,7 @@
 
 .hero-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 /* cell 的 note 插槽：价格与涨跌幅 */
@@ -89,7 +95,7 @@
 }
 
 .p2 {
-  margin-top: 3px;
+  margin-top: var(--sp-1);
   font-size: 12px;
 }
 
@@ -104,8 +110,8 @@
 /* ===== 底部按钮（承载 TDesign button） ===== */
 .bottom-btn {
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: var(--pad-page);
+  right: var(--pad-page);
   height: 52px;
 }
 
@@ -124,7 +130,7 @@
 /* ===== 添加自选表单（承载 TDesign input） ===== */
 /* input 自带 32rpx 纵向内边距，这里只补弹窗底部的收口 */
 .add-form {
-  padding-bottom: 8rpx;
+  padding-bottom: var(--sp-1);
 }
 
 /* ===== 弹窗缩放已关掉，见 wxml 里 t-dialog 的 custom-style ===== */
@@ -145,7 +151,7 @@
   left: 0;
   right: 0;
   top: 100%;
-  margin-top: 8rpx;
+  margin-top: var(--sp-1);
   background: var(--c-card, #fff);
   border: 1rpx solid var(--c-divider, #e5e6eb);
   border-radius: 12rpx;
@@ -158,7 +164,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20rpx 24rpx;
+  padding: var(--sp-2) var(--sp-3);
   font-size: 28rpx;
   border-bottom: 1rpx solid var(--c-divider, #e5e6eb);
 }
@@ -183,7 +189,7 @@
 
 /* ===== 添加自选弹窗提示：一行一个交易所 ===== */
 .add-note {
-  margin-top: 16rpx;
+  margin-top: var(--sp-2);
 }
 
 .note-title {
@@ -194,7 +200,7 @@
 .note-row {
   display: flex;
   align-items: baseline;
-  margin-top: 6rpx;
+  margin-top: var(--sp-1);
   font-size: 22rpx;
   line-height: 1.6;
 }

@@ -8,7 +8,7 @@
   <!-- 页面分两段：概览卡片与筛选 tabs 固定，只有自选列表在下面的容器里滚动 -->
   <view class="content">
     <!-- 总浮动概览：cell-group 卡片主题 + cell 承载主数据 -->
-    <t-cell-group theme="card" bordered="{{true}}" title="自选总浮动（今日）">
+    <t-cell-group theme="card" bordered="{{true}}" title="自选总浮动（今日）" t-class-title="watch-title">
       <t-cell>
         <view slot="title" class="hero-amount {{profitClass}}">¥ {{totalProfitText}}</view>
         <view slot="description" class="hero-desc">{{totalRateText}} · 已同步 {{syncedAt}}</view>

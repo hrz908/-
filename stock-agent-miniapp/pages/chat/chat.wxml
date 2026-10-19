@@ -92,6 +92,28 @@
                 </view>
               </view>
             </view>
+            <!-- 语音消息：与卡片消息同一个套路——content 留空数组，
+                 组件才会渲染 content 插槽，气泡本体在页面上画。
+                 播放状态记在 msg.voice.playing 上（见 playVoice） -->
+            <view
+              wx:elif="{{msg.card === 'voice'}}"
+              slot="content"
+              class="voice-bubble {{msg.voice.playing ? 'voice-bubble--playing' : ''}}"
+              data-index="{{index}}"
+              bindtap="playVoice"
+            >
+              <t-icon name="{{msg.voice.playing ? 'pause-circle' : 'play-circle'}}" size="40rpx" />
+              <view class="voice-wave">
+                <view
+                  class="voice-bar"
+                  wx:for="{{msg.voice.bars}}"
+                  wx:for-item="b"
+                  wx:key="*this"
+                  style="height: {{b}}rpx;"
+                ></view>
+              </view>
+              <view class="voice-duration">{{msg.voice.duration}}"</view>
+            </view>
           </t-chat-message>
         </block>
       </view>
@@ -119,12 +141,25 @@
       placeholder="问点什么，如：白酒还能拿吗？"
       loading="{{sending}}"
       render-presets="{{renderPresets}}"
+      allow-speech="{{true}}"
       auto-rise-with-keyboard="{{false}}"
       custom-style="margin-top: 0; margin-bottom: 12px;"
       bind:change="onInput"
       bind:send="onSend"
       bind:keyboardheightchange="onKeyboardHeightChange"
-    />
+    >
+      <!-- 语音模式的内容区：allow-speech 打开后组件会在左下角自带
+           键盘 / 语音切换按钮，并在语音模式下用这个插槽替掉 textarea，
+           所以这里只需要做「按住说话」这一块 -->
+      <view
+        slot="speech"
+        class="speech-btn {{recording ? 'speech-btn--active' : ''}}"
+        bindtouchstart="onRecordStart"
+        bindtouchmove="onRecordMove"
+        bindtouchend="onRecordEnd"
+        bindtouchcancel="onRecordEnd"
+      >{{recordTip}}</view>
+    </t-chat-sender>
   </view>
 
   <!-- 侧边抽屉：TDesign popup 左侧滑出（drawer 的默认插槽在 70vh 菜单区之下的

@@ -70,8 +70,9 @@ Page({
     stats: makeStats(ALERTS),
     filters: FILTERS,
     filter: 'all',
-    filtered: makeFiltered(ALERTS, 'all')
+    filtered: makeFiltered(ALERTS, 'all'),
   },
+
 
   onLoad() {
     let safeBottom = 0;

@@ -8,7 +8,7 @@ import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 const MENUS = [
   { key: 'watchlist', label: '自选股', icon: 'star', badge: '6', badgeTheme: 'default' },
   { key: 'alerts', label: '提醒', icon: 'notification', badge: '3', badgeTheme: 'danger' },
-  { key: 'settings', label: '设置', icon: 'setting' },
+  { key: 'settings', label: '我的', icon: 'user' },
   { key: 'about', label: '关于', icon: 'info-circle' }
 ];
 
@@ -120,6 +120,27 @@ function klineCard(rows) {
   };
 }
 
+// ===== 语音消息 =====
+// 录音时长的两条边界：短于下限当作误触、不发；触及上限自动结束
+const REC_MIN_MS = 1000;
+const REC_MAX_MS = 60000;
+// 手指上滑超过这个距离（px）后松开，算「取消发送」
+const CANCEL_DISTANCE = 60;
+// 波形装饰：固定一组高度，免得同一条语音每次重绘都长得不一样
+const VOICE_BARS = [10, 20, 30, 16, 26, 36, 22, 12, 28, 18];
+
+// 语音消息的 tempFilePath 只在本次会话可用，重新进入聊天页就失效了——
+// 这一点和当前 messages 一致（本来也没有历史持久化的接口）
+function voiceMsg(path, seconds) {
+  return {
+    role: 'user',
+    status: 'complete',
+    card: 'voice',
+    content: [],
+    voice: { path: path, duration: seconds, playing: false, bars: VOICE_BARS }
+  };
+}
+
 Page({
   data: {
     drawerTop: 44,
@@ -137,6 +158,13 @@ Page({
     markets: MARKETS,
     // chat-sender 右侧按钮：图标型发送按钮
     renderPresets: [{ name: 'send', type: 'icon' }],
+
+    // 语音输入：recording = 手指按住中，recordCanceling = 已上滑到取消区
+    recording: false,
+    recordCanceling: false,
+    recordTip: '按住 说话',
+    // 正在播放的语音消息下标，-1 表示当前没有在播
+    playingIndex: -1,
     messages: [
       assistantMsg('早上好，我是 Stock Agent。今天白酒板块集体走强，要我帮你看持仓吗？'),
       userMsg('帮我查一下贵州茅台的行情，顺便看下日 K。'),
@@ -147,6 +175,8 @@ Page({
   },
 
   onLoad() {
+    this.initVoice();
+
     let statusBarHeight = 44;
     let safeBottom = 0;
     let windowHeight = 667;
@@ -206,6 +236,7 @@ Page({
     }
   },
 
+
   onReady() {
     // 导航栏高度与输入栏高度都按胶囊位置 / 组件样式反算，机型间有出入，
     // 首屏渲染后实测一次修正估算值，避免最后一条消息被输入栏压住
@@ -217,6 +248,12 @@ Page({
     if (this._onResize && wx.offWindowResize) wx.offWindowResize(this._onResize);
     if (this._scrollTimer) clearTimeout(this._scrollTimer);
     if (this._measureTimer) clearTimeout(this._measureTimer);
+    // 录音/播放器：走的时候停干净，否则后台还能听到声音
+    if (this._recordTimer) clearTimeout(this._recordTimer);
+    if (this._audio) {
+      this._audio.stop();
+      this._audio.destroy();
+    }
   },
 
   // placeholder 撑出的高度就是导航栏实际占用的高度（含状态栏）
@@ -320,6 +357,156 @@ Page({
     this.applyKeyboard();
     // 输入过程中卡片会随行数变高（textarea 开了 auto-height），键盘收/起稳定后再量一次
     this.scheduleMeasureSender();
+  },
+
+  /* ===== 语音输入 ===== */
+
+  // 录音管理器和音频播放器各自都是单例，建一次复用。
+  // 挂在 this 上而不是 data 里：data 会参与视图 diff，塞这种对象只会白白加重开销
+  initVoice() {
+    this._recorder = wx.getRecorderManager();
+    this._audio = wx.createInnerAudioContext();
+
+    this._recorder.onStop((res) => {
+      const path = (res && res.tempFilePath) || '';
+      const ms = (res && res.duration) || 0;
+      // 是否取消要在状态复位之前读出来：onRecordEnd 里已经把结果放进 _recordCanceled
+      const canceled = this._recordCanceled;
+
+      this._recording = false;
+      this.setData({ recording: false, recordCanceling: false, recordTip: '按住 说话' });
+
+      if (canceled || !path) return;
+      if (ms < REC_MIN_MS) {
+        wx.showToast({ icon: 'none', title: '说话时间太短', duration: 1200 });
+        return;
+      }
+      this.sendVoice(path, Math.max(1, Math.round(ms / 1000)));
+    });
+
+    this._recorder.onError(() => {
+      this._recording = false;
+      this.setData({ recording: false, recordCanceling: false, recordTip: '按住 说话' });
+      wx.showToast({ icon: 'none', title: '录音失败，请重试' });
+    });
+
+    // 播完或播不动都要把 playing 标记撤掉，按钮变回播放态
+    this._audio.onEnded(() => this.stopVoiceUI());
+    this._audio.onError(() => this.stopVoiceUI());
+  },
+
+  onRecordStart(e) {
+    if (this._recording) return;
+
+    // 麦克风权限：之前拒绝过的话 authorize 会直接失败，
+    // 那时只能让用户去设置页打开，这里给个明确出口，别点了没反应
+    wx.authorize({
+      scope: 'scope.record',
+      success: () => this.startRecord(e),
+      fail: () => {
+        wx.showModal({
+          title: '需要麦克风权限',
+          content: '发送语音需要麦克风权限，是否去设置页开启？',
+          confirmText: '去设置',
+          success: (r) => {
+            if (r.confirm) wx.openSetting();
+          }
+        });
+      }
+    });
+  },
+
+  startRecord(e) {
+    const touch = e && e.touches && e.touches[0];
+    this._startY = (touch && touch.clientY) || 0;
+    this._recording = true;
+    this._recordCanceled = false;
+
+    this.setData({ recording: true, recordCanceling: false, recordTip: '松开 发送' });
+    this._recorder.start({ format: 'mp3', duration: REC_MAX_MS });
+
+    // 录满自动停：onStop 会照常走发送流程
+    clearTimeout(this._recordTimer);
+    this._recordTimer = setTimeout(() => {
+      if (this._recording) this._recorder.stop();
+    }, REC_MAX_MS);
+  },
+
+  // 上滑取消：越过阈值才算，免得手指轻微抖动就触发
+  onRecordMove(e) {
+    if (!this._recording) return;
+    const touch = e && e.touches && e.touches[0];
+    const y = (touch && touch.clientY) || this._startY;
+    const cancel = this._startY - y > CANCEL_DISTANCE;
+    if (cancel === this.data.recordCanceling) return;
+    this.setData({
+      recordCanceling: cancel,
+      recordTip: cancel ? '松开手指，取消发送' : '松开 发送'
+    });
+  },
+
+  onRecordEnd() {
+    if (!this._recording) return;
+    clearTimeout(this._recordTimer);
+    this._recordCanceled = !!this.data.recordCanceling;
+    // stop 是异步的，录音结果在 onStop 里收，这里不立刻收尾
+    this._recorder.stop();
+  },
+
+  sendVoice(path, seconds) {
+    this.setData({ messages: this.data.messages.concat([voiceMsg(path, seconds)]) });
+    this.scrollToBottom();
+    this.replyToVoice(seconds);
+  },
+
+  // 演示回复：真实场景这一步是把语音送去识别，再用识别出的文字走一遍问答
+  replyToVoice(seconds) {
+    this.setData({ sending: true });
+    setTimeout(() => {
+      this.setData({
+        messages: this.data.messages.concat([
+          assistantMsg('收到 ' + seconds + ' 秒语音。当前为演示 UI，语音还没接识别服务。')
+        ]),
+        sending: false
+      });
+      this.scrollToBottom();
+    }, 600);
+  },
+
+  // 点语音气泡：点正在播的那条就停，点别的就切过去播
+  playVoice(e) {
+    const index = Number((e && e.currentTarget.dataset && e.currentTarget.dataset.index) || -1);
+    const msg = this.data.messages[index];
+    if (!msg || !msg.voice) return;
+
+    if (this.data.playingIndex === index) {
+      this._audio.stop();
+      this.stopVoiceUI();
+      return;
+    }
+
+    this._audio.stop();
+    this._audio.src = msg.voice.path;
+    this._audio.play();
+
+    const messages = this.data.messages.map((m, i) => {
+      if (!m.voice) return m;
+      return Object.assign({}, m, {
+        voice: Object.assign({}, m.voice, { playing: i === index })
+      });
+    });
+    this.setData({ messages: messages, playingIndex: index });
+  },
+
+  // playingIndex 与 messages 里的 playing 是同一件事的两份记录：
+  // 后者驱动气泡上的图标，前者用来判断「这次点的是不是正在播的那条」
+  stopVoiceUI() {
+    const messages = this.data.messages.map((m) =>
+      m.voice && m.voice.playing
+        ? Object.assign({}, m, { voice: Object.assign({}, m.voice, { playing: false }) })
+        : m
+    );
+    this.setData({ messages: messages, playingIndex: -1 });
   },
 
   scrollToBottom() {

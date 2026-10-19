@@ -34,8 +34,10 @@
 /* ===== 概览宫格（TDesign grid） ===== */
 .overview-grid {
   display: block;
-  margin-top: 12px;
-  background: #ffffff;
+  /* navbar 之后第一个区块，用标准区块间距 --gap-block（32rpx）。
+     它下面到筛选栏同样是 --gap-block，整页区块间距一致 */
+  margin-top: var(--gap-block);
+  background: var(--c-card);
 }
 
 .g-num {
@@ -56,7 +58,7 @@
 }
 
 .g-label {
-  margin-top: 6px;
+  margin-top: var(--sp-1);
   font-size: 12px;
   color: var(--c-gray);
 }
@@ -64,13 +66,24 @@
 /* ===== 筛选 tabs ===== */
 .filter-tabs {
   display: block;
-  margin-top: 12px;
-  background: #ffffff;
+  margin-top: var(--gap-block);
+  background: var(--c-card);
+}
+
+/* 列表里的分组：与上方筛选栏之间是区块间距，
+   标题与它自己的卡片用 --gap-title（同一套规格，见 app.wxss） */
+.list-group {
+  display: block;
+  margin-top: var(--gap-block);
+}
+
+.list-title {
+  margin-bottom: var(--gap-title);
 }
 
 /* ===== cell 的 description 插槽内容（TDesign cell） ===== */
 .a-desc-wrap {
-  padding-top: 4px;
+  padding-top: var(--sp-1);
 }
 
 .a-desc {
@@ -81,8 +94,8 @@
 .a-tags {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
 }
 
 .a-time {
@@ -93,7 +106,7 @@
 /* ===== 底部按钮（承载 TDesign button） ===== */
 .bottom-btn {
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: var(--pad-page);
+  right: var(--pad-page);
   height: 52px;
 }

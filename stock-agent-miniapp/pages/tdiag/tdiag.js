@@ -1,8 +1,10 @@
+
 Page({
   data: {
     sw: true,
-    result: ''
+    result: '',
   },
+
 
   onLoad() {
     this.setData({ result: '页面 JS 已执行' });

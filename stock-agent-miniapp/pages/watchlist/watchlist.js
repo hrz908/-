@@ -101,7 +101,7 @@ Page({
     searchVisible: false,
     addMarket: '',
     // 弹窗里的交易所提示：一行一个交易所，文案直接来自 EXCHANGES
-    exchanges: EXCHANGES.map((e) => ({ label: e.label, codes: e.codes.join(' / ') }))
+    exchanges: EXCHANGES.map((e) => ({ label: e.label, codes: e.codes.join(' / ') })),
   },
 
   onLoad() {
