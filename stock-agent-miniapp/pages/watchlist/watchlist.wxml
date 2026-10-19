@@ -137,6 +137,7 @@
             <text class="search-item-code">{{item.market}}{{item.code}}</text>
           </view>
         </view>
+      </view>
       <!-- 成本价：type="digit" 带小数点键盘，可留空（还没建仓 / 不想记） -->
       <t-input
         label="买入单价"
