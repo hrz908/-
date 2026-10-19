@@ -196,22 +196,19 @@
           wx:for="{{menus}}"
           wx:for-item="m"
           wx:key="key"
-          title="{{m.label}}"
-          arrow="{{true}}"
+          t-class-center="drawer-nav-center"
           hover="{{true}}"
           data-menu="{{m.key}}"
           bind:click="onMenuSelect"
         >
-          <!-- 图标颜色固定：选中与否都不变色（原来选中会切成品牌蓝），
-               选中态只作为「点击当前项直接收起抽屉」的判断依据 -->
-          <t-icon
-            slot="left-icon"
-            name="{{m.icon}}"
-            size="40rpx"
-            color="#5A5F66"
-          />
-          <view wx:if="{{m.badge}}" slot="note">
-            <t-tag theme="{{m.badgeTheme}}" variant="light" size="small">{{m.badge}}</t-tag>
+          <!-- 图标 + 文字同一行、彼此垂直居中，整组水平居中。
+               用内联样式锁定横向 flex，避免被组件默认样式影响 -->
+          <view
+            slot="title"
+            style="width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 16rpx;"
+          >
+            <t-icon name="{{m.icon}}" size="40rpx" color="#5A5F66" />
+            <text>{{m.label}}</text>
           </view>
         </t-cell>
       </t-cell-group>
@@ -222,22 +219,6 @@
           <view slot="note" class="market-note {{k.up ? 'up' : 'down'}}">{{k.value}}</view>
         </t-cell>
       </t-cell-group>
-
-      <!-- 通知设置 -->
-      <t-cell-group theme="card" bordered="{{true}}">
-        <t-cell
-          title="开启通知"
-          description="第一时间收到价格提醒"
-          arrow="{{true}}"
-          hover="{{true}}"
-          data-name="通知"
-          bind:click="onTodo"
-        >
-          <t-icon slot="left-icon" name="notification" size="40rpx" color="#2559EB" />
-        </t-cell>
-      </t-cell-group>
-
-      <view class="drawer-version">Stock Agent v1.2.0</view>
     </view>
   </t-popup>
 

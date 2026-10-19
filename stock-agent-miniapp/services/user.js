@@ -2,10 +2,10 @@ import { apiBase } from '../config';
 import { getToken, ensureLogin, setSession } from '../utils/request';
 import { get, put } from '../utils/request';
 
-// 登录接口是公开的：不能用 utils/request 的 request()，
-// 它会先 ensureLogin，形成「登录也要先登录」的死循环，
-// 所以这里和 utils/request 内部的登录一样，直接 wx.request
-export function login(payload) {
+// 静默登录：只用 code 换身份，不索要昵称/头像。
+// 后端按 openid 查/建用户，新用户自动给默认昵称「微信用户」、空头像。
+// 头像昵称的完善留给「编辑资料」页面，由用户主动触发
+export function login() {
   return new Promise((resolve, reject) => {
     wx.login({
       success: (lr) => {
@@ -16,13 +16,7 @@ export function login(payload) {
         wx.request({
           url: apiBase + '/api/v1/auth/login',
           method: 'POST',
-          // 昵称、头像随登录一起提交，后端建号时直接落库，
-          // 省掉「登录后再调一次资料接口」的往返
-          data: {
-            code: lr.code,
-            nickname: (payload && payload.nickname) || '',
-            avatar: (payload && payload.avatar) || ''
-          },
+          data: { code: lr.code },
           header: { 'Content-Type': 'application/json' },
           timeout: 10000,
           success: (res) => {

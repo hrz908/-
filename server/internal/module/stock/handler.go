@@ -1,7 +1,6 @@
 package stock
 
 import (
-	"encoding/json"
 	"log"
 	"strconv"
 	"strings"
@@ -59,11 +58,8 @@ func SearchStock(c *gin.Context) {
 	if results == nil {
 		results = []quote.SearchResult{}
 	}
-	body, err := json.Marshal(resp.Body{
-		Code:    0,
-		Message: "ok",
-		Data:    results,
-	})
+	// 序列化与缓存写同一份字节：保证缓存内容与真实响应逐字节一致
+	body, err := resp.JSONBytes(resp.CodeOK, "ok", results)
 	if err != nil {
 		log.Printf("marshal search result failed: %v", err)
 		resp.Fail(c, resp.CodeInternal, "序列化失败")

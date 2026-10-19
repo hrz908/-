@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -24,47 +25,64 @@ import (
 // 提醒防抖锁 TTL（秒）
 const alertLockTTL = 60
 
+// stockNameMax 股票名称长度上限，与列类型 varchar(100) 对应
+const stockNameMax = 100
+
+// 收盘确认型的生效时刻：A 股 15:00 收盘，收盘前不判定 close 型规则。
+// 取的是服务器本地时间，部署时把服务器时区设为 Asia/Shanghai 即可
+const closeHour = 15
+
 /* ===================== 请求 / 响应结构 ===================== */
 
 type CreateAlertReq struct {
 	StockCode      string `json:"stock_code"`
+	StockName      string `json:"stock_name"`
 	ConditionType  string `json:"condition_type"`
-	ConditionValue string `json:"condition_value"`
+	Threshold      string `json:"threshold"`
+	VolumeBase     int    `json:"volume_base"`
+	CheckFrequency string `json:"check_frequency"`
 }
 
 // UpdateAlertReq 局部更新：指针为空表示「不改这个字段」
 type UpdateAlertReq struct {
 	ConditionType  *string `json:"condition_type"`
-	ConditionValue *string `json:"condition_value"`
+	Threshold      *string `json:"threshold"`
+	VolumeBase     *int    `json:"volume_base"`
+	CheckFrequency *string `json:"check_frequency"`
 	Enabled        *bool   `json:"enabled"`
 }
 
-// AlertItem 提醒规则。current_price 来自 Redis，读不到就是 nil
+// AlertItem 提醒规则。current_price / change_percent 来自 Redis，读不到就是 nil
 type AlertItem struct {
 	ID              int64   `json:"id"`
 	StockCode       string  `json:"stock_code"`
+	StockName       string  `json:"stock_name"`
 	ConditionType   string  `json:"condition_type"`
-	ConditionValue  string  `json:"condition_value"`
+	Threshold       string  `json:"threshold"`
+	VolumeBase      int     `json:"volume_base"`
+	CheckFrequency  string  `json:"check_frequency"`
 	Enabled         bool    `json:"enabled"`
 	CurrentPrice    *string `json:"current_price"`
+	ChangePercent   *string `json:"change_percent"`
 	LastTriggeredAt *string `json:"last_triggered_at"`
 	CreatedAt       string  `json:"created_at"`
 }
 
-/* ===================== 四个接口的校验点一览 =====================
-| 接口              | 校验点                                   | 失败返回                      |
-|-------------------|------------------------------------------|-------------------------------|
-| POST   /alerts    | stock_code 缺失或格式非法                 | 400 股票代码格式不正确        |
-| POST   /alerts    | condition_type 不在枚举内                 | 400 条件类型不合法            |
-| POST   /alerts    | condition_value 非数字或 <= 0             | 400 目标价必须大于 0          |
-| POST   /alerts    | 同用户同股票同方向已有启用规则            | 409 该股票的该方向提醒已存在  |
-| GET    /alerts    | 按 user_id 过滤（可选 stock_code）        | 500 查询提醒失败              |
-| PUT    /alerts/:id| id 非法                                   | 400 规则 id 不合法            |
-| PUT    /alerts/:id| condition_type 不在枚举内                 | 400 条件类型不合法            |
-| PUT    /alerts/:id| condition_value 非数字或 <= 0             | 400 目标价必须大于 0          |
-| PUT    /alerts/:id| id + user_id 定位不到                     | 404 规则不存在或无权限        |
-| DELETE /alerts/:id| id 非法                                   | 400 规则 id 不合法            |
-| DELETE /alerts/:id| id + user_id 定位不到                     | 404 规则不存在或无权限        |
+/* ===================== 各接口的校验点一览 =====================
+| 接口               | 校验点                                  | 失败返回                      |
+|--------------------|-----------------------------------------|-------------------------------|
+| POST   /alerts     | stock_code 缺失或格式非法                | 400 股票代码格式不正确        |
+| POST   /alerts     | condition_type 不在枚举内                | 400 条件类型不合法            |
+| POST   /alerts     | threshold 非法或超出该类取值范围         | 400 阈值不合法                |
+| POST   /alerts     | 成交量异动但 volume_base 不在 5/10/20    | 400 基准周期不合法            |
+| POST   /alerts     | check_frequency 不在枚举内               | 400 检查频率不合法            |
+| POST   /alerts     | 同用户同股票同条件已有启用规则           | 409 该股票的该条件提醒已存在  |
+| GET    /alerts     | 按 user_id 过滤（可选 stock_code）       | 500 查询提醒失败              |
+| PUT    /alerts/:id | id 非法                                  | 400 规则 id 不合法            |
+| PUT    /alerts/:id | condition_type / threshold 等非法        | 400 对应文案                  |
+| PUT    /alerts/:id | id + user_id 定位不到                    | 404 规则不存在或无权限        |
+| DELETE /alerts/:id | id 非法                                  | 400 规则 id 不合法            |
+| DELETE /alerts/:id | id + user_id 定位不到                    | 404 规则不存在或无权限        |
 =========================================================== */
 
 /* ===================== 新建 ===================== */
@@ -85,24 +103,48 @@ func CreateAlert(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "股票代码格式不正确，应为 SH/SZ/BJ + 6 位数字")
 		return
 	}
-	if !ValidCondition(req.ConditionType) {
+	condType := normalizeCondition(req.ConditionType)
+	if !ValidCondition(condType) {
 		resp.Fail(c, resp.CodeBadRequest, "条件类型不合法")
 		return
 	}
-	target, errMsg := parseTarget(req.ConditionValue)
+	threshold, errMsg := parseThreshold(condType, req.Threshold)
 	if errMsg != "" {
 		resp.Fail(c, resp.CodeBadRequest, errMsg)
 		return
 	}
+	volumeBase, errMsg := normalizeVolumeBase(condType, req.VolumeBase)
+	if errMsg != "" {
+		resp.Fail(c, resp.CodeBadRequest, errMsg)
+		return
+	}
+	freq := strings.TrimSpace(req.CheckFrequency)
+	if freq == "" {
+		freq = FreqRealtime
+	}
+	if !ValidFrequency(freq) {
+		resp.Fail(c, resp.CodeBadRequest, "检查频率不合法")
+		return
+	}
+	// 股票名称长度：列是 varchar(100)，超长时错误来自 DB、返回的是 500，
+	// 在入口按 400 挡掉
+	stockName := strings.TrimSpace(req.StockName)
+	if utf8.RuneCountInString(stockName) > stockNameMax {
+		resp.Fail(c, resp.CodeBadRequest, "股票名称过长")
+		return
+	}
 
-	// 同一用户、同一股票、同一方向只允许一条启用规则
+	// 同一用户、同一股票、同一条件类型只允许一条启用规则。
+	// 这里是给用户的友好提示；并发下两个请求可能同时通过检查，
+	// 真正的保证是 (user_id, stock_code, condition_type) 唯一索引，
+	// 冲突时下面的 Create 会返回 409
 	var exist AlertRule
 	err := deps.DB.WithContext(ctx).
 		Where("user_id = ? AND stock_code = ? AND condition_type = ? AND enabled = ?",
-			userID, code, req.ConditionType, true).
+			userID, code, condType, true).
 		First(&exist).Error
 	if err == nil {
-		resp.Fail(c, resp.CodeConflict, "该股票的该方向提醒已存在")
+		resp.Fail(c, resp.CodeConflict, "该股票的该条件提醒已存在")
 		return
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -114,11 +156,18 @@ func CreateAlert(c *gin.Context) {
 	rule := AlertRule{
 		UserID:         userID,
 		StockCode:      code,
-		ConditionType:  req.ConditionType,
-		ConditionValue: target,
+		StockName:      stockName,
+		ConditionType:  condType,
+		Threshold:      threshold,
+		VolumeBase:     volumeBase,
+		CheckFrequency: freq,
 		Enabled:        true,
 	}
 	if err := deps.DB.WithContext(ctx).Create(&rule).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			resp.Fail(c, resp.CodeConflict, "该股票的该条件提醒已存在")
+			return
+		}
 		log.Printf("create alert rule failed: user=%d code=%s err=%v", userID, code, err)
 		resp.Fail(c, resp.CodeInternal, "创建提醒失败")
 		return
@@ -199,23 +248,49 @@ func UpdateAlert(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]any{}
+	// 条件类型的最终值：请求带了就用新的，否则沿用库里的，
+	// 阈值 / 基准周期的校验要跟着最终值走
+	condType := rule.ConditionType
 	if req.ConditionType != nil {
-		if !ValidCondition(*req.ConditionType) {
+		condType = normalizeCondition(*req.ConditionType)
+		if !ValidCondition(condType) {
 			resp.Fail(c, resp.CodeBadRequest, "条件类型不合法")
 			return
 		}
-		updates["condition_type"] = *req.ConditionType
 	}
-	if req.ConditionValue != nil {
-		v, msg := parseTarget(*req.ConditionValue)
+
+	updates := map[string]any{}
+	if req.ConditionType != nil {
+		updates["condition_type"] = condType
+	}
+	if req.Threshold != nil {
+		v, msg := parseThreshold(condType, *req.Threshold)
 		if msg != "" {
 			resp.Fail(c, resp.CodeBadRequest, msg)
 			return
 		}
-		updates["condition_value"] = v
+		updates["threshold"] = v
 	}
-	// 条件变了就清掉上次触发时间，让它能重新提醒
+	if req.VolumeBase != nil {
+		n, msg := normalizeVolumeBase(condType, *req.VolumeBase)
+		if msg != "" {
+			resp.Fail(c, resp.CodeBadRequest, msg)
+			return
+		}
+		updates["volume_base"] = n
+	} else if condType != CondVolume {
+		// 从成交量切成其它条件时，基准周期必须归 0，
+		// 否则库里留着 20/10/5，与创建时的归一化不一致
+		updates["volume_base"] = 0
+	}
+	if req.CheckFrequency != nil {
+		if !ValidFrequency(*req.CheckFrequency) {
+			resp.Fail(c, resp.CodeBadRequest, "检查频率不合法")
+			return
+		}
+		updates["check_frequency"] = *req.CheckFrequency
+	}
+	// 判定条件变了就清掉上次触发时间，让它能重新提醒
 	if len(updates) > 0 {
 		updates["last_triggered_at"] = nil
 	}
@@ -238,13 +313,18 @@ func UpdateAlert(c *gin.Context) {
 
 	// 停用即解锁：清掉防抖锁，避免残留锁挡住后续推送
 	if req.Enabled != nil && !*req.Enabled {
-		delAlertLock(ctx, userID, rule.StockCode)
+		delAlertLock(ctx, userID, rule)
 	}
 
 	var fresh AlertRule
 	if err := deps.DB.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
-		First(&fresh).Error; err == nil {
+		First(&fresh).Error; err != nil {
+		// 重查失败不能静默用旧值响应：客户端会拿到修改前的数据还以为成功了
+		log.Printf("reload alert rule failed: id=%d err=%v", id, err)
+		resp.Fail(c, resp.CodeInternal, "修改提醒失败")
+		return
+	} else {
 		rule = fresh
 	}
 	snap, _ := quote.GetQuoteFromRedis(ctx, rule.StockCode)
@@ -288,7 +368,7 @@ func DeleteAlert(c *gin.Context) {
 	}
 
 	// 删除后清防抖锁，否则残留锁会挡住同一股票后续新建的规则
-	delAlertLock(ctx, userID, rule.StockCode)
+	delAlertLock(ctx, userID, rule)
 
 	resp.OK(c, gin.H{"id": id})
 }
@@ -296,7 +376,7 @@ func DeleteAlert(c *gin.Context) {
 /* ===================== 刷新后的提醒检查 ===================== */
 
 // checkAlerts 检查该用户的提醒规则，命中就通过 WebSocket 推送。
-// 防重复：SetNX alert:lock:{user_id}:{stock_code}，TTL 60 秒；
+// 防重复：SetNX alert:lock:{user_id}:{stock_code}:{condition_type}，TTL 60 秒；
 //
 //	写不进去说明 60 秒内已经推过，直接跳过
 func checkAlerts(userID int64, ctx context.Context) {
@@ -323,12 +403,16 @@ func checkAlerts(userID int64, ctx context.Context) {
 		if snap == nil {
 			continue // 没行情不判
 		}
-		if !isHit(r.ConditionType, snap.Price, r.ConditionValue) {
+		// 收盘确认型：只在收盘后判定，盘中即时型每次刷新都判
+		if r.CheckFrequency == FreqClose && now.Hour() < closeHour {
+			continue
+		}
+		if !isHit(r, snap) {
 			continue
 		}
 
 		if deps.RDB != nil {
-			ok, err := deps.RDB.SetNX(ctx, alertLockKey(userID, r.StockCode), now.Unix(),
+			ok, err := deps.RDB.SetNX(ctx, alertLockKey(userID, r), now.Unix(),
 				time.Duration(alertLockTTL)*time.Second).Result()
 			if err != nil {
 				log.Printf("set alert lock failed: code=%s err=%v", r.StockCode, err)
@@ -344,8 +428,11 @@ func checkAlerts(userID int64, ctx context.Context) {
 			"stock_code":      r.StockCode,
 			"stock_name":      snap.Name,
 			"price":           util.Money(snap.Price),
+			"change_percent":  snap.ChangePercent.StringFixed(2),
 			"condition_type":  r.ConditionType,
-			"condition_value": r.ConditionValue.StringFixed(2),
+			"threshold":       r.Threshold.StringFixed(2),
+			"volume_base":     r.VolumeBase,
+			"check_frequency": r.CheckFrequency,
 			"time":            now.Format(time.RFC3339),
 		})
 
@@ -357,13 +444,27 @@ func checkAlerts(userID int64, ctx context.Context) {
 	}
 }
 
-// isHit 判断单条规则是否命中
-func isHit(condType string, price, target decimal.Decimal) bool {
-	switch condType {
-	case CondPriceGTE:
-		return price.GreaterThanOrEqual(target)
-	case CondPriceLTE:
-		return price.LessThanOrEqual(target)
+// isHit 判断单条规则是否命中行情快照
+func isHit(r AlertRule, snap *quote.StockSnapshot) bool {
+	// 停牌 / 自建接口返 0 时价格是 0：0 <= 任意正阈值会让「跌破」类规则恒真，
+	// 用户会收到假提醒。没行情就不判
+	if snap == nil || snap.Price.IsZero() {
+		return false
+	}
+	switch r.ConditionType {
+	case CondPriceUp:
+		return snap.Price.GreaterThanOrEqual(r.Threshold)
+	case CondPriceDown:
+		return snap.Price.LessThanOrEqual(r.Threshold)
+	case CondPctUp:
+		return snap.ChangePercent.GreaterThanOrEqual(r.Threshold)
+	case CondPctDown:
+		// 前端填的是「跌多少」的正数，比较时取负
+		return snap.ChangePercent.LessThanOrEqual(r.Threshold.Neg())
+	case CondVolume:
+		// 行情快照里没有成交量字段，成交量异动只存规则、暂不自动判触发。
+		// 等 quote 补上成交量与 N 日均量数据后，在这里补上比较逻辑即可
+		return false
 	default:
 		return false
 	}
@@ -371,14 +472,17 @@ func isHit(condType string, price, target decimal.Decimal) bool {
 
 /* ===================== 内部工具 ===================== */
 
-// toAlertItem 组装返回项，顺带附上 Redis 里的当前价；
-// 缓存没命中时 current_price 为 nil，前端据此显示「暂无报价」
+// toAlertItem 组装返回项，顺带附上 Redis 里的当前价与涨跌幅；
+// 缓存没命中时这两个字段为 nil，前端据此显示「暂无报价」
 func toAlertItem(r AlertRule, snap *quote.StockSnapshot) AlertItem {
 	item := AlertItem{
 		ID:             r.ID,
 		StockCode:      r.StockCode,
+		StockName:      r.StockName,
 		ConditionType:  r.ConditionType,
-		ConditionValue: r.ConditionValue.StringFixed(2),
+		Threshold:      r.Threshold.StringFixed(2),
+		VolumeBase:     r.VolumeBase,
+		CheckFrequency: r.CheckFrequency,
 		Enabled:        r.Enabled,
 		CreatedAt:      r.CreatedAt.Format(time.RFC3339),
 	}
@@ -389,45 +493,78 @@ func toAlertItem(r AlertRule, snap *quote.StockSnapshot) AlertItem {
 	if snap != nil {
 		p := util.Money(snap.Price)
 		item.CurrentPrice = &p
+		cp := snap.ChangePercent.StringFixed(2)
+		item.ChangePercent = &cp
 	}
 	return item
 }
 
-// alertLockKey 提醒防抖锁：alert:lock:{user_id}:{stock_code}
-func alertLockKey(userID int64, stockCode string) string {
-	return fmt.Sprintf("alert:lock:%d:%s", userID, stockCode)
+// alertLockKey 提醒防抖锁：alert:lock:{user_id}:{stock_code}:{condition_type}
+// 带上条件类型，同一股票的多条不同条件规则互不干扰
+func alertLockKey(userID int64, r AlertRule) string {
+	return fmt.Sprintf("alert:lock:%d:%s:%s", userID, r.StockCode, r.ConditionType)
 }
 
-// delAlertLock 清掉某股票在该用户下的提醒防抖锁，失败只记日志
-func delAlertLock(ctx context.Context, userID int64, stockCode string) {
+// delAlertLock 清掉某条规则的防抖锁，失败只记日志
+func delAlertLock(ctx context.Context, userID int64, r AlertRule) {
 	if deps.RDB == nil {
 		return
 	}
-	if err := deps.RDB.Del(ctx, alertLockKey(userID, stockCode)).Err(); err != nil {
-		log.Printf("del alert lock failed: code=%s err=%v", stockCode, err)
+	if err := deps.RDB.Del(ctx, alertLockKey(userID, r)).Err(); err != nil {
+		log.Printf("del alert lock failed: code=%s err=%v", r.StockCode, err)
 	}
 }
 
+// uniqueCodes 规则里的股票代码去重（供批量读行情用）
 func uniqueCodes(rules []AlertRule) []string {
-	seen := make(map[string]bool, len(rules))
-	out := make([]string, 0, len(rules))
+	codes := make([]string, 0, len(rules))
 	for _, r := range rules {
-		if !seen[r.StockCode] {
-			seen[r.StockCode] = true
-			out = append(out, r.StockCode)
-		}
+		codes = append(codes, r.StockCode)
 	}
-	return out
+	return util.Unique(codes)
 }
 
-// parseTarget 解析提醒目标价：必须是数字且 > 0
-func parseTarget(raw string) (decimal.Decimal, string) {
+// parseThreshold 解析阈值：必须是数字，且落在对应条件的取值范围内
+func parseThreshold(condType, raw string) (decimal.Decimal, string) {
 	v, err := decimal.NewFromString(strings.TrimSpace(raw))
 	if err != nil {
-		return decimal.Zero, "目标价必须是数字"
+		return decimal.Zero, "阈值必须是数字"
 	}
-	if !v.IsPositive() {
-		return decimal.Zero, "目标价必须大于 0"
+	switch condType {
+	case CondPriceUp, CondPriceDown:
+		if !v.IsPositive() {
+			return decimal.Zero, "价格阈值必须大于 0"
+		}
+	case CondPctUp, CondPctDown:
+		if !v.IsPositive() || v.GreaterThan(decimal.NewFromInt(100)) {
+			return decimal.Zero, "涨跌幅阈值需在 0 ~ 100 之间"
+		}
+	case CondVolume:
+		if v.LessThan(decimal.NewFromFloat(0.1)) || v.GreaterThan(decimal.NewFromInt(100)) {
+			return decimal.Zero, "成交量倍数需在 0.1 ~ 100 之间"
+		}
 	}
 	return v, ""
+}
+
+// normalizeVolumeBase 只有成交量异动需要基准周期，且必须在 5 / 10 / 20 内；
+// 其他条件一律归 0，避免库里留下无意义的取值。
+// 成交量条件下传 0 表示「用默认值 20 日均量」，不是报错
+func normalizeVolumeBase(condType string, n int) (int, string) {
+	if condType != CondVolume {
+		return 0, ""
+	}
+	if n == 0 {
+		return 20, ""
+	}
+	if !ValidVolumeBase(n) {
+		return 0, "基准周期只能是 5 / 10 / 20 日均量"
+	}
+	return n, ""
+}
+
+// normalizeCondition 条件类型统一小写去空格：与 CheckFrequency 的处理一致，
+// 否则 " price_up" 会被判成非法
+func normalizeCondition(t string) string {
+	return strings.ToLower(strings.TrimSpace(t))
 }

@@ -17,6 +17,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* 给底部固定的退出登录按钮预留空间，避免卡片滑到按钮下方 */
+  padding-bottom: 240rpx;
 }
 
 /* ===== 个人信息卡 ===== */
@@ -40,7 +42,7 @@
   margin-bottom: var(--gap-title);
 }
 
-/* 两处可点块的按下态底色一致，合并成一条规则 */
+/* 可点块的按下态底色一致 */
 .profile-card--hover,
 .footer-btn--danger-hover {
   background: var(--c-hover);
@@ -60,20 +62,14 @@
 .profile-info {
   flex: 1;
   min-width: 0;
-  margin-left: var(--sp-3);
+  margin-left: var(--sp-4);
 }
 
 .profile-nickname {
-  font-size: 40rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 400;
   color: var(--c-ink);
   line-height: 1.4;
-}
-
-.profile-wxid {
-  margin-top: var(--sp-1);
-  font-size: 26rpx;
-  color: var(--c-gray);
 }
 
 /* ===== 行左侧图标 ===== */
@@ -94,15 +90,18 @@
   background: var(--c-tint);
 }
 
-/* ===== 底部主按键 =====
-   登录 / 退出登录占同一个位置，按登录态切换文案与配色 */
-.footer {
-  margin: var(--sp-5) var(--pad-page) var(--gap-block);
+/* ===== 底部退出登录按键（与其它子页面 .bottom-btn 一致：固定在页面底部） ===== */
+.bottom-btn {
+  position: absolute;
+  left: var(--pad-page);
+  right: var(--pad-page);
+  /* bottom 由 JS 写入的 bottomGap 控制，这里只作占位 */
+  bottom: 20px;
 }
 
-/* 两种状态共用尺寸与形状，只有配色不同 */
 .footer-btn {
   height: 104rpx;
+  width: 100%;
   border-radius: 18rpx;
   display: flex;
   align-items: center;
@@ -111,22 +110,11 @@
   font-weight: 500;
 }
 
-/* 未登录：主色实底，当作主行动点 */
-.footer-btn--primary {
-  background: var(--c-blue);
-  color: #FFFFFF;
-}
-
-/* 已登录：白底红字，危险操作。
+/* 白底红字，危险操作。
    不复用 --c-red：那个语义是「涨」，混用会互相干扰 */
 .footer-btn--danger {
   background: var(--c-card);
   color: var(--c-danger);
-}
-
-/* 实底按钮的按下态用透明度压暗，省得再引入一个更深的蓝 */
-.footer-btn--primary-hover {
-  opacity: 0.85;
 }
 
 .footer-hint {

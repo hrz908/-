@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,13 @@ func Resp(c *gin.Context, code int, msg string, data any) {
 func OK(c *gin.Context, data any) { Resp(c, CodeOK, "ok", data) }
 
 func Fail(c *gin.Context, code int, msg string) { Resp(c, code, msg, nil) }
+
+// JSONBytes 序列化统一响应体。
+// 用于「同一份响应既要写缓存、又要返回」的场景（如股票搜索），
+// 保证缓存内容与真实响应逐字节一致，避免两边各写一份结构漂移
+func JSONBytes(code int, msg string, data any) ([]byte, error) {
+	return json.Marshal(Body{Code: code, Message: msg, Data: data})
+}
 
 // Status 业务码 → HTTP 状态码；code=0 一律 200
 func Status(code int) int {

@@ -13,19 +13,24 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"stock-agent-server/internal/deps"
+	"stock-agent-server/internal/util"
 )
 
 const (
 	// 行情缓存 30 秒，与提示词约定一致
-	TTL = 30 * time.Second
+	ttl = 30 * time.Second
 
-	// Limit 拉取行情的并发上限：防止瞬时并发打爆接口被封 IP
-	Limit = 5
+	// limit 拉取行情的并发上限：防止瞬时并发打爆接口被封 IP
+	limit = 5
 
-	// BatchSize 分批拉取时每批的股票数。
+	// batchSize 分批拉取时每批的股票数。
 	// 内置源支持一次查多只，50 只自选股逐只要 50 次请求（分 10 轮），
 	// 按 20 只一批只要 3 次。请求数越少，越快也越不容易触发第三方限流
-	BatchSize = 20
+	batchSize = 20
+
+	// mgetChunkSize 批量读缓存的分片大小。
+	// 自选股上千时单次 MGET 带上千个 key 会拉高单次 RTT 与内存峰值
+	mgetChunkSize = 100
 )
 
 // StockSnapshot 行情快照（提示词约定的结构体）
@@ -36,8 +41,8 @@ type StockSnapshot struct {
 	ChangePercent decimal.Decimal `json:"change_percent"`
 }
 
-// Key 行情缓存键：stock:{code}:latest
-func Key(code string) string {
+// key 行情缓存键：stock:{code}:latest
+func key(code string) string {
 	return fmt.Sprintf("stock:%s:latest", code)
 }
 
@@ -50,7 +55,7 @@ func SaveQuoteToRedis(ctx context.Context, s *StockSnapshot) error {
 	if err != nil {
 		return err
 	}
-	return deps.RDB.Set(ctx, Key(s.Code), b, TTL).Err()
+	return deps.RDB.Set(ctx, key(s.Code), b, ttl).Err()
 }
 
 // BatchSaveQuotes 批量写：一次 pipeline 提交，避免逐条往返
@@ -69,7 +74,7 @@ func BatchSaveQuotes(ctx context.Context, list []*StockSnapshot) error {
 				log.Printf("marshal quote failed: %v", mErr)
 				continue
 			}
-			p.Set(ctx, Key(s.Code), b, TTL)
+			p.Set(ctx, key(s.Code), b, ttl)
 		}
 		return nil
 	})
@@ -81,7 +86,7 @@ func GetQuoteFromRedis(ctx context.Context, code string) (*StockSnapshot, error)
 	if deps.RDB == nil {
 		return nil, redis.Nil
 	}
-	b, err := deps.RDB.Get(ctx, Key(code)).Bytes()
+	b, err := deps.RDB.Get(ctx, key(code)).Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -92,43 +97,48 @@ func GetQuoteFromRedis(ctx context.Context, code string) (*StockSnapshot, error)
 	return &s, nil
 }
 
-// BatchGetQuotes 批量读：一次 MGET 拿回全部行情。
+// BatchGetQuotes 批量读：分片 MGET。
 // 50 只自选股从 50 次往返降为 1 次；缓存未命中的 code 不出现在结果里，
-// 由调用方按降级策略处理（读不到 = 已过期 / 未缓存）
+// 由调用方按降级策略处理（读不到 = 已过期 / 未缓存）。
+// 分片是为了自选股规模上千时不把上千个 key 塞进单次命令
 func BatchGetQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot, error) {
 	out := make(map[string]*StockSnapshot, len(codes))
 	if deps.RDB == nil || len(codes) == 0 {
 		return out, nil
 	}
-	keys := make([]string, 0, len(codes))
-	for _, c := range codes {
-		keys = append(keys, Key(c))
-	}
-	vals, err := deps.RDB.MGet(ctx, keys...).Result()
-	if err != nil {
-		return out, err
-	}
-	for i, v := range vals {
-		s, ok := v.(string)
-		if !ok {
-			continue // nil = 缓存不存在
+
+	for _, chunk := range chunkStrings(codes, mgetChunkSize) {
+		keys := make([]string, 0, len(chunk))
+		for _, c := range chunk {
+			keys = append(keys, key(c))
 		}
-		var snap StockSnapshot
-		if err := json.Unmarshal([]byte(s), &snap); err != nil {
-			log.Printf("unmarshal quote %s failed: %v", codes[i], err)
-			continue
+		vals, err := deps.RDB.MGet(ctx, keys...).Result()
+		if err != nil {
+			return out, err
 		}
-		out[codes[i]] = &snap
+		for i, v := range vals {
+			s, ok := v.(string)
+			if !ok {
+				continue // nil = 缓存不存在
+			}
+			var snap StockSnapshot
+			if err := json.Unmarshal([]byte(s), &snap); err != nil {
+				log.Printf("unmarshal quote %s failed: %v", chunk[i], err)
+				continue
+			}
+			out[chunk[i]] = &snap
+		}
 	}
 	return out, nil
 }
 
-// FetchQuotes 并发拉行情：errgroup + SetLimit(5)。
+// FetchQuotes 并发拉行情：errgroup + SetLimit(limit)。
 // 分两步：
 //  1. 去重 + 分批，每批一次 HTTP 往返；
-//  2. 批与批之间并发，上限 Limit。
+//  2. 批与批之间并发，上限 limit。
 //
-// 某批失败只影响批内的 code，其余照常返回，交给调用方降级
+// 某批失败只影响批内的 code，其余照常返回，交给调用方降级。
+// goroutine 返回 error 时 errgroup 会取消 gctx，让还没发出的请求提前收手
 func FetchQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot, []string) {
 	out := make(map[string]*StockSnapshot, len(codes))
 	if len(codes) == 0 {
@@ -137,15 +147,15 @@ func FetchQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot
 
 	// 去重：同一只股票在一次刷新里只查一次，
 	// 后续用「去重集合 - 成功集合」的差集得到失败列表
-	uniq := uniqueStrings(codes)
+	uniq := util.Unique(codes)
 
 	var (
 		mu      sync.Mutex
 		g, gctx = errgroup.WithContext(ctx)
 	)
-	g.SetLimit(Limit)
+	g.SetLimit(limit)
 
-	for _, batch := range chunkStrings(uniq, BatchSize) {
+	for _, batch := range chunkStrings(uniq, batchSize) {
 		batch := batch
 		g.Go(func() error {
 			snaps := fetchStockQuotes(gctx, batch)
@@ -153,6 +163,10 @@ func FetchQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot
 			defer mu.Unlock()
 			for _, s := range snaps {
 				out[s.Code] = s
+			}
+			// 拉不到就报错：借 errgroup 取消其它批次，省掉注定失败的请求
+			if len(snaps) == 0 {
+				return fmt.Errorf("fetch quotes failed: %v", batch)
 			}
 			return nil
 		})
@@ -167,18 +181,6 @@ func FetchQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot
 		}
 	}
 	return out, failed
-}
-
-func uniqueStrings(in []string) []string {
-	seen := make(map[string]bool, len(in))
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func chunkStrings(in []string, size int) [][]string {

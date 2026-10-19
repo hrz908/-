@@ -2,7 +2,6 @@ package quote
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // 搜索专用超时。比行情接口的 3 秒略宽：首次请求要额外算上
@@ -18,11 +18,19 @@ import (
 // 搜索是体验加分项，宁可多等 2 秒，也不要因为假超时返回空列表
 const searchTimeout = 5 * time.Second
 
-// SmartBoxURL 腾讯 smartbox 搜索接口
-const SmartBoxURL = "https://smartbox.gtimg.cn/s3/"
+// smartBoxURL 腾讯 smartbox 搜索接口
+const smartBoxURL = "https://smartbox.gtimg.cn/s3/"
+
+// maxBodyBytes 第三方响应体读取上限，与行情接口一致
+const maxSearchBodyBytes = 1 << 20
 
 // unicodeEscape 匹配腾讯返回的 \uXXXX 转义序列
 var unicodeEscape = regexp.MustCompile(`\\u[0-9a-fA-F]{4}`)
+
+// varAssignRe 匹配 `v_hint="..."` 这类赋值片段。
+// 用正则而不是 Index(`="`) + LastIndex(`"`)：后者在响应里出现多余引号时
+// 会截错范围
+var varAssignRe = regexp.MustCompile(`v_[a-z0-9]+="([^"]*)"`)
 
 // searchHTTP 复用连接（与行情接口分开，因为超时不同）。
 // 搜索是高频操作，若每次都新建 client，会重复走 DNS + TLS 握手，
@@ -49,8 +57,12 @@ func Search(ctx context.Context, query string, limit int) []SearchResult {
 		return nil
 	}
 
-	// url.QueryEscape 把中文 / 空格等转成 %XX，否则腾讯可能把请求当乱码拒绝
-	searchURL := fmt.Sprintf("%s?q=%s&t=all", SmartBoxURL, url.QueryEscape(q))
+	// url.Values 编码：中文 / 空格等转成 %XX，否则腾讯可能把请求当乱码拒绝
+	params := url.Values{}
+	params.Set("q", q)
+	params.Set("t", "all")
+	searchURL := smartBoxURL + "?" + params.Encode()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		log.Printf("build search request failed: %v", err)
@@ -71,8 +83,9 @@ func Search(ctx context.Context, query string, limit int) []SearchResult {
 	}
 
 	// 腾讯 smartbox 返回的是 ASCII 文本（中文以 \uXXXX 转义），
-	// 与行情接口 qt.gtimg.cn 的 GBK 字节不同，这里不需要字符解码
-	body, err := io.ReadAll(resp.Body)
+	// 与行情接口 qt.gtimg.cn 的 GBK 字节不同，这里不需要字符解码。
+	// 读取同样要限长，防止上游返回超大内容
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSearchBodyBytes))
 	if err != nil {
 		log.Printf("read search body failed: %v", err)
 		return nil
@@ -107,16 +120,11 @@ func Search(ctx context.Context, query string, limit int) []SearchResult {
 func parseSmartBox(body string, limit int) []SearchResult {
 	out := make([]SearchResult, 0, limit)
 
-	// 提取 v_hint="..." 里的内容
-	eq := strings.Index(body, `="`)
-	if eq < 0 {
+	m := varAssignRe.FindStringSubmatch(body)
+	if m == nil {
 		return out
 	}
-	end := strings.LastIndex(body, `"`)
-	if end <= eq+2 {
-		return out
-	}
-	hint := body[eq+2 : end]
+	hint := m[1]
 
 	for _, line := range strings.Split(hint, "^") {
 		if len(out) >= limit {
@@ -160,15 +168,57 @@ func parseSmartBox(body string, limit int) []SearchResult {
 }
 
 // decodeUnicodeEscape 把 \uXXXX 还原成真实字符。
-// 腾讯把中文以转义形式放在 ASCII 响应里，逐段替换即可
+// 腾讯把中文以转义形式放在 ASCII 响应里，逐段替换即可。
+// 代理对（\ud83d\ude00 这类 emoji）必须先合并高低位再转 rune，
+// 单个解出来是无效码元、会变成替换字符
 func decodeUnicodeEscape(s string) string {
-	return unicodeEscape.ReplaceAllStringFunc(s, func(m string) string {
-		n, err := strconv.ParseUint(m[2:], 16, 32)
+	locs := unicodeEscape.FindAllStringIndex(s, -1)
+	if len(locs) == 0 {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	pos := 0
+	for i := 0; i < len(locs); i++ {
+		start, end := locs[i][0], locs[i][1]
+		b.WriteString(s[pos:start])
+		esc := s[start:end]
+
+		r, err := decodeEscRune(esc)
 		if err != nil {
-			return m
+			b.WriteString(esc) // 解不开就原样保留，至少不丢内容
+			pos = end
+			continue
 		}
-		return string(rune(n))
-	})
+		if utf16.IsSurrogate(r) {
+			// 高代理：与紧邻的下一个转义拼成代理对（emoji 等）
+			if r <= 0xDBFF && i+1 < len(locs) && locs[i+1][0] == end {
+				low, err2 := decodeEscRune(s[locs[i+1][0]:locs[i+1][1]])
+				if err2 == nil && low >= 0xDC00 && low <= 0xDFFF {
+					b.WriteRune(utf16.DecodeRune(r, low))
+					pos = locs[i+1][1]
+					i++ // 低代理已消费
+					continue
+				}
+			}
+			pos = end // 拼不上的孤立代理元，直接丢弃
+			continue
+		}
+		b.WriteRune(r)
+		pos = end
+	}
+	b.WriteString(s[pos:])
+	return b.String()
+}
+
+// decodeEscRune 解单个 \uXXXX 转义成码元
+func decodeEscRune(esc string) (rune, error) {
+	n, err := strconv.ParseUint(esc[2:], 16, 32)
+	if err != nil {
+		return 0, err
+	}
+	return rune(n), nil
 }
 
 func isAllDigits(s string) bool {

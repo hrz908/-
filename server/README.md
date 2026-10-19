@@ -7,7 +7,8 @@
 不要再新建第二个后端工程。
 
 当前已实现「自选股」页面所需接口：添加自选（带成本价 / 持股数量）、查询列表（含浮动盈亏与涨跌排序）、
-手动刷新行情（含提醒检查与 WebSocket 推送）、提醒规则 CRUD。
+手动刷新行情（含提醒检查与 WebSocket 推送）、提醒规则 CRUD（条件类型 / 阈值 / 基准周期 / 检查频率，
+与「新增提醒」弹窗字段一致）、用户资料与头像。
 
 ---
 
@@ -47,10 +48,18 @@ curl -s http://127.0.0.1:8080/healthz
 | `REDIS_ADDR` | `127.0.0.1:6379` | Redis |
 | `REDIS_PASSWORD` | 空 | Redis 密码 |
 | `REDIS_DB` | `0` | Redis 库 |
-| `JWT_SECRET` | `please-change-me` | **上线必须改** |
+| `JWT_SECRET` | `please-change-me` | **上线必须改**（`ENV=prod` 时仍是默认则拒绝启动） |
 | `QUOTE_API` | 空 | 自建行情服务基地址；**为空时用内置真实源**（腾讯财经批量接口，见 `quote/source.go`） |
+| `WECHAT_APPID` / `WECHAT_SECRET` | 空 | 小程序凭据；两者都配了登录走 code2session，都没配时退化为演示账号（`ENV=prod` 拒绝启动） |
+| `UPLOAD_DIR` | `./uploads` | 上传根目录；头像存 `avatars/`，静态路由只暴露 `/uploads/avatars` |
+| `ENV` | `dev` | `dev` / `prod`。`prod` 下强制要求 JWT 与微信凭据 |
+| `ALLOW_ORIGINS` | `*` | CORS 允许的 Origin，逗号分隔；`*` 表示全部 |
 
-启动时会自动建表（AutoMigrate）。表结构见 `migrations/001_init.sql`。
+数值型配置（`REDIS_DB` 等）解析失败会直接终止启动：写错环境变量时静默回退默认值，
+问题会藏到运行期才暴露，不如启动时就报错。
+
+启动时会自动建表（AutoMigrate）。表结构见 `migrations/`（001 建表、002 用户表、
+003 alert_rule 升级、004 提醒规则唯一索引）。
 
 ---
 
@@ -66,8 +75,9 @@ server/
     db/redis.go                 # Redis 客户端
     quote/quote.go              # 行情缓存：MGET 批量读、Pipeline 批量写
     quote/source.go             # fetchStockQuote（内置腾讯真实源 / 自建源，可替换）
-    resp/resp.go                # 统一响应体 + resp() 辅助函数
-    middleware/middleware.go    # Recovery / RequestID / CORS / Auth / RateLimit / AccessLog
+    resp/resp.go                # 统一响应体 + resp() / JSONBytes 辅助函数
+    model/user.go               # 跨模块共享的模型（User：登录与用户资料共用）
+    middleware/middleware.go    # Recovery / RequestID / CORS / Auth / AuthAllowQueryToken / RateLimit / AccessLog
     ws/hub.go                   # WebSocket 连接中心 + Push
     hook/hook.go                # 模块间事件（行情已更新）
     stock/code.go               # 股票代码归一化 / 展示格式
@@ -86,6 +96,9 @@ server/
         route.go
     router/router.go            # 只负责挂载各模块
   migrations/001_init.sql       # 建表 SQL
+  migrations/002_users.sql      # 用户表
+  migrations/003_alert_rule.sql # alert_rule 升级：对齐「新增提醒」弹窗字段
+  migrations/004_alert_unique.sql # 提醒规则唯一索引（去重后建）
 ```
 
 **分层约定**：`internal/` 下除 `module/` 外都是与具体页面无关的共享基础设施；
@@ -161,12 +174,18 @@ server/
 
 ### 提醒规则
 
-- 条件枚举：`price_gte`（最新价 ≥ 目标价）、`price_lte`（最新价 ≤ 目标价）；
-- 同一用户、同一股票、同一方向只允许一条**启用**规则，重复创建返回 409；
+- 条件枚举与小程序「新增提醒」弹窗一一对应：`price_up`（最新价 ≥ 阈值）、`price_down`（最新价 ≤ 阈值）、
+  `pct_up`（涨跌幅 ≥ 阈值%）、`pct_down`（涨跌幅 ≤ −阈值%）、`volume`（成交量 ≥ 阈值 × N 日均量）；
+- 阈值取值范围随条件类型：价格 > 0，涨跌幅 0~100，成交量倍数 0.1~100；
+- `volume_base`（5 / 10 / 20 日均量）只有成交量异动需要，其它条件后端强制归 0；
+- `check_frequency`：`realtime`（盘中即时，每次行情刷新都判）、`close`（日线收盘确认，只在 15:00 后判）；
+- 同一用户、同一股票、同一条件类型只允许一条**启用**规则，重复创建返回 409；
 - `PUT` / `DELETE` 一律用 `id + user_id` 双条件定位，查不到统一 404，不区分「不存在」与「非本人」，防止枚举探测；
-- 改了 `condition_value` / `condition_type` 会清空 `last_triggered_at`，让规则能重新触发；
-- 删除或停用时 `DEL alert:lock:{user_id}:{stock_code}`，避免残留防抖锁挡住后续推送；
-- 推送防重复：`SetNX alert:lock:{user_id}:{stock_code}`，TTL 60 秒，写不进去就跳过。
+- 改了判定条件（条件类型 / 阈值 / 基准周期 / 频率）会清空 `last_triggered_at`，让规则能重新触发；
+- 删除或停用时 `DEL alert:lock:{user_id}:{stock_code}:{condition_type}`，避免残留防抖锁挡住后续推送；
+- 推送防重复：`SetNX alert:lock:{user_id}:{stock_code}:{condition_type}`，TTL 60 秒，写不进去就跳过；
+- **成交量异动暂不自动判触发**：行情快照里只有最新价与涨跌幅，没有成交量与 N 日均量。
+  规则可正常存取，等行情源补上成交量字段后，在 `isHit` 的 `CondVolume` 分支补比较即可。
 
 ### 金额精度
 
@@ -186,6 +205,13 @@ GET {QUOTE_API}?code=SH600519
 ```
 
 数值一律用字符串传递，避免中间环节走 float64 丢失精度。
+
+**批量拉取**：一次刷新按 20 只一批并发请求（批间并发上限 5），
+50 只自选股从「50 次逐只请求」降到 3 次 HTTP；响应体读取限 1MB，
+避免上游异常时把超大内容读进内存。缓存读写同理：MGET 按 100 个 key 分片。
+
+**降级**：某批拉取失败不影响其它批，失败的 code 降级读旧缓存；
+读不到就保持 `--` 无行情状态，不写脏数据。
 
 **拉取策略**：去重 → 按 20 只一批切分 → 批与批之间并发（上限 5）。
 内置源支持一次查多只，所以 50 只自选股只要 3 次 HTTP 往返，而不是 50 次。
@@ -268,32 +294,48 @@ curl -s -X POST http://localhost:8080/api/v1/watchlist/refresh -H "Authorization
 curl -s -X POST http://localhost:8080/api/v1/watchlist/refresh -H "Authorization: Bearer $TOKEN2"
 ```
 
-**7）新建提醒规则**
+**7）新建提醒规则（字段与「新增提醒」弹窗一致）**
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/alerts \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"stock_code":"SH600519","condition_type":"price_gte","condition_value":"1800.00"}'
+  -d '{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"price_up","threshold":"1700.00","check_frequency":"close"}'
 ```
 
-**8）重复方向（返回 409）**
+成交量异动额外带 `volume_base`：
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/alerts \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"stock_code":"SH600519","condition_type":"price_gte","condition_value":"1850.00"}'
+  -d '{"stock_code":"SZ300750","stock_name":"宁德时代","condition_type":"volume","threshold":"1.5","volume_base":20,"check_frequency":"realtime"}'
 ```
 
-**9）越权改他人规则（返回 404）**
+**8）同股票同条件重复创建（返回 409）**
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/alerts \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"price_up","threshold":"1850.00"}'
+```
+
+**9）非法阈值（返回 400）**
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/alerts \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"pct_up","threshold":"120"}'
+```
+
+**10）越权改他人规则（返回 404）**
 
 ```bash
 # 用 TOKEN2 去改 TOKEN 的规则 id=1
 curl -s -X PUT http://localhost:8080/api/v1/alerts/1 \
   -H "Authorization: Bearer $TOKEN2" -H 'Content-Type: application/json' \
-  -d '{"enabled":false}'
+  -d '{"threshold":"1000.00"}'
 ```
 
-**10）删除规则**
+**11）删除规则**
 
 ```bash
 curl -s -X DELETE http://localhost:8080/api/v1/alerts/1 -H "Authorization: Bearer $TOKEN"

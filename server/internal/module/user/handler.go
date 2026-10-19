@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,16 +17,23 @@ import (
 	"gorm.io/gorm"
 
 	"stock-agent-server/internal/deps"
+	"stock-agent-server/internal/model"
 	"stock-agent-server/internal/resp"
 	"stock-agent-server/internal/upload"
 )
 
 // 昵称长度上限，与小程序侧 NICKNAME_MAX 保持一致。
 // 按字符数算（中文一个字算一个），用 utf8.RuneCountInString 而不是 len
-const nicknameMax = 20
+const nicknameMax = 10
 
-// avatarMaxBytes 头像大小上限 2MB
-const avatarMaxBytes = 2 << 20
+// avatarMaxBytes 头像大小上限 2MB。
+// 加 1KB 余量给 multipart 的头与边界：实际写入的字节数受这个总上限约束，
+// 否则客户端改一下头部的 size 字段就能绕过校验
+const avatarMaxBytes = 2<<20 + 1024
+
+// avatarPrefix 头像在库中只允许存这个前缀下的站内路径：
+// 客户端若传外链或 ../ 之类的路径，渲染时会被当成任意图片地址注入
+const avatarPrefix = "/uploads/avatars/"
 
 type ProfileResp struct {
 	Nickname string `json:"nickname"`
@@ -46,8 +55,9 @@ func GetProfile(c *gin.Context) {
 }
 
 // UpdateProfile PUT /api/v1/user/profile
-// 昵称截断到 nicknameMax 个字符；avatar 传空串表示不改动
+// 昵称超出上限时截断到 nicknameMax 个字符；avatar 传空串表示不改动
 func UpdateProfile(c *gin.Context) {
+	ctx := c.Request.Context()
 	u, ok := current(c)
 	if !ok {
 		return
@@ -69,24 +79,40 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	updates := map[string]any{"nickname": nickname}
-	if strings.TrimSpace(req.Avatar) != "" {
-		updates["avatar"] = strings.TrimSpace(req.Avatar)
+	avatar := u.Avatar
+	if raw := strings.TrimSpace(req.Avatar); raw != "" {
+		if !isSafeAvatar(raw) {
+			resp.Fail(c, resp.CodeBadRequest, "头像地址不合法")
+			return
+		}
+		updates["avatar"] = raw
+		avatar = raw
 	}
 
-	if err := deps.DB.Model(&User{}).Where("id = ?", u.ID).Updates(updates).Error; err != nil {
+	if err := deps.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", u.ID).Updates(updates).Error; err != nil {
 		log.Printf("update profile failed: user=%d err=%v", u.ID, err)
 		resp.Fail(c, resp.CodeInternal, "保存失败")
 		return
 	}
 
-	resp.OK(c, ProfileResp{Nickname: nickname, Avatar: avatarOf(updates, u)})
+	// 换头像成功后再删旧文件：先删后写一旦写失败，用户就丢了自己的头像
+	if avatar != u.Avatar && u.Avatar != "" {
+		removeAvatarFile(u.Avatar)
+	}
+
+	resp.OK(c, ProfileResp{Nickname: nickname, Avatar: avatar})
 }
 
 // UploadAvatar POST /api/v1/user/avatar
 // 小程序用 wx.uploadFile 发 multipart，字段名为 file。
 // 返回站内相对路径，前端拼上后端基地址即可显示
 func UploadAvatar(c *gin.Context) {
+	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
+
+	// 请求体总大小先卡住：file.Size 来自 multipart 头部，是客户端可控字段，
+	// 真正限制要靠读的时候不超量
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, avatarMaxBytes)
 
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -113,26 +139,46 @@ func UploadAvatar(c *gin.Context) {
 		return
 	}
 
-	rel := "/uploads/avatars/" + name
-	if err := deps.DB.Model(&User{}).Where("id = ?", userID).Update("avatar", rel).Error; err != nil {
+	rel := avatarPrefix + name
+
+	// 先记下旧头像：写库成功后再删，避免删了旧文件、新路径又没写进去
+	var old model.User
+	oldAvatar := ""
+	if err := deps.DB.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).First(&old).Error; err == nil {
+		oldAvatar = old.Avatar
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("load old avatar failed: user=%d err=%v", userID, err)
+	}
+
+	if err := deps.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("avatar", rel).Error; err != nil {
 		log.Printf("update avatar failed: user=%d err=%v", userID, err)
+		// 回滚刚落盘的文件，别让磁盘上留一个没人引用的孤儿
+		if rmErr := os.Remove(upload.AvatarPath(name)); rmErr != nil {
+			log.Printf("rollback avatar file failed: name=%s err=%v", name, rmErr)
+		}
 		resp.Fail(c, resp.CodeInternal, "头像保存失败")
 		return
+	}
+
+	if oldAvatar != "" && oldAvatar != rel {
+		removeAvatarFile(oldAvatar)
 	}
 
 	resp.OK(c, gin.H{"avatar_url": rel})
 }
 
 // current 取当前登录用户。取不到（未登录 / 用户不存在）时自行写回响应
-func current(c *gin.Context) (*User, bool) {
+func current(c *gin.Context) (*model.User, bool) {
+	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
 	if userID <= 0 {
 		resp.Fail(c, resp.CodeUnauthorized, "未登录或登录已失效")
 		return nil, false
 	}
 
-	var u User
-	if err := deps.DB.Where("id = ?", userID).First(&u).Error; err != nil {
+	var u model.User
+	if err := deps.DB.WithContext(ctx).Where("id = ?", userID).First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			resp.Fail(c, resp.CodeNotFound, "用户不存在，请重新登录")
 			return nil, false
@@ -144,11 +190,29 @@ func current(c *gin.Context) (*User, bool) {
 	return &u, true
 }
 
-func avatarOf(updates map[string]any, u *User) string {
-	if v, ok := updates["avatar"].(string); ok && v != "" {
-		return v
+// isSafeAvatar 头像必须是本站 avatars 目录下的路径，且不含 ..
+func isSafeAvatar(p string) bool {
+	if !strings.HasPrefix(p, avatarPrefix) {
+		return false
 	}
-	return u.Avatar
+	if strings.Contains(p, "..") || strings.ContainsAny(p, "\\") {
+		return false
+	}
+	// 只允许一层文件名，不接受子目录
+	name := strings.TrimPrefix(p, avatarPrefix)
+	return name != "" && !strings.Contains(name, "/")
+}
+
+// removeAvatarFile 按站内路径删掉磁盘上的头像文件。失败只记日志：
+// 清理是尽力而为，不该让主流程失败
+func removeAvatarFile(rel string) {
+	if !isSafeAvatar(rel) {
+		return
+	}
+	name := strings.TrimPrefix(rel, avatarPrefix)
+	if err := os.Remove(upload.AvatarPath(name)); err != nil && !os.IsNotExist(err) {
+		log.Printf("remove old avatar failed: %s err=%v", rel, err)
+	}
 }
 
 // trimRunes 按字符（而非字节）截断
@@ -156,15 +220,5 @@ func trimRunes(s string, n int) string {
 	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	out := make([]rune, 0, n)
-	// range 的 i 是字节下标，不能直接当字符序号用，得自己数
-	count := 0
-	for _, r := range s {
-		if count >= n {
-			break
-		}
-		out = append(out, r)
-		count++
-	}
-	return string(out)
+	return string([]rune(s)[:n])
 }

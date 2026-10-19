@@ -3,15 +3,15 @@
     "t-navbar": "tdesign-miniprogram/navbar/navbar",
     "t-grid": "tdesign-miniprogram/grid/grid",
     "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
-    "t-tabs": "tdesign-miniprogram/tabs/tabs",
-    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
     "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-tag": "tdesign-miniprogram/tag/tag",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-tag": "tdesign-miniprogram/tag/tag",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-toast": "tdesign-miniprogram/toast/toast"
+    "t-toast": "tdesign-miniprogram/toast/toast",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
   }
 }

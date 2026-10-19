@@ -21,19 +21,17 @@ var (
 	Secret string
 )
 
-// Session 微信返回的登录态
+// Session 微信返回的登录态。
+// 只保留用到的 openid：unionid / session_key 全仓没有读取方，
+// 存着只会让人误以为后续逻辑依赖它们
 type Session struct {
-	OpenID     string
-	UnionID    string
-	SessionKey string
+	OpenID string
 }
 
 type code2SessionResp struct {
-	OpenID     string `json:"openid"`
-	UnionID    string `json:"unionid"`
-	SessionKey string `json:"session_key"`
-	ErrCode    int    `json:"errcode"`
-	ErrMsg     string `json:"errmsg"`
+	OpenID  string `json:"openid"`
+	ErrCode int    `json:"errcode"`
+	ErrMsg  string `json:"errmsg"`
 }
 
 var httpClient = &http.Client{Timeout: 5 * time.Second}
@@ -69,5 +67,5 @@ func Code2Session(code string) (*Session, error) {
 		return nil, fmt.Errorf("jscode2session failed: errcode=%d errmsg=%s", out.ErrCode, strings.TrimSpace(out.ErrMsg))
 	}
 
-	return &Session{OpenID: out.OpenID, UnionID: out.UnionID, SessionKey: out.SessionKey}, nil
+	return &Session{OpenID: out.OpenID}, nil
 }

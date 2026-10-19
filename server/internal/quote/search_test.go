@@ -49,8 +49,13 @@ func TestParseSmartBoxEdge(t *testing.T) {
 }
 
 // TestSearchLive 真实联网验证「请求腾讯 → 解析」整条链路。
-// 用 -run TestSearchLive 单独跑，避免日常单测依赖网络
+// 日常 `go test ./...` 会跳过（依赖外网），要跑真链路上加 -short=false：
+//
+//	go test ./internal/quote -run TestSearchLive -short=false
 func TestSearchLive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过联网测试：日常跑 go test -short 时忽略，显式加 -short=false 才执行")
+	}
 	cases := []struct {
 		q    string
 		want int

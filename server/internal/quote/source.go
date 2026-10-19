@@ -7,31 +7,45 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding/simplifiedchinese"
+
+	"stock-agent-server/internal/stock"
 )
 
-// QuoteAPIBase 自建行情服务的基地址（环境变量 QUOTE_API）。
+// quoteAPIBase 自建行情服务的基地址（配置项 QUOTE_API）。
 // 为空时走内置的真实行情源（腾讯财经批量接口），开箱即用。
 //
 // 自建接口约定：GET {base}?code=SH600519
 //
 //	返回 {"code":"SH600519","name":"贵州茅台","price":"1705.30","change_percent":"1.23"}
 //	数值一律用字符串传递，避免中间环节走 float64 丢失精度
-var QuoteAPIBase = os.Getenv("QUOTE_API")
+//
+// 只由 main 启动时通过 SetQuoteAPI 注入，不直接读环境变量，
+// 保证配置来源唯一（测试里也不会意外读到宿主的 env）
+var quoteAPIBase string
+
+// SetQuoteAPI 注入自建行情源基地址；空串表示使用内置腾讯源
+func SetQuoteAPI(base string) { quoteAPIBase = strings.TrimSpace(base) }
 
 const (
-	// TencentQuoteURL 腾讯财经批量行情接口。
+	// tencentQuoteURL 腾讯财经批量行情接口。
 	// 支持一次查多只（q=sh600519,sz000001），返回 GBK 文本，字段以 ~ 分隔
-	TencentQuoteURL = "https://qt.gtimg.cn/q="
+	tencentQuoteURL = "https://qt.gtimg.cn/q="
 
 	// quoteTimeout 单次 HTTP 超时。行情属于旁路数据，
 	// 第三方卡住时不能把刷新接口一起拖死
 	quoteTimeout = 3 * time.Second
+
+	// maxBodyBytes 第三方响应体读取上限。
+	// 不限制的话，上游故障或被污染时返回 GB 级内容会直接 OOM
+	maxBodyBytes = 1 << 20
 )
 
 // 腾讯返回串中按 ~ 分隔的字段下标
@@ -41,6 +55,10 @@ const (
 	tecPrice   = 3  // 最新价
 	tecPercent = 32 // 涨跌幅（%）
 )
+
+// tencentVarRe 匹配腾讯响应里的 `v_sh600519="..."` 片段。
+// 原来的 Index(`="`) + LastIndex(`"`) 写法在响应里出现多余引号时会截错范围
+var tencentVarRe = regexp.MustCompile(`v_[a-z0-9]+="([^"]*)"`)
 
 // quoteHTTP 复用连接：批量刷新时通常是几十个请求打向同一个域名，
 // 每次新建 client 会导致连接无法复用、TIME_WAIT 堆积
@@ -61,7 +79,7 @@ func fetchStockQuotes(ctx context.Context, codes []string) []*StockSnapshot {
 	if len(codes) == 0 {
 		return nil
 	}
-	if QuoteAPIBase != "" {
+	if quoteAPIBase != "" {
 		return fetchFromCustomAPI(ctx, codes)
 	}
 	return fetchFromTencent(ctx, codes)
@@ -71,12 +89,21 @@ func fetchStockQuotes(ctx context.Context, codes []string) []*StockSnapshot {
 func fetchFromTencent(ctx context.Context, codes []string) []*StockSnapshot {
 	symbols := make([]string, 0, len(codes))
 	for _, c := range codes {
+		// 拼 URL 前再过一次代码校验：上游 URL 只应包含可信的代码，
+		// 不让调用方传进来的字符串直接进地址
+		if _, ok := stock.NormalizeCode(c); !ok {
+			log.Printf("skip invalid code in quote url: %q", c)
+			continue
+		}
 		// 腾讯用小写市场前缀：SH600519 → sh600519
 		symbols = append(symbols, strings.ToLower(c))
 	}
+	if len(symbols) == 0 {
+		return nil
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		TencentQuoteURL+strings.Join(symbols, ","), nil)
+		tencentQuoteURL+strings.Join(symbols, ","), nil)
 	if err != nil {
 		log.Printf("build quote request failed: %v", err)
 		return nil
@@ -96,7 +123,7 @@ func fetchFromTencent(ctx context.Context, codes []string) []*StockSnapshot {
 	}
 
 	// 腾讯返回 GBK，必须先转 UTF-8，否则中文股票名是乱码
-	body, err := io.ReadAll(simplifiedchinese.GBK.NewDecoder().Reader(resp.Body))
+	body, err := io.ReadAll(io.LimitReader(simplifiedchinese.GBK.NewDecoder().Reader(resp.Body), maxBodyBytes))
 	if err != nil {
 		log.Printf("decode quote body failed: %v", err)
 		return nil
@@ -105,22 +132,15 @@ func fetchFromTencent(ctx context.Context, codes []string) []*StockSnapshot {
 }
 
 // parseTencentQuotes 解析腾讯行情文本。
-// 每只股票一行，形如：v_sh600519="1~贵州茅台~600519~1705.30~1700.00~...~0.31~...";
+// 每只股票一段，形如：v_sh600519="1~贵州茅台~600519~1705.30~1700.00~...~0.31~...";
 //
 //	↑[0] ↑[1]     ↑[2]   ↑[3]     ↑[4]              ↑[32]
 func parseTencentQuotes(body string) []*StockSnapshot {
 	out := make([]*StockSnapshot, 0)
 
-	for _, line := range strings.Split(body, ";") {
-		line = strings.TrimSpace(line)
+	for _, m := range tencentVarRe.FindAllStringSubmatch(body, -1) {
+		line := m[0]
 		eq := strings.Index(line, `="`)
-		if eq < 0 {
-			continue
-		}
-		end := strings.LastIndex(line, `"`)
-		if end <= eq+2 {
-			continue
-		}
 
 		// 行首形如 v_sh600519，取 _ 之后的部分还原成 SH600519，用于回写 Code
 		symbol := strings.ToUpper(line[:eq])
@@ -128,7 +148,7 @@ func parseTencentQuotes(body string) []*StockSnapshot {
 			symbol = symbol[i+1:]
 		}
 
-		fields := strings.Split(line[eq+2:end], "~")
+		fields := strings.Split(m[1], "~")
 		if len(fields) <= tecPercent {
 			continue
 		}
@@ -160,22 +180,36 @@ func parseTencentQuotes(body string) []*StockSnapshot {
 	return out
 }
 
-// fetchFromCustomAPI 自建行情服务：批内逐只串行请求
+// fetchFromCustomAPI 自建行情服务：批内并发请求。
+// 逐只串行时，一批 20 只 × 3 秒超时最坏要 60 秒，比腾讯源慢一个量级
 func fetchFromCustomAPI(ctx context.Context, codes []string) []*StockSnapshot {
-	out := make([]*StockSnapshot, 0, len(codes))
+	var (
+		mu      sync.Mutex
+		out     = make([]*StockSnapshot, 0, len(codes))
+		g, gctx = errgroup.WithContext(ctx)
+	)
+	g.SetLimit(limit)
+
 	for _, code := range codes {
-		snap, err := requestCustomQuote(ctx, code)
-		if err != nil || snap == nil {
-			log.Printf("fetch quote %s failed: %v", code, err)
-			continue
-		}
-		out = append(out, snap)
+		code := code
+		g.Go(func() error {
+			snap, err := requestCustomQuote(gctx, code)
+			if err != nil || snap == nil {
+				log.Printf("fetch quote %s failed: %v", code, err)
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			out = append(out, snap)
+			return nil
+		})
 	}
+	_ = g.Wait()
 	return out
 }
 
 func requestCustomQuote(ctx context.Context, code string) (*StockSnapshot, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, QuoteAPIBase, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, quoteAPIBase, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +228,7 @@ func requestCustomQuote(ctx context.Context, code string) (*StockSnapshot, error
 	}
 
 	var s StockSnapshot
-	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&s); err != nil {
 		return nil, err
 	}
 	// 兜底：接口没给名称时用代码顶上，避免出现无名记录

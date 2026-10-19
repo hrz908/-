@@ -5,8 +5,8 @@
 <view class="page">
   <t-navbar title="我的" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
 
-  <scroll-view class="content" scroll-y>
-    <!-- 个人信息：整块可点。已登录点开编辑资料，未登录则引导去授权登录 -->
+  <view class="content">
+    <!-- 个人信息：整块可点，打开编辑资料弹窗 -->
     <view class="profile-card" hover-class="profile-card--hover" bindtap="onProfileTap">
       <!-- 头像不给图标，没图时就是一块灰底。
            不用 t-avatar：组件内部自带一个默认底色的小圆，外露出来就是
@@ -14,10 +14,7 @@
       <image wx:if="{{avatar}}" class="profile-avatar" src="{{avatar}}" mode="aspectFill" />
       <view wx:else class="profile-avatar"></view>
       <view class="profile-info">
-        <!-- 未登录时不显示「微信用户」，直接写「未登录」，避免看起来像已有一份资料 -->
-        <view class="profile-nickname">{{isLoggedIn ? nickname : '未登录'}}</view>
-        <!-- 微信号没有任何接口能拿到（wx.login 只给 openid），没填过就显示「未获取」 -->
-        <view class="profile-wxid">微信号：{{wechatId || '未获取'}}</view>
+        <view class="profile-nickname">{{nickname}}</view>
       </view>
       <!-- 颜色用 CSS 变量而不是写死：t-icon 会把 color 原样拼进 style，
            var() 在这里能正常解析 -->
@@ -36,23 +33,18 @@
       </t-cell>
     </t-cell-group>
 
-    <!-- 底部主按键：登录 / 退出登录占同一个位置，按登录态切换 -->
-    <view class="footer">
-      <view
-        wx:if="{{isLoggedIn}}"
-        class="footer-btn footer-btn--danger"
-        hover-class="footer-btn--danger-hover"
-        bindtap="onLogout"
-      >退出登录</view>
-      <view
-        wx:else
-        class="footer-btn footer-btn--primary"
-        hover-class="footer-btn--primary-hover"
-        bindtap="openLogin"
-      >登录</view>
-      <view class="footer-hint">{{isLoggedIn ? '退出后需重新登录，本地缓存将保留' : '使用微信身份登录，无需注册'}}</view>
-    </view>
-  </scroll-view>
+    <!-- 底部：只保留退出登录（结构见页面底部的 .bottom-btn，与其它子页面一致） -->
+  </view>
+
+  <!-- 底部操作区（与自选股 / 提醒页一致：固定在页面底部） -->
+  <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
+    <view
+      class="footer-btn footer-btn--danger"
+      hover-class="footer-btn--danger-hover"
+      bindtap="onLogout"
+    >退出登录</view>
+    <view class="footer-hint">退出后下次打开小程序会自动登录</view>
+  </view>
 
   <!-- 编辑资料：确认/取消直接用 t-dialog 自带的底部按钮，
        与「添加自选股」弹窗一致（组件不会自动关闭，由事件里显式关） -->
@@ -83,19 +75,23 @@
         <!-- align="center" 让输入文字与 placeholder 都居中。
              type 平时是 text，只有点了下方「使用微信昵称」才切成 nickname——
              否则每次聚焦输入框都会弹出微信的昵称候选栏，属于打扰。
+             focus 单独用 nicknameFocus 控制，且仅在唤起微信面板时短暂为 true、
+             选完 / 失焦即释放，避免 focus 长期为 true 把键盘卡住关不掉。
              不用 maxlength 硬截断——截断了就永远超不过、没法提示，
              改为放开输入、由 JS 判长度，超了用 status=error + tips 在框下方提示 -->
         <t-input
           t-class="edit-input"
           type="{{nicknamePicking ? 'nickname' : 'text'}}"
           align="center"
-          focus="{{nicknamePicking}}"
+          focus="{{nicknameFocus}}"
           value="{{editNickname}}"
           placeholder="请输入昵称"
           status="{{nicknameTip ? 'error' : 'default'}}"
           tips="{{nicknameTip}}"
           bind:change="onEditNickname"
           bind:blur="onNicknameBlur"
+          bind:focus="onNicknameFocus"
+          bind:nicknamereview="onNicknameReview"
         />
 
         <!-- 「使用微信昵称」按键：平台没有读取昵称的 API，做不到点了直接填。
@@ -103,52 +99,6 @@
              由用户本人点选填入；失焦后输入框恢复成普通 text -->
         <view class="nickname-action">
           <view class="nickname-link" hover-class="nickname-link--hover" bindtap="fillWechatNickname">
-            使用微信昵称
-          </view>
-        </view>
-      </view>
-    </view>
-  </t-dialog>
-
-  <!-- 微信用户授权登录。
-       头像和昵称微信都不允许静默读取，只能由用户本人点选/填写一次，
-       所以弹窗里必须摆出这两项，而不是「点了登录就自动带上」 -->
-  <t-dialog
-    visible="{{loginVisible}}"
-    title="微信用户授权登录"
-    confirm-btn="登录"
-    cancel-btn="取消"
-    bind:confirm="submitLogin"
-    bind:cancel="cancelLogin"
-    custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
-  >
-    <!-- 复用编辑资料弹窗的排版：头像居中 + 居中输入框 + 「使用微信昵称」 -->
-    <view slot="content" class="edit-form">
-      <button
-        class="avatar-picker"
-        open-type="chooseAvatar"
-        bind:chooseavatar="onChooseLoginAvatar"
-      >
-        <image wx:if="{{loginAvatar}}" class="edit-avatar" src="{{loginAvatar}}" mode="aspectFill" />
-        <view wx:else class="edit-avatar"></view>
-      </button>
-
-      <view class="edit-field">
-        <t-input
-          t-class="edit-input"
-          type="{{loginPicking ? 'nickname' : 'text'}}"
-          align="center"
-          focus="{{loginPicking}}"
-          value="{{loginNickname}}"
-          placeholder="请输入昵称"
-          status="{{loginTip ? 'error' : 'default'}}"
-          tips="{{loginTip}}"
-          bind:change="onLoginNickname"
-          bind:blur="onLoginNicknameBlur"
-        />
-
-        <view class="nickname-action">
-          <view class="nickname-link" hover-class="nickname-link--hover" bindtap="fillLoginNickname">
             使用微信昵称
           </view>
         </view>

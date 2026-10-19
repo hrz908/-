@@ -6,8 +6,8 @@ import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 // 侧边抽屉导航项（TDesign cell-group / cell）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去
 const MENUS = [
-  { key: 'watchlist', label: '自选股', icon: 'star', badge: '6', badgeTheme: 'default' },
-  { key: 'alerts', label: '提醒', icon: 'notification', badge: '3', badgeTheme: 'danger' },
+  { key: 'watchlist', label: '自选股', icon: 'star' },
+  { key: 'alerts', label: '提醒', icon: 'notification' },
   { key: 'settings', label: '我的', icon: 'user' },
   { key: 'about', label: '关于', icon: 'info-circle' }
 ];
@@ -585,10 +585,5 @@ Page({
 
   onSwipeEnd() {
     this._swipeLocked = false;
-  },
-
-  onTodo(e) {
-    const name = (e && e.currentTarget.dataset && e.currentTarget.dataset.name) || '该功能';
-    Toast({ context: this, message: name + '（演示）' });
   }
 });

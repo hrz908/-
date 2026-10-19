@@ -39,9 +39,14 @@ func Thousands(d decimal.Decimal) string {
 	return out + frac
 }
 
-// WithSign 数值带正负号，用于涨跌幅展示：+1.23 / -0.86 / 0.00
+// WithSign 数值带正负号，用于涨跌幅展示：+1.23 / -0.86 / 0.00。
+// -0.001 这类值经 StringFixed(2) 会得到 "-0.00"，先归一成 "0.00"，
+// 否则前端会显示一个负零
 func WithSign(d decimal.Decimal) string {
 	s := d.StringFixed(2)
+	if s == "-0.00" {
+		s = "0.00"
+	}
 	if d.IsPositive() {
 		return "+" + s
 	}

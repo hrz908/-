@@ -12,12 +12,15 @@
   will-change: transform;
 }
 
-/* 中段骨架：概览宫格 + 筛选固定不动，剩余高度全部给列表滚动区 */
+/* 中段骨架：概览宫格 + 筛选固定不动，剩余高度全部给列表滚动区。
+   padding-top 保证第一个卡片与 navbar 之间有可见间距，
+   值与卡片之间的 --gap-block 一致 */
 .content {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-top: var(--gap-block);
 }
 
 /* 列表滚动区：页面里唯一内部滚动的地方。
@@ -34,23 +37,16 @@
 /* ===== 概览宫格（TDesign grid） ===== */
 .overview-grid {
   display: block;
-  /* navbar 之后第一个区块，用标准区块间距 --gap-block（32rpx）。
-     它下面到筛选栏同样是 --gap-block，整页区块间距一致 */
-  margin-top: var(--gap-block);
   background: var(--c-card);
 }
 
 .g-num {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
 }
 
 .g-num.ink {
   color: var(--c-ink);
-}
-
-.g-num.blue {
-  color: var(--c-blue);
 }
 
 .g-num.red {
@@ -63,43 +59,133 @@
   color: var(--c-gray);
 }
 
-/* ===== 筛选 tabs ===== */
-.filter-tabs {
-  display: block;
-  margin-top: var(--gap-block);
+/* 分组标题：从 cell-group 里移出来自己画，规格沿用 TDesign 的
+   .t-cell-group__title（28rpx / 灰字 / 90rpx 行高 / 通栏灰底），
+   这样滚动时它固定不动，只有下面的列表在滚 */
+.group-title {
+  font-size: 28rpx;
+  line-height: 90rpx;
+  padding-left: var(--pad-page);
+  color: var(--c-gray);
+  background: var(--c-fill);
+}
+
+/* ===== 提醒列表：每条一张圆角卡片 =====
+   卡片之间用 --sp-3，左右留 --pad-page 与页面留白一致 */
+.alert-list {
+  padding: var(--sp-3) var(--pad-page);
+}
+
+/* 卡片本体：纵向四段（头部 / 大号阈值 / 描述 / 底部），不再是横向 flex 布局 */
+.alert-card {
+  box-sizing: border-box;
+  padding: var(--sp-4) var(--sp-3);
+  margin-bottom: var(--sp-3);
   background: var(--c-card);
+  border-radius: 16rpx;
 }
 
-/* 列表里的分组：与上方筛选栏之间是区块间距，
-   标题与它自己的卡片用 --gap-title（同一套规格，见 app.wxss） */
-.list-group {
-  display: block;
-  margin-top: var(--gap-block);
+.alert-card:last-child {
+  margin-bottom: 0;
 }
 
-.list-title {
-  margin-bottom: var(--gap-title);
+/* 头部：股票名 + 代码 在左，状态标签在右 */
+.alert-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-/* ===== cell 的 description 插槽内容（TDesign cell） ===== */
-.a-desc-wrap {
-  padding-top: var(--sp-1);
+.alert-card-name {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--c-ink);
 }
 
-.a-desc {
-  font-size: 12px;
+/* 股票代码跟在名称后面，小一号的灰色 */
+.alert-card-code {
+  margin-left: var(--sp-1);
+  font-size: 26rpx;
+  font-weight: 400;
+  color: var(--c-gray-light);
+}
+
+/* 右上角「编辑」：描边胶囊小按钮，压在卡片里不抢主内容视线 */
+.alert-card-edit {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 20rpx;
+  background: transparent;
+  border: 1rpx solid var(--c-border);
+  border-radius: 999rpx;
+}
+
+.alert-card-edit-text {
+  font-size: 26rpx;
   color: var(--c-gray);
 }
 
-.a-tags {
+/* 编辑模式下选中态只作展示：去掉点击反馈，x 图标已隐藏 */
+.selected-stock.is-readonly {
+  cursor: default;
+}
+
+/* 状态标签（已触发 / 未触发）：浅底胶囊，比默认 medium 再大半档 */
+.alert-card-tag {
+  flex: 0 0 auto;
+  --td-tag-medium-font: 26rpx/36rpx -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  --td-tag-medium-icon-size: 28rpx;
+  --td-tag-medium-padding: 6rpx 18rpx;
+}
+
+/* 大号阈值：趋势箭头 + 数字，两者垂直居中平齐 */
+.alert-card-price {
+  display: flex;
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+
+.alert-card-trend {
+  margin-right: var(--sp-1);
+}
+
+/* 价格数字颜色由内联 style 按涨跌下发（红/绿），这里只留字号与等宽数字 */
+.alert-card-price-text {
+  font-size: 48rpx;
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+}
+
+/* 条件描述 */
+.alert-card-desc {
+  margin-top: var(--sp-2);
+  font-size: 28rpx;
+  color: var(--c-gray);
+}
+
+/* 分割线 */
+.alert-card-divider {
+  height: 1px;
+  margin: var(--sp-3) 0;
+  background: var(--c-border);
+}
+
+/* 底部：时间在左，状态标签在右。
+   右侧留一档内边距，让标签比卡片边缘再往左收一点 */
+.alert-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: var(--sp-2);
+}
+
+.alert-card-time {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  margin-top: var(--sp-2);
-}
-
-.a-time {
-  font-size: 11px;
+  font-size: 24rpx;
   color: var(--c-gray-light);
 }
 
@@ -110,3 +196,134 @@
   right: var(--pad-page);
   height: 52px;
 }
+
+/* ===== 新增提醒弹窗表单 =====
+   排版规格对齐「添加自选股」弹窗：
+   - 字号 / placeholder：都用 TDesign 默认的 --td-font-body-large（32rpx），不覆盖
+   - 输入框垂直内边距：默认 32rpx，行与行之间靠它分隔，不再额外加 margin
+   - 标题到框体上边缘 = dialog 的 --td-spacer-3（48rpx）
+   底部单独处理：见下面 margin-bottom 的说明 */
+.alert-form {
+  /* 表单底部到「取消 / 确认添加」的距离要等于「新增提醒」标题到「选择股票」的距离，
+     也就是最后一行自身的 32rpx 下内边距。
+     默认会多出 dialog footer 的 48rpx 上内边距（footer 没有单独的 padding 变量，
+     只有四边统一的 --td-spacer-3，改它会连标题上边距一起变），
+     所以用负 margin 把 footer 拉上来 48rpx 抵消掉 */
+  margin-bottom: -48rpx;
+}
+
+/* 分区不再自带间距：上一个控件的 32rpx 下内边距就是行距，
+   与添加自选股弹窗里两个输入框之间的距离一致 */
+.form-section {
+  margin-top: 0;
+}
+
+/* t-input 的水平内边距恢复 TDesign 默认 32rpx：弹窗内文字到弹窗边缘的距离
+   = dialog 内容区 48rpx + 输入框 32rpx = 80rpx，与「添加自选股」弹窗一致 */
+
+/* 阈值这一行：label「阈值」字号小一档。
+   左内边距保持 TDesign 默认 32rpx，与上下的触发条件 / 检查频率（t-cell 默认 32rpx）
+   同一条左基线，不再单独左移凸出来 */
+.threshold-input {
+  --td-input-label-text-font: 28rpx/48rpx -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  /* 清除图标与单位容器的左间距（默认 --td-spacer-1 = 24rpx）收窄，
+     清除图标、单位一起往左移；单位自身的负 margin 不变，
+     两者间距从 16rpx 收到 8rpx */
+  --td-spacer-1: 16rpx;
+}
+
+/* 股票搜索下拉 */
+.search-field {
+  position: relative;
+}
+
+.search-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: var(--sp-1);
+  background: var(--c-card, #fff);
+  border: 1rpx solid var(--c-divider, #e5e6eb);
+  border-radius: 12rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  /* 字号与「添加自选股」弹窗的联想项一致（28rpx） */
+  font-size: 28rpx;
+  border-bottom: 1rpx solid var(--c-divider, #e5e6eb);
+}
+
+.search-item:last-child {
+  border-bottom: 0;
+}
+
+.search-item:active {
+  background: var(--c-hover, #f5f5f7);
+}
+
+.search-item-name {
+  color: var(--c-text, #333);
+}
+
+.search-item-code {
+  color: var(--c-gray, #8e8e93);
+  font-size: 24rpx;
+  font-feature-settings: 'tnum';
+}
+
+/* 已选股票标签：不另加上边距，与上下行的距离统一由输入框的 32rpx 下内边距决定 */
+.selected-stock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 20rpx;
+  background: var(--c-tint);
+  border-radius: 8rpx;
+}
+
+.selected-stock-text {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--c-blue);
+}
+
+/* 阈值单位：t-input 的 suffix 内容，落在清除图标右侧，跟着输入行走。
+   所有触发条件共用这一个 class，字号 / 间距完全一致；
+   「%」是半角、「元 / 倍」是全角，用 inline-block + min-width 把可视宽度拉齐，
+   避免某个单位看起来更宽或位置发虚 */
+.threshold-unit {
+  display: inline-block;
+  min-width: 44rpx;
+  font-size: 28rpx;
+  color: var(--c-gray);
+  margin-left: -8rpx;
+}
+
+/* 触发条件：t-cell 触发、t-picker 选择的「带标题的选择器」。
+   cell 的左右内边距用默认 32rpx，和输入框一样距弹窗边缘 80rpx */
+.condition-cell {
+  --td-cell-note-color: var(--c-blue);
+  --td-cell-note-font-size: 28rpx;
+}
+
+/* 选择器的确认按钮 / 选中项用项目蓝，别落到 TDesign 默认主色 #0052D9 */
+.condition-picker {
+  --td-picker-confirm-color: var(--c-blue);
+  --td-picker-item-active-color: var(--c-blue);
+  /* 选中项不要那条灰底指示条（默认 #f3f3f3），只靠文字颜色区分 */
+  --td-picker-indicator-bg-color: transparent;
+  /* 不再叠一层遮罩：dialog 已经有一层 rgba(0,0,0,.6)，叠加后背景会明显变黑。
+     主方案是 wxml 里 popup-props 传的 overlayProps.backgroundColor（写成行内样式），
+     这里同名变量做兜底；overlay 节点仍在，点空白照样能关闭 */
+  --td-overlay-bg-color: transparent;
+}
+
+

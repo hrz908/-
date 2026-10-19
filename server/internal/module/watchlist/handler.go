@@ -21,15 +21,15 @@ import (
 // noQuote 无行情占位，与小程序 pending 态的展示保持一致
 const noQuote = "--"
 
+// maxWatchlist 单用户自选股数量上限。
+// 不设上限时一个账号加几千条，refresh 会放大成几百次上游 HTTP 请求
+const maxWatchlist = 200
+
 // 计算常量：具名之后盈亏公式读起来更直白，也免得重复 NewFromInt
 var (
 	zero    = decimal.Zero
 	hundred = decimal.NewFromInt(100)
 )
-
-func logf(format string, args ...any) {
-	log.Printf(format, args...)
-}
 
 /* ===================== 请求 / 响应结构 ===================== */
 
@@ -91,7 +91,7 @@ func GetWatchlist(c *gin.Context) {
 		Where("user_id = ? AND enabled = ?", userID, true).
 		Order("created_at DESC").
 		Find(&rows).Error; err != nil {
-		logf("query watchlist failed: user=%d err=%v", userID, err)
+		log.Printf("query watchlist failed: user=%d err=%v", userID, err)
 		resp.Fail(c, resp.CodeInternal, "查询自选股失败")
 		return
 	}
@@ -102,21 +102,14 @@ func GetWatchlist(c *gin.Context) {
 	}
 	quotes, err := quote.BatchGetQuotes(ctx, codes)
 	if err != nil {
-		logf("batch get quotes failed, degrade: %v", err)
+		log.Printf("batch get quotes failed, degrade: %v", err)
 		quotes = map[string]*quote.StockSnapshot{}
 	}
 
 	filter := c.DefaultQuery("filter", "all")
-	items, totalProfit, totalCostValue := buildItems(rows, quotes, filter)
+	items, totalProfit, totalCostValue := assembleItems(rows, quotes, nil, filter)
 	sortItems(items, filter, c.DefaultQuery("order", ""))
-
-	resp.OK(c, WatchListResp{
-		List:            items,
-		TotalProfit:     util.Money(totalProfit),
-		TotalProfitRate: sumRate(totalProfit, totalCostValue),
-		UpCount:         countUp(items),
-		DownCount:       countDown(items),
-	})
+	writeWatchlist(c, items, totalProfit, totalCostValue)
 }
 
 /* ===================== 添加自选 ===================== */
@@ -151,9 +144,24 @@ func AddWatchlist(c *gin.Context) {
 		return
 	}
 
+	// 数量上限：没有它时一个账号可以加几千条，
+	// 之后的每次 refresh 都会放大成几百次上游请求
+	var count int64
+	if err := deps.DB.WithContext(ctx).Model(&UserWatchlist{}).
+		Where("user_id = ? AND enabled = ?", userID, true).
+		Count(&count).Error; err != nil {
+		log.Printf("count watchlist failed: user=%d err=%v", userID, err)
+		resp.Fail(c, resp.CodeInternal, "添加自选股失败")
+		return
+	}
+	if count >= maxWatchlist {
+		resp.Fail(c, resp.CodeBadRequest, "自选股数量已达上限")
+		return
+	}
+
 	snap, err := quote.FetchOne(ctx, code)
 	if err != nil || snap == nil {
-		logf("fetch stock quote failed: code=%s err=%v", code, err)
+		log.Printf("fetch stock quote failed: code=%s err=%v", code, err)
 		resp.Fail(c, resp.CodeBadGateway, "行情获取失败，请稍后重试")
 		return
 	}
@@ -191,7 +199,7 @@ func AddWatchlist(c *gin.Context) {
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "stock_code"}},
 		DoUpdates: clause.AssignmentColumns(updateCols),
 	}).Create(&row).Error; err != nil {
-		logf("upsert watchlist failed: user=%d code=%s err=%v", userID, code, err)
+		log.Printf("upsert watchlist failed: user=%d code=%s err=%v", userID, code, err)
 		resp.Fail(c, resp.CodeInternal, "添加自选股失败")
 		return
 	}
@@ -207,7 +215,7 @@ func AddWatchlist(c *gin.Context) {
 
 	// 缓存失败不影响本次添加成功，只记日志
 	if err := quote.SaveQuoteToRedis(ctx, snap); err != nil {
-		logf("save quote to redis failed: code=%s err=%v", code, err)
+		log.Printf("save quote to redis failed: code=%s err=%v", code, err)
 	}
 
 	resp.OK(c, AddWatchResp{ID: row.ID, StockCode: row.StockCode, StockName: row.StockName})
@@ -234,7 +242,7 @@ func RefreshWatchlist(c *gin.Context) {
 	if err := deps.DB.WithContext(ctx).
 		Where("user_id = ? AND enabled = ?", userID, true).
 		Find(&rows).Error; err != nil {
-		logf("query watchlist failed: user=%d err=%v", userID, err)
+		log.Printf("query watchlist failed: user=%d err=%v", userID, err)
 		resp.Fail(c, resp.CodeInternal, "刷新行情失败")
 		return
 	}
@@ -247,8 +255,8 @@ func RefreshWatchlist(c *gin.Context) {
 
 	fresh, failed := quote.FetchQuotes(ctx, codes)
 
-	if err := quote.BatchSaveQuotes(ctx, snapshotValues(fresh)); err != nil {
-		logf("batch save quotes failed: %v", err)
+	if err := quote.BatchSaveQuotes(ctx, util.Values(fresh)); err != nil {
+		log.Printf("batch save quotes failed: %v", err)
 	}
 
 	// 拉取失败的：降级读旧缓存；读不到就保持无行情
@@ -256,48 +264,27 @@ func RefreshWatchlist(c *gin.Context) {
 	if len(failed) > 0 {
 		old, err := quote.BatchGetQuotes(ctx, failed)
 		if err != nil {
-			logf("fallback read quotes failed: %v", err)
+			log.Printf("fallback read quotes failed: %v", err)
 		} else {
 			staleMap = old
 		}
 	}
 
 	filter := c.DefaultQuery("filter", "all")
-	items := make([]WatchItem, 0, len(rows))
-	totalProfit := zero
-	totalCostValue := zero
-
-	for _, r := range rows {
-		item := buildEmptyItem(r)
-		switch {
-		case fresh[r.StockCode] != nil:
-			item = buildItem(r, fresh[r.StockCode], false)
-		case staleMap[r.StockCode] != nil:
-			item = buildItem(r, staleMap[r.StockCode], true)
-		}
-
-		if filter == "up" || filter == "down" {
-			if item.Pending {
-				continue // 涨跌榜不列无行情的自选
-			}
-		}
-		items = append(items, item)
-
-		if item.Pending {
-			// 无行情不计入盈亏统计
-			continue
-		}
-		if amt, err := decimal.NewFromString(item.ProfitAmount); err == nil {
-			totalProfit = totalProfit.Add(amt)
-		}
-		totalCostValue = totalCostValue.Add(r.CostPrice.Mul(decimal.NewFromInt(int64(r.Quantity))))
-	}
+	// 组装与列表接口共用一套：行情优先级 fresh > stale > 无行情
+	items, totalProfit, totalCostValue := assembleItems(rows, fresh, staleMap, filter)
 	sortItems(items, filter, c.DefaultQuery("order", ""))
 
-	// 行情更新完成，广播给所有关心方（提醒检查等）
-	hook.EmitQuoteUpdated(userID, ctx)
+	// 行情更新完成，广播给所有关心方（提醒检查等）。
+	// 走异步：检查里的 DB / Redis / WS 推送不该拖慢本接口的响应
+	hook.EmitQuoteUpdatedAsync(userID, ctx)
 
 	// 返回结构与列表接口一致，前端可直接整段替换列表与统计
+	writeWatchlist(c, items, totalProfit, totalCostValue)
+}
+
+// writeWatchlist 统一写列表响应：两个接口（查询 / 刷新）的结构完全一致
+func writeWatchlist(c *gin.Context, items []WatchItem, totalProfit, totalCostValue decimal.Decimal) {
 	resp.OK(c, WatchListResp{
 		List:            items,
 		TotalProfit:     util.Money(totalProfit),
@@ -334,7 +321,7 @@ func DeleteWatchlist(c *gin.Context) {
 		Where("user_id = ? AND stock_code = ?", userID, code).
 		Update("enabled", false)
 	if res.Error != nil {
-		logf("delete watchlist failed: user=%d code=%s err=%v", userID, code, res.Error)
+		log.Printf("delete watchlist failed: user=%d code=%s err=%v", userID, code, res.Error)
 		resp.Fail(c, resp.CodeInternal, "移出自选失败")
 		return
 	}
@@ -381,8 +368,10 @@ func buildItem(row UserWatchlist, snap *quote.StockSnapshot, stale bool) WatchIt
 	return item
 }
 
-// buildItems 列表接口的组装：涨跌幅榜过滤掉无行情的（与前端 filterList 口径一致）
-func buildItems(rows []UserWatchlist, quotes map[string]*quote.StockSnapshot, filter string) ([]WatchItem, decimal.Decimal, decimal.Decimal) {
+// assembleItems 列表 / 刷新共用的组装逻辑：涨跌幅榜过滤掉无行情的
+// （与前端 filterList 口径一致），并顺手累计总盈亏。
+// fresh 优先于 stale：stale 表示这条用的是旧缓存降级数据
+func assembleItems(rows []UserWatchlist, fresh, stale map[string]*quote.StockSnapshot, filter string) ([]WatchItem, decimal.Decimal, decimal.Decimal) {
 	skipPending := filter == "up" || filter == "down"
 
 	items := make([]WatchItem, 0, len(rows))
@@ -390,7 +379,12 @@ func buildItems(rows []UserWatchlist, quotes map[string]*quote.StockSnapshot, fi
 	totalCostValue := zero
 
 	for _, r := range rows {
-		it := buildItem(r, quotes[r.StockCode], false)
+		snap, isStale := fresh[r.StockCode], false
+		if snap == nil {
+			snap, isStale = stale[r.StockCode], true
+		}
+
+		it := buildItem(r, snap, isStale)
 		if skipPending && it.Pending {
 			continue
 		}
@@ -405,27 +399,6 @@ func buildItems(rows []UserWatchlist, quotes map[string]*quote.StockSnapshot, fi
 		totalCostValue = totalCostValue.Add(r.CostPrice.Mul(decimal.NewFromInt(int64(r.Quantity))))
 	}
 	return items, totalProfit, totalCostValue
-}
-
-// buildEmptyItem 刷新失败且无缓存可退：价格归零并标记 pending / stale
-func buildEmptyItem(row UserWatchlist) WatchItem {
-	return WatchItem{
-		ID:           row.ID,
-		StockCode:    row.StockCode,
-		Code:         stock.DisplayCode(row.StockCode),
-		Name:         row.StockName,
-		Price:        "0",
-		PriceText:    noQuote,
-		ChangePct:    "0",
-		PctText:      noQuote,
-		CostPrice:    row.CostPrice.StringFixed(4),
-		Quantity:     row.Quantity,
-		ProfitAmount: "0.00",
-		ProfitRate:   "0.00",
-		Pending:      true,
-		Stale:        true,
-		UpdatedAt:    row.UpdatedAt.Format(time.RFC3339),
-	}
 }
 
 // calcProfit 浮动盈亏：(最新价 - 成本价) × 数量。
@@ -462,13 +435,21 @@ func sortItems(items []WatchItem, filter, order string) {
 		return
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		a, _ := decimal.NewFromString(items[i].ChangePct)
-		b, _ := decimal.NewFromString(items[j].ChangePct)
-		if desc {
-			return a.GreaterThan(b)
+	// 先把涨跌幅解析成 decimal：比较器每次比较都 NewFromString 会把
+	// 解析成本乘以 O(n log n)，而且 sort.Slice 不稳定，同涨跌幅的顺序会随机
+	pcts := make([]decimal.Decimal, len(items))
+	for i, it := range items {
+		v, err := decimal.NewFromString(it.ChangePct)
+		if err != nil {
+			v = zero
 		}
-		return a.LessThan(b)
+		pcts[i] = v
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if desc {
+			return pcts[i].GreaterThan(pcts[j])
+		}
+		return pcts[i].LessThan(pcts[j])
 	})
 }
 
@@ -482,25 +463,30 @@ func countUp(items []WatchItem) int {
 	return n
 }
 
+// countDown 只数真正下跌的（涨跌幅 < 0）。
+// 原来用 !Up 把平盘（0%）也算进了下跌，与前端涨跌榜口径不一致
 func countDown(items []WatchItem) int {
 	n := 0
 	for _, it := range items {
-		if !it.Pending && !it.Up {
+		if it.Pending || it.Up {
+			continue
+		}
+		if v, err := decimal.NewFromString(it.ChangePct); err == nil && v.IsNegative() {
 			n++
 		}
 	}
 	return n
 }
 
-func snapshotValues(m map[string]*quote.StockSnapshot) []*quote.StockSnapshot {
-	out := make([]*quote.StockSnapshot, 0, len(m))
-	for _, s := range m {
-		out = append(out, s)
-	}
-	return out
-}
+// 业务上限。DB 列是 numeric(18,4) / int，超范围的错误要到写库才暴露、
+// 返回的是 500；在入口按 400 挡掉，前端拿到的约束也更明确
+var (
+	maxCostPrice    = decimal.NewFromInt(100000000) // 1 亿
+	maxQuantity     = int64(100000000)              // 1 亿股
+	maxQuantityTemp = maxQuantity
+)
 
-// parseCost 解析成本价：没传返回零值；传了必须是数字且 >= 0
+// parseCost 解析成本价：没传返回零值；传了必须是数字、>= 0 且不超上限
 func parseCost(raw *string) (decimal.Decimal, string) {
 	if raw == nil {
 		return zero, ""
@@ -512,16 +498,22 @@ func parseCost(raw *string) (decimal.Decimal, string) {
 	if v.IsNegative() {
 		return zero, "成本价不能为负"
 	}
+	if v.GreaterThan(maxCostPrice) {
+		return zero, "成本价超出允许范围"
+	}
 	return v, ""
 }
 
-// parseQuantity 解析持股数量：没传为 0；传了不能为负
+// parseQuantity 解析持股数量：没传为 0；传了不能为负且不超上限
 func parseQuantity(raw *int) (int, string) {
 	if raw == nil {
 		return 0, ""
 	}
 	if *raw < 0 {
 		return 0, "持股数量不能为负"
+	}
+	if int64(*raw) > maxQuantityTemp {
+		return 0, "持股数量超出允许范围"
 	}
 	return *raw, ""
 }

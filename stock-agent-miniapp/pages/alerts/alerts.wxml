@@ -1,77 +1,72 @@
 <!-- 页面结构完全基于 TDesign 布局组件：
-     navbar（导航，带占位）+ grid（概览宫格）+ tabs（状态筛选）
+     navbar（导航，带占位）+ grid（概览宫格）
      + cell-group / cell（列表分区）+ empty（空态）+ toast（轻提示） -->
 <view class="page">
   <t-navbar title="提醒" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
 
-  <!-- 页面分两段：概览宫格与筛选 tabs 固定，只有提醒列表在下面的容器里滚动 -->
+  <!-- 页面分两段：概览宫格固定，只有提醒列表在下面的容器里滚动 -->
   <view class="content">
-    <!-- 提醒概览：TDesign grid 宫格（card 主题） -->
-    <t-grid column="{{3}}" theme="card" hover="{{false}}" class="overview-grid">
+    <!-- 提醒概览：TDesign grid 宫格（card 主题），两格：全部提醒 / 今日触发 -->
+    <t-grid column="{{2}}" theme="card" hover="{{false}}" class="overview-grid">
       <t-grid-item wx:for="{{stats}}" wx:for-item="s" wx:key="key">
         <view slot="text" class="g-num {{s.cls}}">{{s.num}}</view>
         <view slot="description" class="g-label">{{s.label}}</view>
       </t-grid-item>
     </t-grid>
 
-    <!-- 状态筛选：TDesign tabs（受控模式，value + change） -->
-    <t-tabs value="{{filter}}" bind:change="onTabsChange" class="filter-tabs">
-      <t-tab-panel
-        wx:for="{{filters}}"
-        wx:for-item="f"
-        wx:key="key"
-        label="{{f.label}}"
-        value="{{f.key}}"
-      />
-    </t-tabs>
+    <!-- 分组标题放在滚动区外：滚动时它固定不动，只有下面的列表在滚 -->
+    <view class="group-title">价格与涨幅提醒</view>
 
     <!-- 提醒列表：只有这一个容器内部滚动，底边停在「新增提醒」按钮上方
-         （预留量在 wxss 的 .list-scroll，含安全区），概览与筛选不参与滚动 -->
+         （预留量在 wxss 的 .list-scroll，含安全区），概览与标题不参与滚动 -->
     <scroll-view class="list-scroll" scroll-y>
-      <t-cell-group
-        wx:if="{{filtered.length > 0}}"
-        title="价格与涨幅提醒"
-        bordered="{{true}}"
-        class="list-group"
-        t-class-title="list-title"
-      >
-      <t-cell
-        wx:for="{{filtered}}"
-        wx:for-item="item"
-        wx:key="id"
-        title="{{item.title}}"
-        bordered="{{true}}"
-      >
-        <t-icon
-          slot="left-icon"
-          name="{{item.iconType === 'trend-up' ? 'trending-up' : 'chart-bar'}}"
-          size="40rpx"
-          color="{{item.enabled ? '#E64545' : '#B0B4BC'}}"
-        />
+      <view wx:if="{{alerts.length > 0}}" class="alert-list">
+        <!-- 每条提醒一张圆角卡片：头部（股票）→ 大号阈值 →
+             条件描述 → 分割线 → 底部（时间 + 状态标签） -->
+        <view
+          class="alert-card"
+          wx:for="{{alerts}}"
+          wx:for-item="item"
+          wx:key="id"
+        >
+          <view class="alert-card-head">
+            <view class="alert-card-name">{{item.name}}<text class="alert-card-code">{{item.code}}</text></view>
+            <!-- 编辑：打开与新增同款弹窗，预填当前规则，底部为「取消 / 删除」 -->
+            <view class="alert-card-edit" data-id="{{item.id}}" catchtap="onEdit">
+              <t-icon name="edit" size="32rpx" color="var(--c-gray)" />
+              <text class="alert-card-edit-text">编辑</text>
+            </view>
+          </view>
 
-        <view slot="description" class="a-desc-wrap">
-          <view class="a-desc">{{item.desc}}</view>
-          <view class="a-tags">
+          <view class="alert-card-price">
+            <t-icon class="alert-card-trend" name="{{item.trendIcon}}" size="44rpx" color="{{item.trendColor}}" />
+            <text class="alert-card-price-text" style="color: {{item.trendColor}};">{{item.priceText}}</text>
+          </view>
+
+          <view class="alert-card-desc">{{item.desc}}</view>
+
+          <view class="alert-card-divider" />
+
+          <view class="alert-card-foot">
+            <view class="alert-card-time">
+              <t-icon name="time" size="28rpx" color="var(--c-gray-light)" />
+              <text>{{item.time}}</text>
+            </view>
+            <!-- 状态标签从右上角移到这里，替换原来的迷你走势图标 -->
             <t-tag
-              theme="{{item.enabled ? 'success' : 'default'}}"
+              class="alert-card-tag"
+              theme="{{item.triggerTheme}}"
               variant="light"
-              size="small"
-            >{{item.enabled ? '已启用' : '已暂停'}}</t-tag>
-            <text class="a-time">{{item.time}}</text>
+              shape="round"
+              size="medium"
+              icon="{{item.trendIcon}}"
+            >{{item.triggerText}}</t-tag>
           </view>
         </view>
+      </view>
 
-        <t-switch
-          slot="note"
-          value="{{item.enabled}}"
-          data-index="{{item.index}}"
-          bind:change="toggleSwitch"
-        />
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 空态 -->
-    <t-empty wx:else image="" description="暂无该状态的提醒" />
+      <!-- 空态 -->
+      <t-empty wx:else image="" description="暂无提醒" />
     </scroll-view>
   </view>
 
@@ -82,4 +77,160 @@
 
   <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
   <t-toast id="t-toast" />
+
+  <!-- ========== 新增提醒弹窗（TDesign dialog，参考自选股添加弹窗） ==========
+       custom-style 关掉 t-popup 的 scale 入场动画，防止原生 input 错位 -->
+  <t-dialog
+    visible="{{popupVisible}}"
+    title="{{editMode ? '编辑提醒' : '新增提醒'}}"
+    confirm-btn="{{editMode ? deleteBtn : '确认添加'}}"
+    cancel-btn="取消"
+    custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
+    bind:confirm="onPopupConfirm"
+    bind:cancel="onPopupCancel"
+  >
+    <view slot="content" class="alert-form">
+      <!-- 表单不再套滚动区：内容高度交给 dialog 自己撑，
+           去掉提醒方式和预览后表单已经装得下，也省掉了「标题被裁」的问题 -->
+      <!-- ===== 区域 1：选股（搜索框 + 结果下拉） =====
+           编辑模式下已带股票且不可更换（后端 PUT 不支持改股票代码），
+           所以搜索框整块隐藏，只保留下方不可清除的选中态 -->
+      <view class="search-field" wx:if="{{!editMode}}">
+        <t-input
+          label="选择股票"
+          placeholder="股票代码/名称/拼音"
+          value="{{searchKeyword}}"
+          clearable="{{clearIconCfg}}"
+          always-embed="{{true}}"
+          bind:change="onSearchInput"
+          bind:clear="onSearchClear"
+        />
+        <!-- 下拉联想结果 -->
+        <view class="search-dropdown" wx:if="{{searchResults.length > 0}}">
+          <view
+            class="search-item"
+            wx:for="{{searchResults}}"
+            wx:key="code"
+            data-code="{{item.code}}"
+            data-name="{{item.name}}"
+            data-market="{{item.market}}"
+            bindtap="onSelectStock"
+          >
+            <text class="search-item-name">{{item.name}}</text>
+            <text class="search-item-code">{{item.market}}{{item.code}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 已选中股票时显示选中状态（新增模式可点右侧 x 清除） -->
+      <view wx:if="{{selectedStock}}" class="selected-stock {{editMode ? 'is-readonly' : ''}}" bindtap="onClearStock">
+        <text class="selected-stock-text">{{selectedStock.name}} ({{selectedStock.market}}{{selectedStock.code}})</text>
+        <t-icon wx:if="{{!editMode}}" name="close-circle-filled" size="36rpx" color="var(--c-gray-light)" />
+      </view>
+
+      <!-- ===== 区域 2：选择触发条件（带标题的选择器） ===== -->
+      <view class="form-section">
+        <t-cell
+          class="condition-cell"
+          title="触发条件"
+          arrow="{{true}}"
+          hover="{{true}}"
+          note="{{conditionText}}"
+          bind:click="onConditionPickerOpen"
+        />
+      </view>
+
+      <!-- ===== 区域 3：设置阈值（不再显示分区标题） ===== -->
+      <view class="form-section">
+        <!-- 单位走 suffix 插槽：TDesign 的 input 里 clear 图标在 suffix 左边，
+             所以「元 / % / 倍」正好落在清除图标右侧 -->
+        <t-input
+          class="threshold-input"
+          label="阈值"
+          type="number"
+          value="{{threshold}}"
+          placeholder="{{thresholdPlaceholder}}"
+          clearable="{{clearIconCfg}}"
+          always-embed="{{true}}"
+          bind:change="onThresholdInput"
+          bind:blur="onThresholdBlur"
+        >
+          <text slot="suffix" class="threshold-unit">{{thresholdUnit}}</text>
+        </t-input>
+      </view>
+
+      <!-- 成交量类额外显示基准选择：与触发条件同一套带标题的选择器 -->
+      <view wx:if="{{conditionType === 'volume'}}" class="form-section">
+        <t-cell
+          class="condition-cell"
+          title="基准周期"
+          arrow="{{true}}"
+          hover="{{true}}"
+          note="{{volumeBaseText}}"
+          bind:click="onVolumeBasePickerOpen"
+        />
+      </view>
+
+      <!-- 检查频率：与触发条件同一套带标题的选择器 -->
+      <view class="form-section">
+        <t-cell
+          class="condition-cell"
+          title="检查频率"
+          arrow="{{true}}"
+          hover="{{true}}"
+          note="{{frequencyText}}"
+          bind:click="onFrequencyPickerOpen"
+        />
+      </view>
+
+    </view>
+  </t-dialog>
+
+  <!-- ========== 带标题的选择器 ==========
+       都放在 t-dialog 外面：dialog 面板上有 transform，
+       放在它内部时 picker 的 fixed 定位会以面板为参照而错位 -->
+  <t-picker
+    class="condition-picker"
+    visible="{{conditionVisible}}"
+    value="{{conditionPickerValue}}"
+    title="选择触发条件"
+    confirm-btn="确定"
+    cancel-btn="取消"
+    usingCustomNavbar
+    popup-props="{{pickerPopupProps}}"
+    bind:change="onConditionPickerChange"
+    bind:close="onConditionPickerClose"
+  >
+    <t-picker-item options="{{conditionOptions}}" />
+  </t-picker>
+
+  <t-picker
+    class="condition-picker"
+    visible="{{volumeBaseVisible}}"
+    value="{{volumeBasePickerValue}}"
+    title="选择基准周期"
+    confirm-btn="确定"
+    cancel-btn="取消"
+    usingCustomNavbar
+    popup-props="{{pickerPopupProps}}"
+    bind:change="onVolumeBasePickerChange"
+    bind:close="onVolumeBasePickerClose"
+  >
+    <t-picker-item options="{{volumeBaseOptions}}" />
+  </t-picker>
+
+  <t-picker
+    class="condition-picker"
+    visible="{{frequencyVisible}}"
+    value="{{frequencyPickerValue}}"
+    title="选择检查频率"
+    confirm-btn="确定"
+    cancel-btn="取消"
+    usingCustomNavbar
+    popup-props="{{pickerPopupProps}}"
+    bind:change="onFrequencyPickerChange"
+    bind:close="onFrequencyPickerClose"
+  >
+    <t-picker-item options="{{frequencyOptions}}" />
+  </t-picker>
 </view>

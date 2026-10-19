@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/shopspring/decimal"
+
+	"stock-agent-server/internal/util"
 )
 
 // tencentFixture 取自腾讯行情的真实返回（已转 UTF-8）。
@@ -59,8 +61,10 @@ func TestChunkStrings(t *testing.T) {
 	}
 }
 
+// TestUniqueStrings 去重保序。各包的 uniqueStrings / uniqueCodes 已统一成
+// util.Unique 泛型版，这里验证行为没变
 func TestUniqueStrings(t *testing.T) {
-	got := uniqueStrings([]string{"SH600519", "SZ000001", "SH600519"})
+	got := util.Unique([]string{"SH600519", "SZ000001", "SH600519"})
 	if len(got) != 2 {
 		t.Fatalf("去重后应为 2 个，实际 %d：%v", len(got), got)
 	}

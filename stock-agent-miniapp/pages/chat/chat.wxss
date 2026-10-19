@@ -352,6 +352,11 @@
   color: var(--c-gray);
 }
 
+/* 抽屉导航项标题区：去掉默认右边距，让图标+文字整组真正居中 */
+.drawer-nav-center {
+  margin-right: 0;
+}
+
 /* cell 的 note 插槽：大盘数值 */
 .market-note {
   font-size: 13px;

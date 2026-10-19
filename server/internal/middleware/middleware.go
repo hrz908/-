@@ -3,6 +3,7 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -17,12 +18,19 @@ import (
 	"stock-agent-server/internal/resp"
 )
 
-const requestIDKey = "request_id"
+const (
+	requestIDKey = "request_id"
+
+	// requestIDMaxLen 客户端传入的 X-Request-ID 长度上限。
+	// 不限制的话超长值 / 控制字符会进入日志，造成日志注入与洪水
+	requestIDMaxLen = 64
+)
 
 // Recovery panic 恢复：单请求崩溃不拖垮进程，统一回 code:500
 func Recovery() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
-		log.Printf("rid=%s panic: %v", RequestIDFrom(c), recovered)
+		// 带上堆栈，否则线上 panic 只有一行消息、无从定位
+		log.Printf("rid=%s panic: %v\n%s", RequestIDFrom(c), recovered, debug.Stack())
 		resp.Fail(c, resp.CodeInternal, "服务内部错误")
 		c.Abort()
 	})
@@ -31,7 +39,7 @@ func Recovery() gin.HandlerFunc {
 // RequestID 透传或生成 X-Request-ID，写进 context 与响应头，便于日志追踪
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := strings.TrimSpace(c.GetHeader("X-Request-ID"))
+		id := sanitizeRequestID(c.GetHeader("X-Request-ID"))
 		if id == "" {
 			id = uuid.NewString()
 		}
@@ -39,6 +47,20 @@ func RequestID() gin.HandlerFunc {
 		c.Writer.Header().Set("X-Request-ID", id)
 		c.Next()
 	}
+}
+
+// sanitizeRequestID 只保留可打印 ASCII 且限制长度，其余视为未传（重新生成）
+func sanitizeRequestID(raw string) string {
+	id := strings.TrimSpace(raw)
+	if id == "" || len(id) > requestIDMaxLen {
+		return ""
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x20 || id[i] > 0x7e {
+			return ""
+		}
+	}
+	return id
 }
 
 // RequestIDFrom 取当前请求的 X-Request-ID（日志用）
@@ -51,10 +73,19 @@ func RequestIDFrom(c *gin.Context) string {
 	return ""
 }
 
-// CORS 放行小程序域名的跨域请求，并直接吃掉 OPTIONS 预检
-func CORS() gin.HandlerFunc {
+// CORS 放行跨域请求，并直接吃掉 OPTIONS 预检。
+// origins 为逗号分隔的白名单；"*" 表示全部（默认）。
+// 用 Bearer token 时白名单无所谓，但一旦某天改用 Cookie 鉴权，
+// 通配符会让 Allow-Credentials 失效且很难排查，所以这里就按白名单来
+func CORS(origins string) gin.HandlerFunc {
+	allow := parseOrigins(origins)
+
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if allow[origin] || allow["*"] {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Request-ID")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
@@ -66,12 +97,25 @@ func CORS() gin.HandlerFunc {
 	}
 }
 
+func parseOrigins(raw string) map[string]bool {
+	out := map[string]bool{}
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			out[o] = true
+		}
+	}
+	if len(out) == 0 {
+		out["*"] = true
+	}
+	return out
+}
+
 // Auth 解析 Authorization: Bearer <token>，校验通过后把 user_id 注入 context。
-// user_id 只从这里取，禁止从请求体 / query 读取，防止越权。
-// 例外：WebSocket 握手无法自定义请求头，故兜底支持 ?token=
+// user_id 只从这里取，禁止从请求体 / query 读取，防止越权
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		uid, err := auth.ParseToken(bearer(c))
+		uid, err := auth.ParseToken(bearer(c, false))
 		if err != nil || uid <= 0 {
 			resp.Fail(c, resp.CodeUnauthorized, "未登录或登录已失效")
 			c.Abort()
@@ -82,12 +126,31 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
-func bearer(c *gin.Context) string {
+// AuthAllowQueryToken 与 Auth 相同，额外允许 ?token= 兜底。
+// 只给 WebSocket 握手用（它无法带自定义请求头）。
+// token 进 URL 会留在代理日志与浏览器历史里，因此不对普通接口开放
+func AuthAllowQueryToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, err := auth.ParseToken(bearer(c, true))
+		if err != nil || uid <= 0 {
+			resp.Fail(c, resp.CodeUnauthorized, "未登录或登录已失效")
+			c.Abort()
+			return
+		}
+		c.Set("user_id", uid)
+		c.Next()
+	}
+}
+
+func bearer(c *gin.Context, allowQuery bool) string {
 	h := c.GetHeader("Authorization")
 	if len(h) > 7 && strings.EqualFold(h[:7], "bearer ") {
 		return strings.TrimSpace(h[7:])
 	}
-	return strings.TrimSpace(c.Query("token"))
+	if allowQuery {
+		return strings.TrimSpace(c.Query("token"))
+	}
+	return ""
 }
 
 // RateLimit 基于 Redis 有序集合的滑动窗口限流（按 IP）
