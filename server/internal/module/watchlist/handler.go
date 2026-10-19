@@ -169,13 +169,27 @@ func AddWatchlist(c *gin.Context) {
 		CostPrice: cost,
 		Quantity:  qty,
 		Enabled:   true,
+		// 显式取当前时间：冲突更新要读 row.UpdatedAt 的值，
+		// 留零值会把 updated_at 写成 0001-01-01
+		UpdatedAt: time.Now(),
 	}
-	// Upsert：唯一索引冲突时更新成本、数量与时间，不覆盖股票名称。
-	// 带上 enabled 是为了「移出后重新添加」能恢复这条记录，
-	// 否则用户会看到添加成功但列表里没有
+	// 冲突时改哪些列：enabled 必须恢复（「移出后重新添加」靠它，
+	// 否则用户会看到添加成功、列表里却查不到）；
+	// 而成本价与持股数量只能「传了才更新」——它们是首次录入的建仓信息，
+	// 重复添加时用户往往不会再填一遍，若像之前那样无条件覆盖就会被冲成 0
+	updateCols := []string{"enabled"}
+	if req.CostPrice != nil {
+		updateCols = append(updateCols, "cost_price")
+	}
+	if req.Quantity != nil {
+		updateCols = append(updateCols, "quantity")
+	}
+	updateCols = append(updateCols, "updated_at")
+
+	// Upsert：唯一索引冲突时更新上述列，不覆盖股票名称
 	if err := deps.DB.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "stock_code"}},
-		DoUpdates: clause.AssignmentColumns([]string{"cost_price", "quantity", "enabled", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns(updateCols),
 	}).Create(&row).Error; err != nil {
 		logf("upsert watchlist failed: user=%d code=%s err=%v", userID, code, err)
 		resp.Fail(c, resp.CodeInternal, "添加自选股失败")

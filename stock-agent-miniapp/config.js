@@ -38,6 +38,7 @@ function currentConfig() {
 
 const config = currentConfig();
 
-export const env = envVersion();
+// wsBase 目前还没有消费方：后端的 WebSocket 通道已建（server/internal/ws），
+// 前端还没接实时推送。留着这张表，将来接 WS 时直接从这里取即可
 export const apiBase = config.apiBase;
 export const wsBase = config.wsBase;

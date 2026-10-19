@@ -12,14 +12,6 @@ export function getToken() {
   }
 }
 
-export function getUserId() {
-  try {
-    return Number(wx.getStorageSync(UID_KEY)) || 0;
-  } catch (e) {
-    return 0;
-  }
-}
-
 export function setSession(token, userId) {
   try {
     wx.setStorageSync(TOKEN_KEY, token);
@@ -29,12 +21,14 @@ export function setSession(token, userId) {
   }
 }
 
+// 清掉本地凭证。重登录也失败时必须调用：
+// 否则失效的 token 会一直留在本地，之后每个请求都带着它去撞 401
 export function clearSession() {
   try {
     wx.removeStorageSync(TOKEN_KEY);
     wx.removeStorageSync(UID_KEY);
   } catch (e) {
-    // 忽略
+    // 同上，取不到存储就算了
   }
 }
 
@@ -117,6 +111,9 @@ function doRequest(url, method, data, token, retried) {
         if (res.statusCode === 401 && !retried) {
           ensureLogin(true).then((nt) => {
             if (!nt) {
+              // 重登录也拿不到新 token：清掉本地失效凭证。
+              // 不清的话它会一直留着，之后每个请求都带着它再去撞一次 401
+              clearSession();
               reject(fail(401, '登录已失效，请重试'));
               return;
             }
@@ -138,5 +135,7 @@ function request(url, method, data) {
 
 export const get = (url, data) => request(url, 'GET', data);
 export const post = (url, data) => request(url, 'POST', data);
+// put 暂无页面调用，但后端 alert 模块已有 PUT /api/v1/alerts/:id，
+// 接提醒规则编辑时要用到，故一并留着
 export const put = (url, data) => request(url, 'PUT', data);
 export const del = (url, data) => request(url, 'DELETE', data);
