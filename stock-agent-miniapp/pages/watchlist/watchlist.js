@@ -1,5 +1,6 @@
 import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 import * as api from '../../services/watchlist';
+import * as stockApi from '../../services/stock';
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -14,6 +15,9 @@ const EXCHANGES = [
   { label: '深市', prefix: 'SZ', codes: ['000', '001', '002', '003', '300', '301'] },
   { label: '北交所', prefix: 'BJ', codes: ['43', '83', '87', '88', '920'] }
 ];
+
+// 下拉最多展示几条联想结果：5 条刚好占满手机一屏，再多就要滚动了
+const SEARCH_LIMIT = 5;
 
 function marketOf(code) {
   const hit = EXCHANGES.find((e) => e.codes.some((p) => code.indexOf(p) === 0));
@@ -84,12 +88,18 @@ Page({
     pendingIndex: -1,
     pendingName: '',
 
-    // 添加自选表单：股票代码 + 成本价（元）+ 持股数量（股）
+    // 添加自选表单：股票代码（支持模糊搜索）+ 成本价（元）+ 持股数量（股）
     addVisible: false,
     addCode: '',
     addCost: '',
     addQty: '',
     codeError: '',
+    // 下拉联想：searchResults 是后端给的候选，searchVisible 控制显隐，
+    // addMarket 记下选中项的交易所——点确定时直接用它，
+    // 不必再用代码前缀反推市场（后端返回的才是权威值）
+    searchResults: [],
+    searchVisible: false,
+    addMarket: '',
     // 弹窗里的交易所提示：一行一个交易所，文案直接来自 EXCHANGES
     exchanges: EXCHANGES.map((e) => ({ label: e.label, codes: e.codes.join(' / ') }))
   },
@@ -264,17 +274,69 @@ Page({
 
   /* ================= 添加自选（dialog + input） ================= */
   onAdd() {
-    this.setData({ addVisible: true, addCode: '', addCost: '', addQty: '', codeError: '' });
+    this.setData({
+      addVisible: true,
+      addCode: '',
+      addCost: '',
+      addQty: '',
+      codeError: '',
+      searchResults: [],
+      searchVisible: false,
+      addMarket: ''
+    });
   },
 
   onAddCancel() {
-    this.setData({ addVisible: false });
+    this.setData({ addVisible: false, searchResults: [], searchVisible: false });
   },
 
   onAddCode(e) {
     const value = (e.detail && e.detail.value) || '';
     // 输入时清掉旧的报错，避免边改边红
     this.setData({ addCode: value, codeError: '' });
+    this.scheduleSearch(value);
+  },
+
+  // 防抖 300ms：打字过程中不发请求，停手后再发。
+  // 不防抖的话每敲一个字符就打一次后端，既慢又容易被第三方限流
+  scheduleSearch(value) {
+    if (this._searchTimer) clearTimeout(this._searchTimer);
+
+    const kw = String(value || '').trim();
+    if (!kw) {
+      this.setData({ searchResults: [], searchVisible: false });
+      return;
+    }
+
+    // 切走页面时清掉待发请求，避免在已销毁的页面上 setData
+    this._searchTimer = setTimeout(() => this.doSearch(kw), 300);
+  },
+
+  // 拉联想候选。失败就静默收起下拉：搜索是体验加分项，
+  // 挂了也不影响手输代码添加自选
+  doSearch(kw) {
+    stockApi
+      .search(kw, SEARCH_LIMIT)
+      .then((list) => {
+        const results = list || [];
+        this.setData({ searchResults: results, searchVisible: results.length > 0 });
+      })
+      .catch(() => {
+        this.setData({ searchResults: [], searchVisible: false });
+      });
+  },
+
+  // 选中下拉项：填回代码，并记住它的交易所。
+  // 之后就算用户再手动改动代码，也会走 onAddConfirm 里的兜底反推
+  onPickSearch(e) {
+    const { code, market } = e.currentTarget.dataset;
+    this.setData({
+      addCode: code || '',
+      addMarket: market || '',
+      searchResults: [],
+      searchVisible: false,
+      codeError: ''
+    });
   },
 
   onAddCost(e) {
@@ -294,8 +356,9 @@ Page({
     if (!code) codeError = '请输入股票代码';
     else if (!/^\d{6}$/.test(code)) codeError = '股票代码为 6 位数字';
 
-    // 市场由代码前缀反推，反推不到说明代码不属于已支持的交易所
-    const market = codeError ? '' : marketOf(code);
+    // 优先用下拉选中时记下的交易所（后端给的是权威值）；
+    // 手输没选过的，再按代码前缀反推
+    const market = codeError ? '' : this.data.addMarket || marketOf(code);
     if (!codeError && !market) codeError = '暂不支持该交易所，请核对代码';
     if (!codeError && this.data.stocks.some((s) => s.code === `${market} ${code}`)) {
       codeError = '该股票已在自选中';

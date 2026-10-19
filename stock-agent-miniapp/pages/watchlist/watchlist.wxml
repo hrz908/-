@@ -109,18 +109,34 @@
     bind:cancel="onAddCancel"
   >
     <view slot="content" class="add-form">
-      <t-input
-        label="股票代码"
-        placeholder="6位数字"
-        value="{{addCode}}"
-        type="number"
-        maxlength="{{6}}"
-        clearable="{{true}}"
-        always-embed="{{true}}"
-        status="{{codeError ? 'error' : 'default'}}"
-        tips="{{codeError}}"
-        bind:change="onAddCode"
-      />
+      <!-- 股票代码：模糊搜索，下拉给出最匹配的 5 条。
+           去掉 type="number" 与 maxlength 是为了能直接输中文和拼音，
+           不再需要用户背 6 位代码，也不用靠前缀猜交易所 -->
+      <view class="search-field">
+        <t-input
+          label="股票代码"
+          placeholder="代码 / 名称 / 拼音"
+          value="{{addCode}}"
+          clearable="{{true}}"
+          always-embed="{{true}}"
+          status="{{codeError ? 'error' : 'default'}}"
+          tips="{{codeError}}"
+          bind:change="onAddCode"
+        />
+        <!-- 下拉只在有结果时占位，避免空框挤压表单 -->
+        <view class="search-dropdown" wx:if="{{searchVisible && searchResults.length > 0}}">
+          <view
+            class="search-item"
+            wx:for="{{searchResults}}"
+            wx:key="code"
+            data-code="{{item.code}}"
+            data-market="{{item.market}}"
+            bindtap="onPickSearch"
+          >
+            <text class="search-item-name">{{item.name}}</text>
+            <text class="search-item-code">{{item.market}}{{item.code}}</text>
+          </view>
+        </view>
       <!-- 成本价：type="digit" 带小数点键盘，可留空（还没建仓 / 不想记） -->
       <t-input
         label="买入单价"

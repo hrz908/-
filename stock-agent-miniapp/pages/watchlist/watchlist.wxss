@@ -134,6 +134,53 @@
    改由 t-dialog 的 custom-style 写进行内样式（优先级高于任何类名规则），
    这里不再重复覆盖，也避免连删除确认弹窗一起被改掉 */
 
+/* ===== 添加自选弹窗的代码联想下拉 ===== */
+.search-field {
+  position: relative;
+}
+
+/* 下拉容器：绝对定位浮在 input 下方，不挤压表单 */
+.search-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 8rpx;
+  background: var(--c-card, #fff);
+  border: 1rpx solid var(--c-divider, #e5e6eb);
+  border-radius: 12rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx;
+  border-bottom: 1rpx solid var(--c-divider, #e5e6eb);
+}
+
+.search-item:last-child {
+  border-bottom: 0;
+}
+
+.search-item:active {
+  background: var(--c-hover, #f5f5f7);
+}
+
+.search-item-name {
+  color: var(--c-text, #333);
+}
+
+.search-item-code {
+  color: var(--c-gray, #8e8e93);
+  font-size: 24rpx;
+  font-feature-settings: 'tnum';
+}
+
 /* ===== 添加自选弹窗提示：一行一个交易所 ===== */
 .add-note {
   margin-top: 16rpx;

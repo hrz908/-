@@ -9,6 +9,7 @@ import (
 	"stock-agent-server/internal/middleware"
 	"stock-agent-server/internal/module/alert"
 	authapi "stock-agent-server/internal/module/auth"
+	"stock-agent-server/internal/module/stock"
 	"stock-agent-server/internal/module/watchlist"
 	"stock-agent-server/internal/ws"
 )
@@ -48,6 +49,7 @@ func New() *gin.Engine {
 	{
 		watchlist.Register(authorized)
 		alert.Register(authorized)
+		stock.Register(authorized)
 
 		// WebSocket 长连接：握手无法带自定义头，token 走 query
 		authorized.GET("/ws", ws.Serve)
