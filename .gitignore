@@ -27,6 +27,10 @@ server/.env.local
 # 设计稿截图（Ardot 导出的临时产物，不属于源码）
 .ardot-shots/
 
+# Playwright CLI 产物（快照/截图/视频，一次性调试产物）
+# 注：浏览器自动化统一走 agent-browser，这里只是防止误用 playwright-cli 时污染仓库
+.playwright-cli/
+
 # ===== 系统 / 编辑器 =====
 .DS_Store
 Thumbs.db
