@@ -24,6 +24,9 @@ type Config struct {
 	Env           string // dev（默认）/ prod。prod 下强制要求 JWT_SECRET 与微信凭据
 	AllowOrigins  string // CORS 允许的 Origin，逗号分隔；* 表示全部（默认）
 	AgentBaseURL  string // Python Agent 服务基地址，网关反向代理到该地址的 /run/stream
+	ASRBaseURL    string // 语音转文字上游基地址（OpenAI 兼容的 /audio/transcriptions）
+	ASRAPIKey     string // 上游密钥；为空时 /asr/transcribe 直接返回「未配置」
+	ASRModel      string // 上游 ASR 模型名
 }
 
 func Load() Config {
@@ -46,6 +49,14 @@ func Load() Config {
 		Env:          env("ENV", "dev"),
 		AllowOrigins: env("ALLOW_ORIGINS", "*"),
 		AgentBaseURL: env("AGENT_BASE_URL", "http://127.0.0.1:8000"),
+		// 语音转文字：默认指向硅基流动（与 Python agent 同一家上游），
+		// 密钥没有默认值——不配就直接不可用，避免静默拿到空识别结果
+		ASRBaseURL: env("ASR_BASE_URL", "https://api.siliconflow.cn/v1"),
+		// 密钥没有默认值：不配就直接不可用，避免静默拿到空识别结果。
+		// 回退到 OPENAI_API_KEY 是因为 ASR 与 LLM 通常是同一家上游、同一把钥匙，
+		// 只配一次就能用（想单独控制额度再显式设 ASR_API_KEY）
+		ASRAPIKey: env("ASR_API_KEY", env("OPENAI_API_KEY", "")),
+		ASRModel:   env("ASR_MODEL", "FunAudioLLM/SenseVoiceSmall"),
 	}
 }
 

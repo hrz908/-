@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"stock-agent-server/internal/agent"
+	"stock-agent-server/internal/asr"
 	"stock-agent-server/internal/middleware"
 	"stock-agent-server/internal/module/alert"
 	authapi "stock-agent-server/internal/module/auth"
@@ -76,6 +77,10 @@ func New(allowOrigins string) *gin.Engine {
 
 		// Agent AI 对话 SSE 兜底（H5 / 不支持 WS 的环境）：走 Header 鉴权，留在组内
 		authorized.POST("/agent/stream", agent.ServeSSE)
+
+		// 语音转文字：multipart 上传录音，网关转发上游 ASR。
+		// 挂在鉴权组内——每次识别都消耗上游额度，不能匿名调用
+		authorized.POST("/asr/transcribe", asr.Transcribe)
 	}
 
 	return r

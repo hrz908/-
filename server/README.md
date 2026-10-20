@@ -54,6 +54,9 @@ curl -s http://127.0.0.1:8080/healthz
 | `UPLOAD_DIR` | `./uploads` | 上传根目录；头像存 `avatars/`，静态路由只暴露 `/uploads/avatars` |
 | `ENV` | `dev` | `dev` / `prod`。`prod` 下强制要求 JWT 与微信凭据 |
 | `ALLOW_ORIGINS` | `*` | CORS 允许的 Origin，逗号分隔；`*` 表示全部 |
+| `ASR_BASE_URL` | `https://api.siliconflow.cn/v1` | 语音转文字上游（OpenAI 兼容的 `/audio/transcriptions`） |
+| `ASR_API_KEY` | 回退 `OPENAI_API_KEY` | 上游密钥；两者都为空时 `/api/v1/asr/transcribe` 直接报「未配置」 |
+| `ASR_MODEL` | `FunAudioLLM/SenseVoiceSmall` | 上游 ASR 模型 |
 
 数值型配置（`REDIS_DB` 等）解析失败会直接终止启动：写错环境变量时静默回退默认值，
 问题会藏到运行期才暴露，不如启动时就报错。

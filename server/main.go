@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"stock-agent-server/internal/agent"
+	"stock-agent-server/internal/asr"
 	"stock-agent-server/internal/auth"
 	"stock-agent-server/internal/config"
 	"stock-agent-server/internal/db"
@@ -74,6 +75,9 @@ func main() {
 	// Agent 网关：注入 Redis（三道限流闸门）与 Python Agent 服务地址。
 	// 必须在 router.New 之前完成，否则路由 handler 取到的 limiter/proxy 为 nil
 	agent.Init(rdb, cfg.AgentBaseURL)
+
+	// 语音转文字：同样要在 router.New 之前注入，否则 handler 读到空配置
+	asr.Init(cfg.ASRBaseURL, cfg.ASRAPIKey, cfg.ASRModel)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,
