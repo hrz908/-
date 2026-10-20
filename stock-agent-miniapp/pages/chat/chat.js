@@ -1,8 +1,8 @@
 // 对话页：消息收发走 Agent WebSocket（services/agent.js 单例），流式 token 逐字追加；
 // 纯文本走 TDesign chat-message 的 text 内容，行情/K 线这类结构化数据走自绘卡片消息
 
-import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 import agentSocket from '../../services/agent';
+import { quote } from '../../services/stock';
 
 // 侧边抽屉导航项（TDesign cell-group / cell）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去
@@ -19,12 +19,26 @@ const ROUTES = {
   settings: '/pages/settings/settings'
 };
 
-// 今日大盘（TDesign cell 列表）。抽屉里的静态装饰数据，与对话消息无关，
-// 后续接真实指数行情时再替换
-const MARKETS = [
-  { name: '上证指数', value: '3,024.16  +0.68%', up: true },
-  { name: '深证成指', value: '9,512.34  -0.42%', up: false }
+// 今日大盘指数：代码 -> 展示名。实时行情在 onLoad 与抽屉打开时从后端 /stock/quote 拉取。
+// 指数代码必须带市场前缀（SH/SZ），否则 6 位纯数字会被后端按个股规则误判市场
+const MARKET_INDICES = [
+  { code: 'SH000001', name: '上证指数' },
+  { code: 'SZ399001', name: '深证成指' },
+  { code: 'SZ399006', name: '创业板指' },
+  { code: 'SH000680', name: '科创综指' }
 ];
+
+// 首屏占位：实时数据到位前先显示名称 + 占位符，避免抽屉里一片空白
+const MARKETS_PLACEHOLDER = MARKET_INDICES.map((m) => ({ name: m.name, value: '--', pct: '--', up: true }));
+
+// 指数点位加千分位：3718.44 -> 3,718.44（不用 toLocaleString，小程序端支持不稳）
+function formatIndex(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return v == null ? '--' : String(v);
+  const fixed = n.toFixed(2);
+  const dot = fixed.indexOf('.');
+  return fixed.slice(0, dot).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + fixed.slice(dot);
+}
 
 // 触发抽屉开关的最小横向滑动距离（px）
 const SWIPE_MIN = 40;
@@ -61,7 +75,9 @@ function assistantMsg(data) {
   return {
     role: 'assistant',
     status: 'complete',
-    content: [{ type: 'text', data }]
+    // type 用 markdown：chat-content 只对 markdown 走 t-chat-markdown（marked 解析），
+    // text 会被当纯文本转义输出，**加粗**、- 列表、表格都会原样露出来
+    content: [{ type: 'markdown', data }]
   };
 }
 
@@ -76,22 +92,37 @@ function userMsg(data) {
 // 结构化卡片消息：content 必须是空数组，chat-message 才会渲染它的 content 插槽，
 // 卡片本体交给页面 WXML 绘制（行情卡、日 K 表的版式用 markdown 表格还原不出来）
 function quoteCard(q) {
+  // 后端 QuoteDetail 的涨跌幅字段是 change_percent（如 "-0.33"），且没有 meta 字段；
+  // 没有的信息在页面上拼出来，缺了就留空
+  const pctNum = parseFloat(q.change_percent);
+  const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
+  const meta = [
+    q.time || '',
+    q.volume ? '量 ' + q.volume + '手' : '',
+    q.amount ? '额 ' + q.amount + '万' : ''
+  ].filter(Boolean).join(' · ');
   return {
     role: 'assistant',
     status: 'complete',
     card: 'quote',
     content: [],
-    quote: Object.assign({}, q, { up: isUp(q.pct) })
+    quote: Object.assign({}, q, { pct: pct, meta: meta, up: isUp(pct) })
   };
 }
 
 function klineCard(rows) {
+  // 后端 KlineRow 字段是 date / close / change_percent，
+  // 卡片模板展示「日期 / 收盘 / 涨跌幅」，在这里做映射
   return {
     role: 'assistant',
     status: 'complete',
     card: 'kline',
     content: [],
-    kline: rows.map((r) => Object.assign({}, r, { up: isUp(r.p) }))
+    kline: rows.map((r) => {
+      const pctNum = parseFloat(r.change_percent);
+      const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
+      return { d: r.date, c: r.close, p: pct, up: !isNaN(pctNum) && pctNum >= 0 };
+    })
   };
 }
 
@@ -130,7 +161,7 @@ Page({
     drawerOpen: false,
     scrollIntoView: '',
     menus: MENUS,
-    markets: MARKETS,
+    markets: MARKETS_PLACEHOLDER,
     // chat-sender 右侧按钮：图标型发送按钮
     renderPresets: [{ name: 'send', type: 'icon' }],
 
@@ -141,7 +172,7 @@ Page({
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
-      assistantMsg('你好，我是股票助手。你可以问我行情、K 线、研报等问题。')
+      assistantMsg('你好，我是股票小助手。你可以问我行情、K 线、研报等问题。')
     ],
     // 状态提示（「正在思考…」「正在查询…」）：挂在消息列表底部，done/error 后清空
     statusText: ''
@@ -191,8 +222,9 @@ Page({
     this._streamFlushed = '';
     this._streamTimer = 0;
 
-    // 抽屉内容避让状态栏与菜单按钮
-    const drawerTop = statusBarHeight + 44;
+    // 抽屉内容避让状态栏：statusBarHeight 下方再留 28px（原 44，按需求整体上移一点）。
+    // 抽屉在左侧、胶囊菜单在右上，横向不重叠，故减小留白不会撞上菜单按钮
+    const drawerTop = statusBarHeight + 28;
     const chatHeight = Math.max(160, windowHeight - navH - senderH - padBottom);
 
     this.setData({
@@ -203,6 +235,8 @@ Page({
       chatHeight
     });
     this.scrollToBottom();
+    // 预热四大指数行情：抽屉首次打开前就把数据备好
+    this.loadMarkets();
 
     if (wx.onWindowResize) {
       this._onResize = (res) => {
@@ -314,7 +348,9 @@ Page({
             {
               role: 'assistant',
               status: 'streaming',
-              content: [{ type: 'text', data: '' }]
+              // 与 assistantMsg 一致用 markdown：流式期间 chat-markdown 每次合批刷新
+              // 都会整段重新解析，能正确渲染未完成段落到收敛的整个过程
+              content: [{ type: 'markdown', data: '' }]
             }
           ]),
           statusText: ''
@@ -644,9 +680,31 @@ Page({
   },
 
   // ===== 侧边抽屉 =====
+  // 拉取四大指数实时行情 -> 抽屉「今日大盘」。
+  // 单只失败降级为占位符（--），不阻断整个抽屉；涨红跌绿由 up 字段驱动
+  loadMarkets() {
+    Promise.all(MARKET_INDICES.map((m) => quote(m.code).catch(() => null))).then((list) => {
+      const markets = MARKET_INDICES.map((m, i) => {
+        const d = list[i];
+        if (!d) return { name: m.name, value: '--', pct: '--', up: true };
+        const pctNum = parseFloat(d.change_percent);
+        const num = isNaN(pctNum) ? 0 : pctNum;
+        const up = num >= 0; // >=0 红（涨），<0 绿（跌）
+        return {
+          name: m.name,
+          value: formatIndex(d.price),
+          pct: (up ? '+' : '') + num.toFixed(2) + '%',
+          up
+        };
+      });
+      this.setData({ markets });
+    });
+  },
+
   onMenuTap() {
     this._pendingMenu = '';
     this.setData({ drawerOpen: true });
+    this.loadMarkets(); // 每次打开抽屉刷新一次（后端 30s 缓存，开销可控）
   },
 
   // popup 的 visible-change：detail.visible 为目标状态（点遮罩关闭时也会触发）
@@ -702,6 +760,7 @@ Page({
     this._swipeLocked = true;
     if (dx > 0 && !this.data.drawerOpen) {
       this.setData({ drawerOpen: true });
+      this.loadMarkets(); // 滑动打开抽屉同样刷新指数
     } else if (dx < 0 && this.data.drawerOpen) {
       this.setData({ drawerOpen: false });
     }
