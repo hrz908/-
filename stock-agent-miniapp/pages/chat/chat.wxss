@@ -398,8 +398,10 @@
 
 .bar-input {
   width: 100%;
-  /* 最多两行：line-height 44rpx × 2 = 88rpx，超出后 textarea 内部滚动。
-     不让它无限长高，否则几行就把对话区顶没了 */
+  /* 一行高度打底（line-height 44rpx）：auto-height 的空 textarea 高度可能塌成 0，
+     没有热区就点不中、placeholder 也看不见。
+     最多两行 = 88rpx，超出后 textarea 内部滚动，不再把对话区顶掉 */
+  min-height: 44rpx;
   max-height: 88rpx;
   font-size: 30rpx;
   line-height: 44rpx;

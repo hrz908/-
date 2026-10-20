@@ -9,7 +9,7 @@
        navbar 的 fixed 默认是 true、而 placeholder 默认 false，
        意味着内容区 position: fixed 且不占位，对话区会顶到最上面被它遮住，
        因此这里显式打开 placeholder 让它在文档流里预留出自身高度 -->
-  <t-navbar title="股票小助手" placeholder="{{true}}">
+  <t-navbar title="溜来" placeholder="{{true}}">
     <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
       <t-icon name="view-list" size="52rpx" />
     </view>
@@ -139,16 +139,14 @@
        - 一条胶囊：左端是模式键（语音 / 键盘），右端是发送键
        - 键盘态：文字从模式键右侧开始；语音态：中间换成「按住说话」，模式键同时换成键盘图标
        - 语音态直接不渲染 textarea，键盘随之收起，再点模式键切回键盘
-       触摸事件用 catch 而不是 bind：页面的右滑开抽屉手势挂在根节点（bindtouch*），
-       若这里继续冒泡，按住说话时手指右滑会连带把抽屉拉出来（语音与抽屉抢同一个手势）。
-       catch 让触摸到输入栏为止，输入栏内不产生开关抽屉的手势 -->
+       手势起点标记用 bind 而不是 catch：catch 会让子元素的点击全部失效
+       （输入框点不动、模式键和发送键也不响应），只能用在没有可点子元素的节点上。
+       这里改成「起点在输入栏」的信号，由 onSwipeStart 判断后锁掉抽屉手势，
+       既不阻断点击，也能让光标移动 / 按住说话优先于开关抽屉 -->
   <view
     class="sender-wrap"
     style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
-    catchtouchstart="onSenderTouch"
-    catchtouchmove="onSenderTouch"
-    catchtouchend="onSenderTouch"
-    catchtouchcancel="onSenderTouch"
+    bindtouchstart="onSenderTouchStart"
   >
     <view class="sender-bar">
       <!-- 模式键：键盘态显示语音图标，语音态显示键盘图标 -->
@@ -161,8 +159,10 @@
         <t-icon name="{{voiceMode ? 'keyboard-1' : 'voice-wave'}}" size="46rpx" />
       </view>
 
-      <!-- 键盘态：输入区紧贴模式键右侧 -->
-      <view wx:if="{{!voiceMode}}" class="bar-field">
+      <!-- 键盘态：输入区紧贴模式键右侧。
+           整块可点（bindtap 主动聚焦）：textarea 是原生组件，点它的空白边角
+           未必落在原生节点上，给整块输入区一个聚焦入口更稳 -->
+      <view wx:if="{{!voiceMode}}" class="bar-field" bindtap="onTapInputField">
         <textarea
           class="bar-input"
           value="{{input}}"
@@ -183,14 +183,16 @@
         ></textarea>
       </view>
 
-      <!-- 语音态：胶囊中央的「按住说话」，上滑可取消 -->
+      <!-- 语音态：胶囊中央的「按住说话」，上滑可取消。
+           这里可以用 catch：本节点没有需要点击的子元素，catch 不会误伤点击；
+           它拦住的是「按住说话时右滑把抽屉拉出来」——触摸事件不再冒泡到页面根节点 -->
       <view
         wx:else
         class="bar-hold {{recording ? 'bar-hold--active' : ''}}"
-        bindtouchstart="onRecordStart"
-        bindtouchmove="onRecordMove"
-        bindtouchend="onRecordEnd"
-        bindtouchcancel="onRecordEnd"
+        catchtouchstart="onRecordStart"
+        catchtouchmove="onRecordMove"
+        catchtouchend="onRecordEnd"
+        catchtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
 
       <!-- 发送键：与模式键同规格，一起被胶囊包住 -->
@@ -229,8 +231,8 @@
       <view class="drawer-head">
         <t-image src="/assets/logo-bull.jpg" class="drawer-logo" mode="aspectFill" />
         <view class="drawer-title-col">
-          <view class="drawer-title">股票小助手</view>
-          <view class="drawer-sub">AI 股票小助手</view>
+          <view class="drawer-title">溜来</view>
+          <view class="drawer-sub">AI 溜来</view>
         </view>
       </view>
 

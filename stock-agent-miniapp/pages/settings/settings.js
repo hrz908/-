@@ -30,11 +30,11 @@ Page({
     nicknameTip: '',
     // 昵称输入框是否处于「取微信昵称」模式：只决定 type（nickname/text）。
     // 只有点下方「使用微信昵称」才为 true，平时为 false，避免一聚焦就弹候选栏。
-    // 注意：不要让它同时控制 focus——focus 一直为 true 会强制输入框常驻聚焦，
-    // 键盘就关不掉。focus 单独由 nicknameFocus 控制并在用完即释放
     nicknamePicking: false,
-    // 是否强制聚焦：仅在点击「使用微信昵称」后短暂为 true 以唤起微信面板，
-    // 选完 / 失焦后立刻置回 false，否则键盘无法收起
+    // 焦点状态：必须与输入框的「真实焦点」保持一致（focus 事件置 true、blur 事件置 false）。
+    // 不能把它当成「收起键盘」的命令：把已聚焦输入框的 focus 下发成 false，
+    // 微信会立刻让它失焦，表现就是「删除一个字符键盘就收起、没法连续编辑」。
+    // 要主动收键盘请用 wx.hideKeyboard()，它会触发 blur，变量随之归位
     nicknameFocus: false,
     // 「使用微信昵称」按键刚触发过聚焦的标记：用于区分「按键唤起面板」和
     // 「用户手动点进输入框」。面板关掉后若残留 nickname 类型，用户再次点输入框
@@ -125,33 +125,37 @@ Page({
     });
   },
 
-  // 把微信昵称（来自 change 或 nicknamereview 事件）写入输入框，并退出「取微信昵称」模式。
-  // 关键：一旦取到昵称就立刻把 nicknamePicking 置回 false，让 type 切回 text。
-  // 否则 type=nickname 的输入框每次聚焦都会唤起微信昵称面板，点进去就一直跳。
-  // 选到的昵称是普通字符串、已存进 editNickname，切回 text 通过绑定重新写入不会丢
-  applyWechatNickname(value) {
+  /* ===== 昵称输入的两条铁律（都是踩过坑才立的） =====
+     1) nicknameFocus 必须镜像「真实焦点」。把它当命令用（置 false 去收键盘）会让
+        一个已聚焦的输入框被下发 focus=false，微信随即让它失焦 —— 症状就是
+        「删除一个字符键盘就收起」。要收键盘用 wx.hideKeyboard()，它会触发 blur，
+        变量自然归位。
+     2) type=nickname 只存在于「点了使用微信昵称」到「拿到值」之间。它一聚焦就弹
+        微信昵称面板，残留下来会让之后的手动编辑反复被面板打断。 */
+
+  // 手动输入 / 面板回填都走这里：只写值与提示，绝不动 focus 与 type。
+  // 多下发一次 focus=false，用户正在用的键盘就会掉一次
+  onEditNickname(e) {
+    const value = (e && e.detail && e.detail.value) || '';
     const picking = this.data.nicknamePicking;
-    // 只在「按键唤起且真正选到昵称」这一次退出 nickname 模式并释放强制聚焦。
-    // 普通编辑（picking 已为 false）完全不碰 nicknameFocus，这样删除字符不会把键盘收起来
-    const exitPicking = picking && !!value;
-    this.setData({
-      editNickname: value,
-      nicknameTip: this.tipFor(value),
-      nicknamePicking: exitPicking ? false : this.data.nicknamePicking,
-      nicknameFocus: exitPicking ? false : this.data.nicknameFocus
-    });
+    this.setData({ editNickname: value, nicknameTip: this.tipFor(value) });
+    // 取昵称模式一旦有值（面板选的或手动敲的）就切回普通 text
+    if (picking && value) this.exitPicking(value);
+  },
+
+  // 退出「取微信昵称」模式：type 切回 text 并收键盘。
+  // 这里置 nicknameFocus=false 是安全的：紧接着输入框确实会失焦（hideKeyboard），
+  // 变量与真实状态仍然一致
+  exitPicking(value) {
+    this.setData({ nicknamePicking: false, nicknameFocus: false });
+    if (wx.hideKeyboard) wx.hideKeyboard();
     // 防御：个别基础库在 type 从 nickname 切回 text 的瞬间会清掉显示值，
-    // 仅当确实被清空时才延迟重写回昵称，绝不覆盖用户正在做的编辑
-    if (exitPicking) {
+    // 仅当确实被清空时才延迟重写回去，绝不覆盖用户正在做的编辑
+    if (value) {
       setTimeout(() => {
         if (!this.data.editNickname) this.setData({ editNickname: value });
       }, 60);
     }
-  },
-
-  onEditNickname(e) {
-    const value = (e && e.detail && e.detail.value) || '';
-    this.applyWechatNickname(value);
   },
 
   // 微信昵称面板的「昵称审核」事件：部分基础库版本只通过这个事件回传选中的昵称，
@@ -159,47 +163,63 @@ Page({
   onNicknameReview(e) {
     const detail = (e && e.detail) || {};
     const value = detail.value || detail.nickname || '';
-    if (value) this.applyWechatNickname(value);
+    if (!value) return;
+    this.setData({ editNickname: value, nicknameTip: this.tipFor(value) });
+    if (this.data.nicknamePicking) this.exitPicking(value);
   },
 
-  // 失焦兜底：点开「使用微信昵称」后没选就点了别处（输入框仍为空），
-  // 把 nickname 模式复位、释放强制聚焦，避免空值 + nickname 类型 + 残留聚焦
-  // 导致微信候选栏再次弹出。已选到昵称的情况由 applyWechatNickname 处理（type 已切回 text）
-  onNicknameBlur() {
-    if (this.data.nicknamePicking) {
-      this.setData({
-        nicknamePicking: false,
-        nicknameFocus: false
-      });
-    }
-  },
-
-  // 聚焦兜底：用户手动点进输入框时，若仍处于 nickname 模式但这次聚焦不是由
-  // 「使用微信昵称」按键触发（nicknameArmed 已被消费），说明微信面板已关掉却残留了
-  // nickname 类型——这里强制切回 text，保证点输入框本身绝不会再弹昵称面板，
-  // 只有点「使用微信昵称」按键才能唤起。按键触发的那次聚焦会先消费掉 armed 标记
   onNicknameFocus() {
+    // 与真实焦点对齐：用户手动点进输入框时必须置 true。
+    // 少了这一句，变量(false)与真实(已聚焦)不一致，之后每次 setData 都会把
+    // false 重新下发给原生 input，键盘就被收掉了
+    this.setData({ nicknameFocus: true });
     if (this.data.nicknamePicking && !this.data.nicknameArmed) {
-      this.setData({ nicknamePicking: false, nicknameFocus: false });
-    } else if (this.data.nicknameArmed) {
+      // 面板已关但类型还挂着 nickname（用户没选就关了）：只切回 text，
+      // 绝不顺手把 focus 置 false —— 那会把用户刚点开的键盘立刻收掉
+      this.setData({ nicknamePicking: false });
+    }
+    if (this.data.nicknameArmed) {
       // 消费按键触发的聚焦标记，之后任何聚焦都按「用户手动」处理
       this.setData({ nicknameArmed: false });
     }
   },
 
-  // 「使用微信昵称」：每次都弹微信官方的昵称选择面板。
-  // 平台不提供读取昵称的接口，只能把输入框切成 nickname 类型并聚焦，
-  // 由用户本人点选一次。清空输入框是因为微信面板只在输入框为空时才弹出。
-  // 这里只短暂把 nicknameFocus 置 true 唤起面板，选完 / 失焦即释放（见 onEditNickname / onNicknameBlur）
+  onNicknameBlur() {
+    // 与真实焦点对齐
+    if (this.data.nicknameFocus) this.setData({ nicknameFocus: false });
+    // 按键唤起面板的过程中会人为制造一次失焦（见 fillWechatNickname），
+    // 那一刻不能把 nickname 模式复位，否则面板永远弹不出来
+    if (this.data.nicknamePicking && !this.data.nicknameArmed && !this._nicknamePulsing) {
+      this.setData({ nicknamePicking: false });
+    }
+  },
+
+  // 「使用微信昵称」：弹微信官方的昵称选择面板。
+  // 平台不提供读取昵称的接口，只能把输入框切成 nickname 类型并聚焦，由用户本人点选。
+  // 清空输入框是因为微信面板只在输入框为空时才弹出
   fillWechatNickname() {
-    this.setData({
+    const patch = {
       editNickname: '',
       nicknameTip: '',
       nicknamePicking: true,
-      nicknameFocus: true,
       // 标记本次聚焦由按键触发，允许唤起微信面板；消费后即视为手动聚焦
       nicknameArmed: true
-    });
+    };
+
+    if (!this.data.nicknameFocus) {
+      // 没聚焦：focus false → true 会真实触发一次聚焦，微信随即弹出昵称面板
+      this.setData(Object.assign({ nicknameFocus: true }, patch));
+      return;
+    }
+    // 已经聚焦：focus 值不变，微信不会重新唤起面板（面板只在聚焦发生变化时弹）。
+    // 故先收一次焦点、再重新聚焦，制造一次真实的聚焦变化。
+    // 这中间那次 blur 由 _nicknamePulsing 挡住，不会把 nickname 模式复位
+    this._nicknamePulsing = true;
+    this.setData(Object.assign({ nicknameFocus: false }, patch));
+    setTimeout(() => {
+      this._nicknamePulsing = false;
+      this.setData({ nicknameFocus: true });
+    }, 80);
   },
 
   // 弹窗关闭（openProfile / cancelEdit / saveProfile）时也会统一复位 nicknamePicking 与 nicknameFocus

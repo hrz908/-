@@ -44,6 +44,9 @@ function formatIndex(v) {
 // 触发抽屉开关的最小横向滑动距离（px）
 const SWIPE_MIN = 40;
 
+// 发送看门狗：超过这个时长一个字都没回来，就认为这一轮没有响应（秒）
+const SEND_TIMEOUT_MS = 45000;
+
 // 对话列表底部锚点：scroll-into-view 滚动到它即可到达列表末尾
 const CHAT_BOTTOM_ID = 'chat-bottom';
 
@@ -197,7 +200,7 @@ Page({
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
-      assistantMsg('你好，我是股票小助手。你可以问我行情、K 线、研报等问题。')
+      assistantMsg('你好，我是溜来。你可以问我行情、K 线、研报等问题。')
     ],
     // 状态提示（「正在思考…」「正在查询…」）：挂在消息列表底部，done/error 后清空
     statusText: ''
@@ -243,6 +246,7 @@ Page({
     // 键盘弹起时额外上抬的间距（px）：键盘高度是 px，这里一次性换算好
     this._keyboardGap = KEYBOARD_GAP_RPX * rpx;
     this._measureTimer = 0;
+    this._sendWatchdog = 0;
     this._kbHeight = 0;
     // 流式输出追踪：当前 streaming 消息在 messages 里的下标（-1 表示无）、
     // 累计文本、已落到视图层的文本、合批定时器
@@ -335,6 +339,7 @@ Page({
     agentSocket.on('error', (data) => {
       this._flushStream();
       this._finishStreaming();
+      this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '' });
       wx.showToast({
         icon: 'none',
@@ -347,6 +352,7 @@ Page({
     agentSocket.on('done', () => {
       this._flushStream();
       this._finishStreaming();
+      this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '' });
     });
 
@@ -363,6 +369,8 @@ Page({
   // 把增量文本积进缓冲；首个 token 到达时确定目标消息（没有 streaming 消息
   // 就新建一条）并立即刷一帧，后续 token 只积缓冲，由定时器合批刷新
   _appendToken(delta) {
+    // 已经有内容在回来，说明这一轮是活的，撤掉看门狗
+    this._clearSendWatchdog();
     if (this._streamIndex < 0) {
       const messages = this.data.messages;
       const last = messages[messages.length - 1];
@@ -438,6 +446,7 @@ Page({
     if (this._scrollTimer) clearTimeout(this._scrollTimer);
     if (this._measureTimer) clearTimeout(this._measureTimer);
     if (this._streamTimer) clearTimeout(this._streamTimer);
+    this._clearSendWatchdog();
     // 录音/播放器：走的时候停干净，否则后台还能听到声音
     if (this._recordTimer) clearTimeout(this._recordTimer);
     if (this._audio) {
@@ -557,9 +566,31 @@ Page({
       statusText: '正在思考...'
     });
     this.scrollToBottom();
+    this._armSendWatchdog();
 
     // 通过 WS 发送；未连接时 agentSocket 内部会先缓存并触发连接
     agentSocket.sendMessage(text);
+  },
+
+  // 发送看门狗：sending 只在 done / error 里复位，服务没起、WS 没连上或消息被缓存
+  // 却始终没建立连接时，这两个事件永远不来，sending 就一直为 true，
+  // 之后每次发送都被 sendText 开头那句静默吞掉 —— 表现为「点了发送没反应」。
+  // 收到第一个 token 说明链路活着，立刻撤掉（见 _appendToken）
+  _armSendWatchdog() {
+    this._clearSendWatchdog();
+    this._sendWatchdog = setTimeout(() => {
+      this._sendWatchdog = 0;
+      if (!this.data.sending) return;
+      this.setData({ sending: false, statusText: '' });
+      wx.showToast({ icon: 'none', title: '服务暂时没有响应，请重试', duration: 2000 });
+    }, SEND_TIMEOUT_MS);
+  },
+
+  _clearSendWatchdog() {
+    if (this._sendWatchdog) {
+      clearTimeout(this._sendWatchdog);
+      this._sendWatchdog = 0;
+    }
   },
 
   // 键盘弹起后的布局：输入栏容器整体上移 kb，对话区同步收窄 kb，
@@ -829,18 +860,32 @@ Page({
   },
 
   // ===== 手势开关抽屉：右滑打开，左滑关闭 =====
-  // 输入栏内的触摸在这里终结（wxml 用 catch 绑到这里）：
-  // 不做任何事，存在的目的就是不冒泡到根节点，避免与「按住说话」抢手势
-  onSenderTouch() {},
+  // 输入栏内的手势起点标记（wxml 用 bindtouchstart 绑到 .sender-wrap）。
+  // 用「标记 + 判断」取代原来的 catch：catch 会让整个输入栏的子元素点击失效，
+  // 输入框点不动、模式键和发送键全都不响应。这里只记一个信号，
+  // 由 onSwipeStart 决定这次手势是否让给输入（光标移动 / 按住说话）
+  onSenderTouchStart() {
+    this._inSender = true;
+  },
+
+  // 点输入区任意位置都聚焦 textarea：原生组件的点击热区未必铺满整块，
+  // 给一个明确的聚焦入口，点空白也能唤起键盘
+  onTapInputField() {
+    if (!this.data.inputFocus) this.setData({ inputFocus: true });
+  },
 
   onSwipeStart(e) {
     this._startX = e.touches[0].clientX;
     this._startY = e.touches[0].clientY;
     this._lastX = this._startX;
     this._lastY = this._startY;
-    // 录音期间整段手势直接锁死：手指按住说话时若滑出按钮范围（比如想上滑取消时
-    // 手抖带出横向位移），事件仍可能落到根节点，这里兜住不让抽屉被拉出来
-    this._swipeLocked = !!this._recording;
+    // 子元素的 bindtouchstart 先于根节点执行，这里读到的是本次手势的起点归属；
+    // 读完即清，下一次手势重新判定
+    const inSender = this._inSender;
+    this._inSender = false;
+    // 起点在输入栏（或正在录音）：这一整段手势都不用于开关抽屉。
+    // 录音这条是兜底：按住说话时若滑出按钮范围，事件仍可能落到根节点
+    this._swipeLocked = !!this._recording || !!inSender;
   },
 
   onSwipeMove(e) {

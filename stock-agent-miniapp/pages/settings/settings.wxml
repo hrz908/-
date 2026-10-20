@@ -75,8 +75,11 @@
         <!-- align="center" 让输入文字与 placeholder 都居中。
              type 平时是 text，只有点了下方「使用微信昵称」才切成 nickname——
              否则每次聚焦输入框都会弹出微信的昵称候选栏，属于打扰。
-             focus 单独用 nicknameFocus 控制，且仅在唤起微信面板时短暂为 true、
-             选完 / 失焦即释放，避免 focus 长期为 true 把键盘卡住关不掉。
+             focus 用 nicknameFocus 受控，但它必须镜像「真实焦点」（focus 事件置 true、
+             blur 事件置 false）：把已聚焦输入框的 focus 下发成 false 会让微信立刻收键盘，
+             删除字符时键盘反复掉就是这个原因；要主动收键盘走 wx.hideKeyboard()。
+             hold-keyboard=true：点输入框以外的地方（如「使用微信昵称」）不收键盘，
+             避免键盘状态被误触发的失焦打断。
              不用 maxlength 硬截断——截断了就永远超不过、没法提示，
              改为放开输入、由 JS 判长度，超了用 status=error + tips 在框下方提示 -->
         <t-input
@@ -86,6 +89,7 @@
           focus="{{nicknameFocus}}"
           value="{{editNickname}}"
           placeholder="请输入昵称"
+          hold-keyboard="{{true}}"
           status="{{nicknameTip ? 'error' : 'default'}}"
           tips="{{nicknameTip}}"
           bind:change="onEditNickname"
