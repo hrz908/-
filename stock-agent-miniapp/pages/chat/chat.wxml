@@ -25,8 +25,9 @@
       scroll-y="{{true}}"
       enhanced="{{true}}"
       show-scrollbar="{{false}}"
-      scroll-with-animation="{{true}}"
-      scroll-into-view="{{scrollIntoView}}"
+      scroll-with-animation="{{scrollAnimated}}"
+      scroll-top="{{scrollTop}}"
+      bindscroll="onChatScroll"
     >
       <view class="chat-inner">
         <block wx:for="{{messages}}" wx:for-item="msg" wx:key="index">
@@ -127,7 +128,8 @@
         </view>
         <text>{{statusText}}</text>
       </view>
-      <!-- scroll-into-view 的锚点：撑到最后一条消息之后，用于滚动到底 -->
+      <!-- 底部锚点：0 高度。滚动已改为 scroll-top 数值控制，
+           它不再承担定位职责，仅作为列表内容的稳定结尾 -->
       <view id="chat-bottom" class="chat-anchor"></view>
     </scroll-view>
   </view>

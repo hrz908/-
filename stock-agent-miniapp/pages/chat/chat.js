@@ -161,6 +161,12 @@ const CANCEL_DISTANCE = 60;
 // 波形装饰：固定一组高度，免得同一条语音每次重绘都长得不一样
 const VOICE_BARS = [10, 20, 30, 16, 26, 36, 22, 12, 28, 18];
 
+// 流式渲染节奏：合批间隔(ms)、不足一整行时至少攒够多少字符才落视图、
+// 滚动跟随的去抖间隔(ms)。三者共同决定「多久重排一次」
+const STREAM_FLUSH_MS = 100;
+const STREAM_MIN_DELTA = 40;
+const SCROLL_FOLLOW_MS = 80;
+
 // 语音消息的 tempFilePath 只在本次会话可用，重新进入聊天页就失效了——
 // 这一点和当前 messages 一致（本来也没有历史持久化的接口）
 function voiceMsg(path, seconds) {
@@ -185,7 +191,12 @@ Page({
     keyboardOffset: 0,
     chatHeight: 0,
     drawerOpen: false,
-    scrollIntoView: '',
+    // 对话区滚动位置：用数值 scroll-top 控制。
+    // 旧写法 scroll-into-view 每次都要「先清空锚点再置位」，流式期间
+    // 会不停重启滚动动画，看起来就是画面上下抽动。
+    // scrollAnimated 只在非流式场景（发消息、插卡片）打开，流式跟随一律瞬移
+    scrollTop: 0,
+    scrollAnimated: false,
     menus: MENUS,
     markets: MARKETS_PLACEHOLDER,
 
@@ -254,6 +265,10 @@ Page({
     this._streamText = '';
     this._streamFlushed = '';
     this._streamTimer = 0;
+    // 滚动跟随状态：是否停在底部（用户上翻看历史时不再被拽回去）、
+    // 最近一次写入视图的 scroll-top
+    this._atBottom = true;
+    this._scrollTopVal = 0;
 
     // 抽屉内容避让状态栏：statusBarHeight 下方再留 28px（原 44，按需求整体上移一点）。
     // 抽屉在左侧、胶囊菜单在右上，横向不重叠，故减小留白不会撞上菜单按钮
@@ -267,7 +282,7 @@ Page({
       keyboardOffset: 0,
       chatHeight
     });
-    this.scrollToBottom();
+    this.scrollToBottom({ force: true });
     // 预热四大指数行情：抽屉首次打开前就把数据备好
     this.loadMarkets();
 
@@ -304,10 +319,10 @@ Page({
     // 卡片之后的 token 会被追加到卡片上方的旧消息里，顺序就乱了
     agentSocket.on('card', (data) => {
       if (!data || data.type !== 'quote_card' || !data.payload) return;
-      this._flushStream();
+      this._flushStream({ force: true });
       this._finishStreaming();
       this.setData({ messages: this.data.messages.concat([quoteCard(data.payload)]) });
-      this.scrollToBottom();
+      this.scrollToBottom({ force: true });
     });
 
     // K 线表格：payload 约定为 { rows: [...] }，兼容直接给数组
@@ -315,10 +330,10 @@ Page({
       if (!data || data.type !== 'kline_table' || !data.payload) return;
       const rows = data.payload.rows || data.payload;
       if (!Array.isArray(rows) || !rows.length) return;
-      this._flushStream();
+      this._flushStream({ force: true });
       this._finishStreaming();
       this.setData({ messages: this.data.messages.concat([klineCard(rows)]) });
-      this.scrollToBottom();
+      this.scrollToBottom({ force: true });
     });
 
     // 后端主动推的状态提示
@@ -337,7 +352,7 @@ Page({
 
     // 错误：复位发送态并提示，不往消息列表里塞错误气泡
     agentSocket.on('error', (data) => {
-      this._flushStream();
+      this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '' });
@@ -350,7 +365,7 @@ Page({
 
     // 本轮回答结束：流式消息转 complete，解锁发送按钮
     agentSocket.on('done', () => {
-      this._flushStream();
+      this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '' });
@@ -396,30 +411,58 @@ Page({
     }
     this._streamText += delta;
     if (!this._streamTimer) {
-      // 合批：窗口内连续到达的 token 只安排一次刷新，到点后落视图并跟随滚动
+      // 合批：窗口内连续到达的 token 只安排一次刷新。
+      // 滚动交给 _flushStream 在 setData 回调里做 —— 回调触发时新内容已经渲染完，
+      // 量到的是新高度，一次滚到位；若在刷新前就滚，会先按旧高度定位、
+      // 下一帧再补一次，表现出来就是上下跳
       const first = this._streamFlushed === '';
       this._streamTimer = setTimeout(() => {
         this._streamTimer = 0;
-        this._flushStream();
-        this.scrollToBottom();
-      }, first ? 0 : 100);
+        this._flushStream({ afterRender: true });
+      }, first ? 0 : STREAM_FLUSH_MS);
     }
   },
 
-  // 把缓冲区落到视图：只更新目标消息的文本字段（路径级 setData）
-  _flushStream() {
+  // 把缓冲区落到视图：只更新目标消息的文本字段（路径级 setData）。
+  // opts.force  = 收尾（done / error / 插卡片）时把缓冲一字不落地渲染完
+  // opts.afterRender = 刷新完成后再跟随滚动，用于流式逐帧刷新
+  _flushStream(opts) {
+    const force = !!(opts && opts.force);
+    const afterRender = !!(opts && opts.afterRender);
     if (this._streamTimer) {
       clearTimeout(this._streamTimer);
       this._streamTimer = 0;
     }
     if (this._streamIndex === undefined || this._streamIndex < 0) return;
     if (this._streamFlushed === this._streamText) return;
-    this._streamFlushed = this._streamText;
-    const patch = {};
-    patch['messages[' + this._streamIndex + '].content[0].data'] = this._streamText;
-    this.setData(patch);
-  },
 
+    let text = this._streamText;
+    if (!force) {
+      // 只在「行边界」落视图：半行文本、以及未闭合的 markdown 块（表格、代码 fence、
+      // 列表项）都会让气泡高度忽大忽小，已渲染内容因此上下跳。
+      // 把不完整的一行留在缓冲里，等下一批凑齐整行再一起渲染，
+      // 这样气泡高度只会单调递增，视觉上就是平滑长高
+      const cut = text.lastIndexOf('\n');
+      if (cut > this._streamFlushed.length) {
+        text = text.slice(0, cut + 1);
+      } else if (text.length - this._streamFlushed.length < STREAM_MIN_DELTA) {
+        // 一行都没攒完、增量也很小：等下一批，避免每个 token 都触发一次重排
+        return;
+      }
+      // 兜底：一直等不到换行（超长单行）时，攒够 STREAM_MIN_DELTA 也照常渲染
+    }
+    if (text === this._streamFlushed) return;
+
+    this._streamFlushed = text;
+    const patch = {};
+    patch['messages[' + this._streamIndex + '].content[0].data'] = text;
+    if (afterRender) {
+      // 渲染完成后再跟随滚动：回调里量到的高度是新的，滚动一次到位
+      this.setData(patch, () => this.scrollToBottom());
+    } else {
+      this.setData(patch);
+    }
+  },
   // 流式消息收尾：status 转 complete，复位流式追踪状态。
   // done 和卡片插入都走这里：后者是为了让卡片之后的 token 另起一条消息，
   // 两者都不碰 sending（是否解锁发送按钮只由 done / error 决定）
@@ -556,7 +599,7 @@ Page({
     if (!text || this.data.sending) return;
 
     // 上一轮流式状态先复位（正常情况下 done 已经收过尾，这里是兜底）
-    this._flushStream();
+    this._flushStream({ force: true });
     this._finishStreaming();
 
     this.setData({
@@ -565,7 +608,7 @@ Page({
       sending: true,
       statusText: '正在思考...'
     });
-    this.scrollToBottom();
+    this.scrollToBottom({ force: true });
     this._armSendWatchdog();
 
     // 通过 WS 发送；未连接时 agentSocket 内部会先缓存并触发连接
@@ -729,7 +772,7 @@ Page({
       sending: true,
       statusText: '语音识别中...'
     });
-    this.scrollToBottom();
+    this.scrollToBottom({ force: true });
 
     transcribe(path)
       .then((text) => {
@@ -784,18 +827,42 @@ Page({
     this.setData({ messages: messages, playingIndex: -1 });
   },
 
-  scrollToBottom() {
-    // 已有一次待执行的滚动就直接返回：流式期间每帧（100ms）都会调到这里，
-    // 反复「清空锚点 → 重设锚点」会让 scroll-into-view 动画不停重启，
-    // 长列表下看起来就是画面抽搐。节流后每 80ms 最多滚一次，且仍然滚到最新内容
+  // 滚到底：改用数值 scroll-top 定位，不再走 scroll-into-view。
+  // 旧实现每帧都要「清空锚点 → 重设锚点」，配合滚动动画会不停重启，
+  // 长文本流式下表现为画面反复上下抽动。现在：
+  // - 按内容高度递增地写 scroll-top（值不变不会触发滚动，天然去抖）
+  // - 用户上翻看历史时不跟随，只有新消息 / 卡片这类场景才 force
+  // - 流式进行中关闭滚动动画，避免动画过程里的位置回弹
+  scrollToBottom(opts) {
+    const force = !!(opts && opts.force);
+    if (!force && this._atBottom === false) return;
     if (this._scrollTimer) return;
-    // scroll-into-view 在值不变时不会重新滚动，先清空再置位
-    this.setData({ scrollIntoView: '' });
-    // 等新消息渲染完成（卡片较多时首次渲染会慢于本次调用）再定位
     this._scrollTimer = setTimeout(() => {
       this._scrollTimer = 0;
-      this.setData({ scrollIntoView: CHAT_BOTTOM_ID });
-    }, 80);
+      const query = wx.createSelectorQuery().in(this);
+      query.select('.chat-inner').boundingClientRect();
+      query.exec((res) => {
+        const rect = res && res[0];
+        if (!rect || !rect.height) return;
+        // scroll-top 会被自动夹到「内容高度 - 容器高度」，直接给内容总高即可；
+        // 内容变长时这个值单调递增，每次都会真正滚到底
+        const top = Math.ceil(rect.height);
+        if (top <= this._scrollTopVal) return;
+        this._scrollTopVal = top;
+        this.setData({ scrollTop: top, scrollAnimated: this._streamIndex < 0 });
+      });
+    }, SCROLL_FOLLOW_MS);
+  },
+
+  // 记录用户是否停在底部：由 scroll-view 的 bindscroll 驱动。
+  // 只有贴底时才自动跟随新内容，用户往上翻历史不会被拽回去
+  onChatScroll(e) {
+    const d = e && e.detail;
+    if (!d) return;
+    const viewH = this.data.chatHeight || 0;
+    const maxTop = Math.max(0, (d.scrollHeight || 0) - viewH);
+    // 距底部 24px 内都算贴底：容忍小数像素与测量误差
+    this._atBottom = maxTop - (d.scrollTop || 0) <= 24;
   },
 
   // ===== 侧边抽屉 =====
