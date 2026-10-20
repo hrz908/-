@@ -1,38 +1,89 @@
-# ===== 小程序 =====
-# npm 依赖
-stock-agent-miniapp/node_modules/
+# ==========================================================
+# 溜来（stock-agent）· Git 忽略规则
+#
+# 技术栈：微信小程序（原生 + TDesign）/ Go（gin + gorm）/ Python（agent、ingest）/ Docker Compose
+# 原则：只忽略「生成物」与「本机私有配置」；源码、SQL 迁移、依赖清单一律入库
+# ==========================================================
 
-# npm 构建产物：由开发者工具「构建 npm」生成，不入库
-stock-agent-miniapp/miniprogram_npm/
-
-# 开发者工具个人配置（本地编译选项等，每人不同，不应共享）
-stock-agent-miniapp/project.private.config.json
-
-# ===== Go 后端 =====
-# 编译产物
-server/stock-agent-server
-server/stock-agent-server.exe
-server/tmp/
-
-# 冒烟测试产物（一次性文档，混进向量库会污染 RAG 检索）
-server/tmp_smoke/
-
-# 本地环境变量（目前配置都有默认值，若后续新增再放开）
+# ===== 一、环境变量 / 密钥 =====
+# 本地环境变量：含真实密钥，且每台机器不同，不入库。
+# server 启动时要求存在 server/.env，缺失直接 die（见 server/internal/config/config.go）
+.env
+.env.*
+!.env.example
 server/.env
 server/.env.local
 
-# ===== 日志 / 临时文件 =====
-*.log
+# ===== 二、微信小程序 =====
+# npm 依赖
+node_modules/
+stock-agent-miniapp/node_modules/
+# 「构建 npm」产物：开发者工具生成，每次构建都会重写
+stock-agent-miniapp/miniprogram_npm/
+# 开发者工具个人配置（编译选项、断点等，每人不同）
+project.private.config.json
+stock-agent-miniapp/project.private.config.json
+# 误生成在仓库根的 project.config.json：真正的那份在 stock-agent-miniapp/ 下且已入库
+/project.config.json
 
+# ===== 三、Go 后端（server/）=====
+# 编译产物
+server/stock-agent-server
+server/stock-agent-server.exe
+server/*.exe
+# 临时目录与冒烟产物（混进向量库会污染 RAG 检索）
+server/tmp/
+server/tmp_smoke/
+# 测试与覆盖率产物
+*.test
+server/coverage.out
+server/coverage.txt
+server/coverage.html
+
+# ===== 四、Python（agent/、ingest/）=====
+# 字节码：ingest/__pycache__ 下有一批 .pyc 是早期误入库的，已用 git rm --cached 摘掉
+__pycache__/
+*.py[cod]
+*.pyo
+# 虚拟环境
+.venv/
+venv/
+env/
+# 工具缓存
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+# 打包产物
+*.egg-info/
+dist/
+build/
+# ingest 的本地文档监听目录（放待入库的原始文档，是数据不是源码）
+ingest/data/
+
+# ===== 五、日志与临时文件 =====
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+*~
 # 设计稿截图（Ardot 导出的临时产物，不属于源码）
 .ardot-shots/
-
 # Playwright CLI 产物（快照/截图/视频，一次性调试产物）
 # 注：浏览器自动化统一走 agent-browser，这里只是防止误用 playwright-cli 时污染仓库
 .playwright-cli/
 
-# ===== 系统 / 编辑器 =====
+# ===== 六、Serena（代码索引 / 项目记忆）=====
+# memories/ 与 project.yml 建议入库：跨机器共享 onboarding 结论。
+# 下面是缓存与本机配置，Serena 自带的 .serena/.gitignore 已忽略，这里再兜一层
+.serena/cache/
+.serena/logs/
+.serena/project.local.yml
+
+# ===== 七、系统 / 编辑器 =====
 .DS_Store
 Thumbs.db
+Desktop.ini
 .idea/
 .vscode/
