@@ -58,7 +58,14 @@ func New(allowOrigins string) *gin.Engine {
 	// 公开路由：登录（内部对登录单独挂了更严的限流）
 	authapi.Register(api)
 
-	// 受保护路由：统一挂 auth，user_id 由中间件注入
+	// WebSocket 长连接：握手无法带自定义头，token 只能走 query（?token=）。
+	// 必须注册在 authorized 组「之外」——该组的 Auth() 只认 Header Bearer，
+	// WS 握手没有 Header，若挂在组内会先被 Auth() 以 401 拦下，根本到不了
+	// 下面这个允许 query token 的中间件。故这里直接挂在 api 上，只用 AuthAllowQueryToken。
+	api.GET("/ws", middleware.AuthAllowQueryToken(), ws.Serve)
+	api.GET("/ws/agent", middleware.AuthAllowQueryToken(), agent.ServeWS)
+
+	// 受保护路由：统一挂 auth（Header Bearer），user_id 由中间件注入
 	authorized := api.Group("")
 	authorized.Use(middleware.Auth())
 	{
@@ -67,13 +74,7 @@ func New(allowOrigins string) *gin.Engine {
 		stock.Register(authorized)
 		user.Register(authorized)
 
-		// WebSocket 长连接：握手无法带自定义头，token 走 query
-		// （只有这一个路由允许 ?token=，普通接口一律走 Header）
-		authorized.GET("/ws", middleware.AuthAllowQueryToken(), ws.Serve)
-
-		// Agent AI 对话：WS 主通道 + SSE 兜底（H5 / 不支持 WS 的环境）。
-		// WS 握手同样无法带自定义头，复用 ?token= 鉴权变体
-		authorized.GET("/ws/agent", middleware.AuthAllowQueryToken(), agent.ServeWS)
+		// Agent AI 对话 SSE 兜底（H5 / 不支持 WS 的环境）：走 Header 鉴权，留在组内
 		authorized.POST("/agent/stream", agent.ServeSSE)
 	}
 

@@ -12,8 +12,10 @@ EMBED_DIM = 1024
 
 # 工具超时
 TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "8.0"))
-# RAG 相关度阈值
-RAG_THRESHOLD = float(os.getenv("RAG_THRESHOLD", "0.4"))
+# RAG 相关度阈值：对余弦相似度设阈（不是 RRF 融合分）。
+# bge-m3 的 query↔chunk 相关命中实测约 0.22~0.5，故默认 0.2；
+# 语料/模型变化时需重新校准（阈值过高会让 RAG 恒 escalate 到 mcp、从不生成引用回答）
+RAG_THRESHOLD = float(os.getenv("RAG_THRESHOLD", "0.2"))
 # Go 网关地址（工具调用回现有后端获取行情）
 GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 # 调 Go 网关受保护接口用的服务间 token（Agent 作为可信内部服务）

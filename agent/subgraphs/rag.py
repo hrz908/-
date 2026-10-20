@@ -43,15 +43,21 @@ async def hybrid_retrieve(state: dict) -> dict:
         "source_path": d.metadata.get("source_path", ""),
         "chunk_id": str(d.metadata.get("id", "")),
         "score": d.metadata.get("score", 0.0),
+        "similarity": d.metadata.get("similarity", 0.0),
     } for d in docs]
     return {"retrieved": retrieved}
 
 
 def sufficiency_check(state: dict) -> dict:
-    """判断检索是否充分。不足则升级 intent=mcp 让主图重路由。"""
+    """判断检索是否充分。不足则升级 intent=mcp 让主图重路由。
+
+    用余弦相似度 similarity 而非 RRF 融合分 score 来判定：
+    score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），无法衡量相关性；
+    similarity 才与 RAG_THRESHOLD 同尺度（bge-m3 的 query↔chunk 相关命中约 0.2~0.5）。
+    """
     retrieved = state.get("retrieved", []) or []
-    top = max((r.get("score", 0.0) for r in retrieved), default=0.0)
-    if len(retrieved) < _MIN_CHUNKS or top < RAG_THRESHOLD:
+    top_sim = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)
+    if len(retrieved) < _MIN_CHUNKS or top_sim < RAG_THRESHOLD:
         return {"intent": "mcp"}
     return {}
 

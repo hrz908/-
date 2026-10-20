@@ -6,6 +6,7 @@ from typing import Optional
 import psycopg
 import psycopg.errors
 from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +21,11 @@ class Store:
 
     def __init__(self, database_url: str):
         self.database_url = database_url
-        self._pool: Optional[psycopg.AsyncConnectionPool] = None
+        self._pool: Optional[AsyncConnectionPool] = None
 
     async def connect(self):
         """初始化连接池"""
-        self._pool = psycopg.AsyncConnectionPool(
+        self._pool = AsyncConnectionPool(
             conninfo=self.database_url,
             min_size=2,
             max_size=10,
@@ -141,24 +142,26 @@ class Store:
             return
 
         async with self._pool.connection() as conn:
-            # 使用 executemany 批量插入
-            await conn.executemany(
-                """
-                INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
-                VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
-                """,
-                [
-                    (
-                        document_id,
-                        chunk["seq"],
-                        chunk["content"],
-                        chunk.get("token_count"),
-                        json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
-                        _vec_literal(chunk["embedding"]),
-                    )
-                    for chunk in chunks
-                ],
-            )
+            rows = [
+                (
+                    document_id,
+                    chunk["seq"],
+                    chunk["content"],
+                    chunk.get("token_count"),
+                    json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
+                    _vec_literal(chunk["embedding"]),
+                )
+                for chunk in chunks
+            ]
+            # psycopg3 的 executemany 是游标方法（AsyncConnection 无此方法），须经 cursor 调用
+            async with conn.cursor() as cur:
+                await cur.executemany(
+                    """
+                    INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
+                    VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
+                    """,
+                    rows,
+                )
             await conn.commit()
             logger.info("已插入 %d chunks for document %s", len(chunks), document_id)
 
@@ -262,24 +265,27 @@ class Store:
                 )
 
                 # 3. 批量插入新 chunks（id 自增、tsv 生成列均不写入）
+                # psycopg3 的 executemany 是游标方法，须经 cursor 调用
                 if chunks:
-                    await conn.executemany(
-                        """
-                        INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
-                        VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
-                        """,
-                        [
-                            (
-                                doc_id,
-                                chunk["seq"],
-                                chunk["content"],
-                                chunk.get("token_count"),
-                                json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
-                                _vec_literal(chunk["embedding"]),
-                            )
-                            for chunk in chunks
-                        ],
-                    )
+                    rows = [
+                        (
+                            doc_id,
+                            chunk["seq"],
+                            chunk["content"],
+                            chunk.get("token_count"),
+                            json.dumps(chunk.get("metadata", {}), ensure_ascii=False),
+                            _vec_literal(chunk["embedding"]),
+                        )
+                        for chunk in chunks
+                    ]
+                    async with conn.cursor() as cur:
+                        await cur.executemany(
+                            """
+                            INSERT INTO chunks (document_id, seq, content, token_count, metadata, embedding)
+                            VALUES (%s, %s, %s, %s, %s::jsonb, %s::vector)
+                            """,
+                            rows,
+                        )
 
         logger.info("事务写入完成: %s -> %d chunks", source_path, len(chunks))
         return doc_id

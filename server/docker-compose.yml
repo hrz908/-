@@ -61,6 +61,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-deepseek-ai/DeepSeek-V3}
       SMALL_MODEL: ${SMALL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      # RAG 相关性阈值（对余弦相似度设阈，非 RRF 分）；bge-m3 默认 0.2，可经 .env 调
+      RAG_THRESHOLD: ${RAG_THRESHOLD:-0.2}
       # Tushare Pro 数据增强 token（财务/资金流/龙虎榜/北向/资讯/历史K线）；
       # 为空时这些工具不注册，agent 仅用 Go 网关行情
       TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}

@@ -2,10 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装系统依赖（pymupdf 等可能需要）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# 依赖全部有 manylinux 预编译 wheel（psycopg[binary]/numpy/pandas/pymupdf4llm/tiktoken 等），
+# 无需 build-essential 现场编译；去掉 apt 步骤既避开 deb.debian.org 国内不可达，又减小镜像。
+# 若将来加入需源码编译的依赖，再补 apt（记得先把源换成国内镜像，如 mirrors.aliyun.com）。
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

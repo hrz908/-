@@ -12,9 +12,13 @@ from config import DATABASE_URL, OPENAI_API_BASE, OPENAI_API_KEY, EMBED_MODEL
 
 # 混合检索 SQL（RRF k=60）——保留 $n 占位形式作为规范文档，
 # 执行时经 _to_psycopg 转成 psycopg 的 %s 位置参数。
+# 注意：$1（查询向量）在 vec CTE 里出现 3 次（dist / 窗口排序 / 外层排序），
+# $2 为全文检索 query，$3 为 limit；params 必须按出现顺序给足 5 个。
+# similarity = 1 - 余弦距离，与 RAG_THRESHOLD 同尺度，供相关性判定（RRF 分只用于排序融合）。
 SEARCH_SQL = """
 WITH vec AS (
-  SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rk
+  SELECT id, (embedding <=> $1::vector) AS dist,
+         ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rk
   FROM chunks ORDER BY embedding <=> $1::vector LIMIT 50
 ),
 lex AS (
@@ -26,8 +30,11 @@ fused AS (
   SELECT id, SUM(1.0/(60+rk)) AS score
   FROM (SELECT id,rk FROM vec UNION ALL SELECT id,rk FROM lex) u GROUP BY id
 )
-SELECT c.id, c.content, d.title, d.source_path, f.score
-FROM fused f JOIN chunks c USING(id) JOIN documents d ON d.id=c.document_id
+SELECT c.id, c.content, d.title, d.source_path, f.score, (1 - v.dist) AS similarity
+FROM fused f
+JOIN chunks c USING(id)
+JOIN documents d ON d.id=c.document_id
+LEFT JOIN vec v ON v.id = c.id
 ORDER BY f.score DESC LIMIT $3;
 """
 
@@ -67,17 +74,24 @@ class HybridRetriever(BaseRetriever):
 
     async def _run_search(self, query: str) -> List[Document]:
         emb = await self._get_embedder().aembed_query(query)
-        params = (_vec_literal(emb), _vec_literal(emb), query, self.k)
+        vl = _vec_literal(emb)
+        # $1 出现 3 次、$2 一次、$3 一次，按出现顺序绑定 5 个参数
+        params = (vl, vl, vl, query, self.k)
         sql = _to_psycopg(SEARCH_SQL)
         async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
             async with conn.cursor() as cur:
                 await cur.execute(sql, params)
                 rows = await cur.fetchall()
         docs: List[Document] = []
-        for cid, content, title, source_path, score in rows:
+        for cid, content, title, source_path, score, similarity in rows:
             docs.append(Document(
                 page_content=content,
-                metadata={"id": cid, "title": title, "source_path": source_path, "score": float(score)},
+                metadata={
+                    "id": cid, "title": title, "source_path": source_path,
+                    "score": float(score),
+                    # 余弦相似度（1 - 余弦距离），与 RAG_THRESHOLD 同尺度，用于相关性判定
+                    "similarity": float(similarity) if similarity is not None else 0.0,
+                },
             ))
         return docs
 
