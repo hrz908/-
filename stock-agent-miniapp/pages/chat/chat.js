@@ -110,19 +110,28 @@ function quoteCard(q) {
   };
 }
 
+// 日 K 卡片最多渲染的行数。后端一次可能给几十根 K 线，全量渲染会把对话区撑爆、
+// 流式期间每帧重排造成画面抖动；卡片只做「最近走势」概览，取最后 _KLINE_MAX_ROWS 行
+const KLINE_MAX_ROWS = 10;
+
 function klineCard(rows) {
   // 后端 KlineRow 字段是 date / close / change_percent，
   // 卡片模板展示「日期 / 收盘 / 涨跌幅」，在这里做映射
+  const all = Array.isArray(rows) ? rows : [];
+  const shown = all.slice(-KLINE_MAX_ROWS);
+  const kline = shown.map((r) => {
+    const pctNum = parseFloat(r.change_percent);
+    const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
+    return { d: r.date, c: r.close, p: pct, up: !isNaN(pctNum) && pctNum >= 0 };
+  });
   return {
     role: 'assistant',
     status: 'complete',
     card: 'kline',
     content: [],
-    kline: rows.map((r) => {
-      const pctNum = parseFloat(r.change_percent);
-      const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
-      return { d: r.date, c: r.close, p: pct, up: !isNaN(pctNum) && pctNum >= 0 };
-    })
+    kline: kline,
+    // 副标题按实际渲染的行数走：行数被截断时如实标出「最近 N 个交易日」
+    klineSub: '最近 ' + kline.length + ' 个交易日 · 前复权' + (all.length > kline.length ? '（共 ' + all.length + ' 根）' : '')
   };
 }
 
@@ -670,11 +679,15 @@ Page({
   },
 
   scrollToBottom() {
-    if (this._scrollTimer) clearTimeout(this._scrollTimer);
+    // 已有一次待执行的滚动就直接返回：流式期间每帧（100ms）都会调到这里，
+    // 反复「清空锚点 → 重设锚点」会让 scroll-into-view 动画不停重启，
+    // 长列表下看起来就是画面抽搐。节流后每 80ms 最多滚一次，且仍然滚到最新内容
+    if (this._scrollTimer) return;
     // scroll-into-view 在值不变时不会重新滚动，先清空再置位
     this.setData({ scrollIntoView: '' });
     // 等新消息渲染完成（卡片较多时首次渲染会慢于本次调用）再定位
     this._scrollTimer = setTimeout(() => {
+      this._scrollTimer = 0;
       this.setData({ scrollIntoView: CHAT_BOTTOM_ID });
     }, 80);
   },

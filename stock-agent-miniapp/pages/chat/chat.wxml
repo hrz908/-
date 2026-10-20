@@ -72,7 +72,7 @@
             <view wx:elif="{{msg.card === 'kline'}}" slot="content" class="card">
               <view class="card-head">
                 <view class="card-title">日 K 走势</view>
-                <view class="card-sub">最近 10 个交易日 · 前复权</view>
+                <view class="card-sub">{{msg.klineSub}}</view>
               </view>
               <view class="kline-table">
                 <view class="kline-tr">
