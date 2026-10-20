@@ -3,11 +3,6 @@ import { apiBase } from '../config';
 // 登录后把 token / user_id 存本地，后续请求自动带上
 const TOKEN_KEY = 'token';
 const UID_KEY = 'user_id';
-// 「用户已授权登录」的标记。它和 token 不是一回事：
-// token 是接口调用凭证，ensureLogin 会在需要时静默换取；
-// 这个标记表示用户真正点过授权登录、后端已建好个人信息。
-// 页面上的「登录 / 退出登录」按键只看这个标记
-const LOGIN_KEY = 'sa_logged_in';
 
 export function getToken() {
   try {
@@ -26,32 +21,12 @@ export function setSession(token, userId) {
   }
 }
 
-// 是否已授权登录（后端已建好个人信息）
-export function isLoggedIn() {
-  try {
-    return wx.getStorageSync(LOGIN_KEY) === true;
-  } catch (e) {
-    return false;
-  }
-}
-
-// 登录成功 / 退出登录时翻转标记
-export function setLoggedIn(on) {
-  try {
-    wx.setStorageSync(LOGIN_KEY, !!on);
-  } catch (e) {
-    // 存不下就本次会话生效
-  }
-}
-
 // 清掉本地凭证。重登录也失败时必须调用：
 // 否则失效的 token 会一直留在本地，之后每个请求都带着它去撞 401
 export function clearSession() {
   try {
     wx.removeStorageSync(TOKEN_KEY);
     wx.removeStorageSync(UID_KEY);
-    // 登录态一并清掉，页面上按键要变回「登录」
-    wx.removeStorageSync(LOGIN_KEY);
   } catch (e) {
     // 同上，取不到存储就算了
   }

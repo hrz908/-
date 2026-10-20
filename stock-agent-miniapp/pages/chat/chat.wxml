@@ -9,7 +9,7 @@
        navbar 的 fixed 默认是 true、而 placeholder 默认 false，
        意味着内容区 position: fixed 且不占位，对话区会顶到最上面被它遮住，
        因此这里显式打开 placeholder 让它在文档流里预留出自身高度 -->
-  <t-navbar title="股票助手" placeholder="{{true}}">
+  <t-navbar title="股票小助手" placeholder="{{true}}">
     <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
       <t-icon name="view-list" size="52rpx" />
     </view>
@@ -148,7 +148,6 @@
   >
     <t-chat-sender
       value="{{input}}"
-      placeholder="问点什么，如：白酒还能拿吗？"
       loading="{{sending}}"
       render-presets="{{renderPresets}}"
       allow-speech="{{true}}"
@@ -193,10 +192,10 @@
     <view class="drawer-body" style="padding-top: {{drawerTop}}px;">
       <!-- 品牌头部 -->
       <view class="drawer-head">
-        <t-image src="/assets/logo.png" class="drawer-logo" mode="aspectFill" />
+        <t-image src="/assets/logo-bull.jpg" class="drawer-logo" mode="aspectFill" />
         <view class="drawer-title-col">
-          <view class="drawer-title">股票助手</view>
-          <view class="drawer-sub">AI 股票助手</view>
+          <view class="drawer-title">股票小助手</view>
+          <view class="drawer-sub">AI 股票小助手</view>
         </view>
       </view>
 
@@ -223,15 +222,15 @@
         </t-cell>
       </t-cell-group>
 
-      <!-- 今日大盘 -->
-      <t-cell-group theme="card" bordered="{{true}}" title="今日大盘 · 15:00 收盘">
+      <!-- 今日大盘：指数值 + 涨跌幅分列，涨红跌绿（.up/.down 着色） -->
+      <t-cell-group theme="card" bordered="{{true}}" title="今日大盘">
         <t-cell wx:for="{{markets}}" wx:for-item="k" wx:key="name" title="{{k.name}}">
-          <view slot="note" class="market-note {{k.up ? 'up' : 'down'}}">{{k.value}}</view>
+          <view slot="note" class="market-note {{k.up ? 'up' : 'down'}}">
+            <text class="market-val">{{k.value}}</text>
+            <text class="market-pct">{{k.pct}}</text>
+          </view>
         </t-cell>
       </t-cell-group>
     </view>
   </t-popup>
-
-  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
-  <t-toast id="t-toast" />
 </view>

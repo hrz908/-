@@ -386,15 +386,15 @@
   gap: var(--sp-4);
   /* 上下留白加大，让品牌头部整体更突出 */
   padding: var(--sp-3) var(--pad-page);
-  /* 整块（连同下方菜单）相对顶部再下移一点 */
-  margin-top: var(--sp-2);
+  /* 品牌头部整体上移一点（负 margin 抵消 drawerTop 里多让出的 44px 空间） */
+  margin-top: -12rpx;
 }
 
 /* TDesign image（Logo） */
 .drawer-logo {
   flex: none;
-  width: 104rpx;
-  height: 104rpx;
+  width: 128rpx;
+  height: 128rpx;
   border-radius: 50%;
   overflow: hidden;
 }
@@ -406,13 +406,13 @@
 }
 
 .drawer-title {
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--c-ink);
 }
 
 .drawer-sub {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--c-gray);
 }
 
@@ -421,10 +421,21 @@
   margin-right: 0;
 }
 
-/* cell 的 note 插槽：大盘数值 */
+/* cell 的 note 插槽：大盘数值。指数值与涨跌幅拆成两段，
+   flex + gap 在两者间留距离；note 整体右对齐，gap 会把指数往左推一点 */
 .market-note {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 16rpx;
   font-size: 13px;
   font-weight: 500;
+}
+
+/* 涨跌幅固定最小宽度并右对齐，让四行的百分比纵向对齐成列，指数值随之整体左移 */
+.market-pct {
+  min-width: 100rpx;
+  text-align: right;
 }
 
 .market-note.up {
@@ -433,13 +444,4 @@
 
 .market-note.down {
   color: var(--c-green);
-}
-
-.drawer-version {
-  /* 版本号固定在面板底部 */
-  margin-top: auto;
-  padding-top: var(--sp-2);
-  font-size: 11px;
-  color: var(--c-gray-light);
-  text-align: center;
 }
