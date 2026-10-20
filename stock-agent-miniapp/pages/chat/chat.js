@@ -3,6 +3,7 @@
 
 import agentSocket from '../../services/agent';
 import { quote } from '../../services/stock';
+import { transcribe } from '../../services/asr';
 
 // 侧边抽屉导航项（TDesign cell-group / cell）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去
@@ -46,19 +47,32 @@ const SWIPE_MIN = 40;
 // 对话列表底部锚点：scroll-into-view 滚动到它即可到达列表末尾
 const CHAT_BOTTOM_ID = 'chat-bottom';
 
-// chat-sender 卡片高度（rpx），取自 chat-sender.wxss：
-//   22rpx×2 内边距 + 2rpx×2 边框 + textarea 区（min-height 134rpx + 16rpx 下内边距）
-//   + 发送栏 64rpx
-const SENDER_CARD_RPX = 262;
-// 卡片外边距：组件自带 margin 是 24rpx 24rpx 80rpx，
-// margin-top 已在 chat.wxml 用 custom-style 归零（那段 24rpx = 12px 会在
-// 最后一条消息和输入栏之间垫出一条空隙），margin-bottom 已覆盖成 12px
+// 输入栏胶囊高度（rpx）：取「两行」时的高度，见 chat.wxss 的 .sender-bar
+//   .sender-bar 内边距 8rpx×2 + 边框 2rpx×2 = 20rpx
+//   .bar-field 内边距 14rpx×2 = 28rpx
+//   .bar-input 两行 88rpx（line-height 44rpx × 2，超出内部滚动）
+//   合计 136rpx；单行时会被 min-height 96rpx 兜住
+// 按最大高度预留，首屏才不会把最后一条消息盖住（onReady 实测后会按真实高度修正）
+const SENDER_BAR_RPX = 136;
+// 胶囊上方留白（rpx）：取自 .sender-wrap 的 padding-top（--sp-2）
+const SENDER_PAD_TOP_RPX = 16;
+// 胶囊下方留白（rpx）：取自 .sender-bar 的 margin-bottom（--sp-2），
+// 让胶囊整体离屏幕底边上移一档。与 chatHeight 的估算一起算，
+// 否则首帧会少让出这 8px（onReady 实测后会修正，但首帧会抖一下）
+const SENDER_BAR_MARGIN_BOTTOM_RPX = 16;
+// 卡片外边距：自绘胶囊后没有组件外边距了，只保留底部与安全区之间的这段距离
 const SENDER_MARGIN_TOP_RPX = 0;
 const SENDER_MARGIN_BOTTOM_PX = 12;
 // 对话区底边与输入栏卡片之间的间距（rpx）。
 // 原值 29 里含组件 margin-top 的 24rpx；margin-top 归零后改为 5，
 // 卡片是底部锚定的，这里不同步减的话那段空隙会原样留着
 const SENDER_GAP_RPX = 5;
+// 键盘弹起时，输入栏在键盘顶边之上再抬的间距（rpx）。
+// 只按键盘高度上抬的话，胶囊底边正好压在键盘顶边上：机型不同（键盘高度、
+// 安全区、是否有候选栏）看起来时紧时松。这里统一加一段固定间距，
+// 与键盘多高无关；用 rpx 是为了跟其他间距一样随屏幕宽度等比缩放，
+// 各尺寸下观感一致（换算在 onLoad 里做，chatHeight 用的是 px）
+const KEYBOARD_GAP_RPX = 16;
 
 // 涨跌幅是 '+1.12%' / '-0.65%' 这类字符串，按符号判涨跌方向供卡片着色。
 // 只依赖首字符符号，后续接真实行情数据时无需额外字段
@@ -171,13 +185,15 @@ Page({
     scrollIntoView: '',
     menus: MENUS,
     markets: MARKETS_PLACEHOLDER,
-    // chat-sender 右侧按钮：图标型发送按钮
-    renderPresets: [{ name: 'send', type: 'icon' }],
 
+    // 输入模式：false = 键盘输入，true = 语音输入（模式键在两者之间切换）
+    voiceMode: false,
+    // textarea 的受控 focus：切回键盘态时靠它主动唤起键盘
+    inputFocus: false,
     // 语音输入：recording = 手指按住中，recordCanceling = 已上滑到取消区
     recording: false,
     recordCanceling: false,
-    recordTip: '按住 说话',
+    recordTip: '按住说话',
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
@@ -213,8 +229,10 @@ Page({
     // rpx → px：chatHeight 是按 px 算的，设计稿的 rpx 要先换算
     const rpx = windowWidth / 750;
     // 输入栏让出的空间（首帧估算值，onReady 里会按实测值修正）：
-    // 卡片 + 卡片下边距 + 与对话区的间距，安全区内边距在下面单独扣
-    const senderH = SENDER_CARD_RPX * rpx + SENDER_MARGIN_BOTTOM_PX + SENDER_GAP_RPX * rpx;
+    // 胶囊 + 上下留白 + 与对话区的间距 + 底部余量，安全区内边距在下面单独扣
+    const senderH =
+      (SENDER_BAR_RPX + SENDER_PAD_TOP_RPX + SENDER_BAR_MARGIN_BOTTOM_RPX + SENDER_GAP_RPX) * rpx +
+      SENDER_MARGIN_BOTTOM_PX;
 
     this._baseH = windowHeight;
     this._curH = windowHeight;
@@ -222,6 +240,8 @@ Page({
     this._senderH = senderH;
     this._senderMarginTop = SENDER_MARGIN_TOP_RPX * rpx;
     this._senderGap = SENDER_GAP_RPX * rpx;
+    // 键盘弹起时额外上抬的间距（px）：键盘高度是 px，这里一次性换算好
+    this._keyboardGap = KEYBOARD_GAP_RPX * rpx;
     this._measureTimer = 0;
     this._kbHeight = 0;
     // 流式输出追踪：当前 streaming 消息在 messages 里的下标（-1 表示无）、
@@ -479,13 +499,51 @@ Page({
     }, 320);
   },
 
-  // chat-sender 的输入事件
+  // 输入事件（textarea）
   onInput(e) {
     this.setData({ input: (e && e.detail && e.detail.value) || '' });
+    // 单行 -> 两行时胶囊会变高，对话区要让出相应空间，否则最后一条消息会被压住。
+    // 这里走节流测量：连续打字只在停顿时量一次
+    this.scheduleMeasureSender();
+  },
+
+  // focus 由受控字段回写：切回键盘态时要靠它主动唤起键盘，
+  // 用户自己点输入框时也会走到这里，保持视图与状态一致
+  onInputFocus() {
+    if (!this.data.inputFocus) this.setData({ inputFocus: true });
+  },
+
+  onInputBlur() {
+    if (this.data.inputFocus) this.setData({ inputFocus: false });
+  },
+
+  // 键盘 / 语音互切。语音态下整块不渲染 textarea，键盘随之收起；
+  // 再点一次切回键盘态，并主动聚焦把键盘唤起来
+  onToggleInputMode() {
+    // 正在录音时不允许切：切走会让手指还按着的那次录音没有归宿
+    if (this._recording) return;
+
+    if (this.data.voiceMode) {
+      this.setData({ voiceMode: false, inputFocus: true });
+      return;
+    }
+
+    this.setData({ voiceMode: true, inputFocus: false });
+    // 组件移除后键盘并不会立刻收，这里显式收一次
+    if (wx.hideKeyboard) wx.hideKeyboard();
+    // 键盘高度事件不一定补发 0，手动归零，防止输入栏悬在半空
+    this._kbHeight = 0;
+    this.applyKeyboard();
   },
 
   onSend() {
-    const text = (this.data.input || '').trim();
+    this.sendText(this.data.input);
+  },
+
+  // 发送一条文本：打字与语音识别结果走同一条链路，
+  // 避免「识别出来的话」和「打出来的话」在界面上表现不一致
+  sendText(raw) {
+    const text = (raw || '').trim();
     if (!text || this.data.sending) return;
 
     // 上一轮流式状态先复位（正常情况下 done 已经收过尾，这里是兜底）
@@ -511,19 +569,21 @@ Page({
     // 键盘弹起时窗口可能已被系统收缩（Android 会 resize，iOS 不 resize），
     // 减掉已收缩的部分，否则键盘高度会被重复计算
     const kb = Math.max(0, (this._kbHeight || 0) - alreadyShifted);
+    // 输入栏的上抬量 = 键盘高度 + 固定间距：只抬键盘高度的话胶囊会贴着键盘顶边
+    const lift = kb > 0 ? kb + (this._keyboardGap || 0) : 0;
     // 键盘弹起时安全区落在键盘之下，输入栏不再为它留白
     const senderPad = kb > 0 ? 0 : this.data.padBottom;
-    const availH = this._curH - kb;
+    const availH = this._curH - lift;
     // 兜底值取小值：兜得太高会让对话区反向溢出到输入栏上，把卡片盖住
     const chatHeight = Math.max(80, availH - this._navH - this._senderH - senderPad);
     if (
       chatHeight === this.data.chatHeight &&
-      kb === this.data.keyboardOffset &&
+      lift === this.data.keyboardOffset &&
       senderPad === this.data.senderPadBottom
     ) {
       return;
     }
-    this.setData({ chatHeight, keyboardOffset: kb, senderPadBottom: senderPad });
+    this.setData({ chatHeight, keyboardOffset: lift, senderPadBottom: senderPad });
   },
 
   onKeyboardHeightChange(e) {
@@ -551,7 +611,7 @@ Page({
       const canceled = this._recordCanceled;
 
       this._recording = false;
-      this.setData({ recording: false, recordCanceling: false, recordTip: '按住 说话' });
+      this.setData({ recording: false, recordCanceling: false, recordTip: '按住说话' });
 
       if (canceled || !path) return;
       if (ms < REC_MIN_MS) {
@@ -563,7 +623,7 @@ Page({
 
     this._recorder.onError(() => {
       this._recording = false;
-      this.setData({ recording: false, recordCanceling: false, recordTip: '按住 说话' });
+      this.setData({ recording: false, recordCanceling: false, recordTip: '按住说话' });
       wx.showToast({ icon: 'none', title: '录音失败，请重试' });
     });
 
@@ -630,16 +690,31 @@ Page({
     this._recorder.stop();
   },
 
+  // 松手后的语音流程：先把语音气泡放出去（用户说了什么要看得见、能回放），
+  // 再把录音送去识别，识别成文字后按普通文本发送
   sendVoice(path, seconds) {
-    this.setData({ messages: this.data.messages.concat([voiceMsg(path, seconds)]) });
+    this.setData({
+      messages: this.data.messages.concat([voiceMsg(path, seconds)]),
+      sending: true,
+      statusText: '语音识别中...'
+    });
     this.scrollToBottom();
-    // 语音识别服务还没接：识别成文字后才能走 agentSocket.sendMessage，
-    // 先给个明确提示，不假装在回答
-    this.setData({ sending: true, statusText: '语音识别中...' });
-    setTimeout(() => {
-      this.setData({ sending: false, statusText: '' });
-      wx.showToast({ icon: 'none', title: '语音识别功能开发中', duration: 1500 });
-    }, 800);
+
+    transcribe(path)
+      .then((text) => {
+        // 先摘掉「识别中」，再走发送：sendText 内部会拦住 sending 为真的情况
+        this.setData({ sending: false, statusText: '' });
+        this.sendText(text);
+      })
+      .catch((err) => {
+        this.setData({ sending: false, statusText: '' });
+        // 识别失败不静默：语音气泡已经留在列表里，用户至少能重听自己说了什么
+        wx.showToast({
+          icon: 'none',
+          title: (err && err.message) || '没听清，请再说一次',
+          duration: 1500
+        });
+      });
   },
 
   // 点语音气泡：点正在播的那条就停，点别的就切过去播
@@ -754,15 +829,22 @@ Page({
   },
 
   // ===== 手势开关抽屉：右滑打开，左滑关闭 =====
+  // 输入栏内的触摸在这里终结（wxml 用 catch 绑到这里）：
+  // 不做任何事，存在的目的就是不冒泡到根节点，避免与「按住说话」抢手势
+  onSenderTouch() {},
+
   onSwipeStart(e) {
     this._startX = e.touches[0].clientX;
     this._startY = e.touches[0].clientY;
     this._lastX = this._startX;
     this._lastY = this._startY;
-    this._swipeLocked = false;
+    // 录音期间整段手势直接锁死：手指按住说话时若滑出按钮范围（比如想上滑取消时
+    // 手抖带出横向位移），事件仍可能落到根节点，这里兜住不让抽屉被拉出来
+    this._swipeLocked = !!this._recording;
   },
 
   onSwipeMove(e) {
+    if (this._recording) return;
     this._lastX = e.touches[0].clientX;
     this._lastY = e.touches[0].clientY;
     if (this._swipeLocked) return;

@@ -332,26 +332,6 @@
   opacity: 0.85;
 }
 
-/* ===== 输入栏：语音模式下的「按住说话」 =====
-   键盘 / 语音的切换按钮由 chat-sender 自带（左下角），这里只是那块按住区 */
-.speech-btn {
-  height: 80rpx;
-  border-radius: 40rpx;
-  background: var(--c-fill);
-  color: var(--c-ink);
-  font-size: 28rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* 按下给一点缩放反馈：语音没有光标，全靠这个告诉用户已经按住了 */
-  transition: transform 0.15s ease;
-}
-
-.speech-btn--active {
-  background: var(--c-hover);
-  transform: scale(0.98);
-}
-
 /* ===== 输入栏 ===== */
 /* 绝对定位于页面容器内（等价于 fixed，但会随页面一起参与转场动画） */
 .sender-wrap {
@@ -362,6 +342,118 @@
   bottom: 0;
   background: var(--c-bg);
   transition: bottom 0.25s ease;
+  /* 胶囊与屏幕两侧留白（--pad-page 与 TDesign 卡片一致）；
+     下内边距由内联样式给：键盘弹起时为 0，否则让出安全区 */
+  padding: var(--sp-2) var(--pad-page) 0;
+  box-sizing: border-box;
+}
+
+/* 胶囊本体：一条圆角条，左端模式键、右端发送键，中间是输入区或「按住说话」 */
+.sender-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 96rpx;
+  /* 胶囊整体上移一档（--sp-2 = 16rpx = 8px）。
+     注意只能加在胶囊「下方」：容器是底部锚定的，加大上方留白（padding-top）
+     只会把对话区挤短，胶囊本身不会动。这段会被 measureSender 量进
+     .sender-wrap 的高度，对话区随之收窄同样的量，
+     所以「最后一条消息 ↔ 胶囊」的间距不变，只是胶囊离屏幕底边更远了 */
+  margin-bottom: var(--sp-2);
+  padding: 8rpx 10rpx;
+  box-sizing: border-box;
+  background: var(--c-card);
+  border: 2rpx solid var(--c-border);
+  border-radius: 999rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.04);
+}
+
+/* 模式键（语音 / 键盘）：与发送键同规格，比组件自带的 64rpx 放大到 76rpx，更好点按 */
+.bar-btn {
+  flex: none;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  background: var(--c-fill);
+  color: var(--c-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.bar-btn--hover {
+  background: var(--c-hover);
+}
+
+/* 输入区：紧贴模式键右侧，多行时随内容长高（textarea auto-height） */
+.bar-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  /* 上下留白把单行文字垂直居中；多行时 auto-height 会把胶囊一起撑高 */
+  padding: 14rpx 0;
+}
+
+.bar-input {
+  width: 100%;
+  /* 最多两行：line-height 44rpx × 2 = 88rpx，超出后 textarea 内部滚动。
+     不让它无限长高，否则几行就把对话区顶没了 */
+  max-height: 88rpx;
+  font-size: 30rpx;
+  line-height: 44rpx;
+  color: var(--c-ink);
+}
+
+/* 语音态：胶囊中央的「按住说话」 */
+.bar-hold {
+  flex: 1;
+  min-width: 0;
+  height: 76rpx;
+  border-radius: 999rpx;
+  background: var(--c-fill);
+  color: var(--c-ink);
+  font-size: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 语音没有光标，靠底色 + 轻微缩放告诉用户已经按住了 */
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.bar-hold--active {
+  background: var(--c-tint);
+  transform: scale(0.99);
+}
+
+/* 发送键：无内容时是灰底，有内容才点亮成主蓝 */
+.bar-send {
+  flex: none;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  background: var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.bar-send--active {
+  background: var(--c-blue);
+}
+
+.bar-send--hover {
+  opacity: 0.85;
+}
+
+/* 加载态：方块代替发送图标（沿用 chat-sender 的「停止」观感） */
+.bar-send-stop {
+  width: 26rpx;
+  height: 26rpx;
+  border-radius: 6rpx;
+  background: #ffffff;
 }
 
 /* ===== 侧边抽屉内容 ===== */

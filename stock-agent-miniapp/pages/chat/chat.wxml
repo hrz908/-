@@ -132,43 +132,78 @@
     </scroll-view>
   </view>
 
-  <!-- 输入栏：TDesign chat-sender，自带发送按钮、加载态
-       custom-style 覆盖组件自带的 margin（24rpx 24rpx 80rpx 24rpx）：
-       - margin-top 归零：组件默认的 24rpx（=12px）会在最后一条消息和输入栏之间
-         垫出一条空隙（开发者工具盒模型里标的那段 12px 就是它）；
-         对话区要留多少间距统一由 chat.js 的 SENDER_GAP_RPX 控制，不靠组件外边距
-       - margin-bottom 12px：让输入栏下沉，并与组件键盘弹起时使用的
-         originalMarginBottom（12px）保持一致
-       键盘上移不用组件的 auto-rise-with-keyboard：它按自身拿到的键盘高度上顶卡片，
-       与页面这边的窗口收缩会重复计算，改由页面统一用 keyboardOffset 控制容器 bottom，
-       对话区收缩与卡片上移共用同一个值 -->
+  <!-- 输入栏：页面自绘的一条胶囊（不再用 t-chat-sender）
+       原组件是「大卡片 + 左下角切换键 + 右下角发送键」的两段式布局，
+       改不出「胶囊整体包住语音键与发送键」的结构，且卡片左上角自带工具栏入口，
+       所以这里自绘一层，换来完全可控：
+       - 一条胶囊：左端是模式键（语音 / 键盘），右端是发送键
+       - 键盘态：文字从模式键右侧开始；语音态：中间换成「按住说话」，模式键同时换成键盘图标
+       - 语音态直接不渲染 textarea，键盘随之收起，再点模式键切回键盘
+       触摸事件用 catch 而不是 bind：页面的右滑开抽屉手势挂在根节点（bindtouch*），
+       若这里继续冒泡，按住说话时手指右滑会连带把抽屉拉出来（语音与抽屉抢同一个手势）。
+       catch 让触摸到输入栏为止，输入栏内不产生开关抽屉的手势 -->
   <view
     class="sender-wrap"
     style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
+    catchtouchstart="onSenderTouch"
+    catchtouchmove="onSenderTouch"
+    catchtouchend="onSenderTouch"
+    catchtouchcancel="onSenderTouch"
   >
-    <t-chat-sender
-      value="{{input}}"
-      loading="{{sending}}"
-      render-presets="{{renderPresets}}"
-      allow-speech="{{true}}"
-      auto-rise-with-keyboard="{{false}}"
-      custom-style="margin-top: 0; margin-bottom: 12px;"
-      bind:change="onInput"
-      bind:send="onSend"
-      bind:keyboardheightchange="onKeyboardHeightChange"
-    >
-      <!-- 语音模式的内容区：allow-speech 打开后组件会在左下角自带
-           键盘 / 语音切换按钮，并在语音模式下用这个插槽替掉 textarea，
-           所以这里只需要做「按住说话」这一块 -->
+    <view class="sender-bar">
+      <!-- 模式键：键盘态显示语音图标，语音态显示键盘图标 -->
       <view
-        slot="speech"
-        class="speech-btn {{recording ? 'speech-btn--active' : ''}}"
+        class="bar-btn"
+        hover-class="bar-btn--hover"
+        aria-label="{{voiceMode ? '切换到键盘输入' : '切换到语音输入'}}"
+        bindtap="onToggleInputMode"
+      >
+        <t-icon name="{{voiceMode ? 'keyboard-1' : 'voice-wave'}}" size="46rpx" />
+      </view>
+
+      <!-- 键盘态：输入区紧贴模式键右侧 -->
+      <view wx:if="{{!voiceMode}}" class="bar-field">
+        <textarea
+          class="bar-input"
+          value="{{input}}"
+          focus="{{inputFocus}}"
+          placeholder="问点什么…"
+          placeholder-style="color: #B0B4BC; font-size: 30rpx;"
+          auto-height="{{true}}"
+          adjust-position="{{false}}"
+          cursor-spacing="24"
+          confirm-type="send"
+          show-confirm-bar="{{false}}"
+          maxlength="-1"
+          bindinput="onInput"
+          bindconfirm="onSend"
+          bindfocus="onInputFocus"
+          bindblur="onInputBlur"
+          bindkeyboardheightchange="onKeyboardHeightChange"
+        ></textarea>
+      </view>
+
+      <!-- 语音态：胶囊中央的「按住说话」，上滑可取消 -->
+      <view
+        wx:else
+        class="bar-hold {{recording ? 'bar-hold--active' : ''}}"
         bindtouchstart="onRecordStart"
         bindtouchmove="onRecordMove"
         bindtouchend="onRecordEnd"
         bindtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
-    </t-chat-sender>
+
+      <!-- 发送键：与模式键同规格，一起被胶囊包住 -->
+      <view
+        class="bar-send {{input ? 'bar-send--active' : ''}}"
+        hover-class="bar-send--hover"
+        aria-label="发送"
+        bindtap="onSend"
+      >
+        <view wx:if="{{sending}}" class="bar-send-stop"></view>
+        <t-icon wx:else name="send-filled" size="44rpx" color="#FFFFFF" />
+      </view>
+    </view>
   </view>
 
   <!-- 侧边抽屉：TDesign popup 左侧滑出（drawer 的默认插槽在 70vh 菜单区之下的
