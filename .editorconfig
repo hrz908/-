@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Go 走 gofmt：必须用 tab，用空格会被 gofmt 全部改掉
+[*.go]
+indent_style = tab
+
+# Python：4 空格（PEP 8），与 ruff 默认一致
+[*.py]
+indent_size = 4
+
+# Markdown 里行尾双空格是换行语义，不能裁
+[*.md]
+trim_trailing_whitespace = false
+
+# 小程序：WXML/WXSS/JSON 都是 2 空格
+[*.{wxml,wxss,json}]
+indent_size = 2

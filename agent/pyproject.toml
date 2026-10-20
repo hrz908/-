@@ -1,0 +1,28 @@
+# 只放工具配置，不放 [project] / [build-system]。
+# 原因：agent 的镜像是 Dockerfile 里 `pip install -r requirements.txt` + `COPY . .`，
+# 一旦声明 [project]，pip 会把它当成可安装包处理，反而干扰构建。
+
+[tool.ruff]
+line-length = 100
+# 与 Dockerfile 的 python:3.11-slim 对齐
+target-version = "py311"
+extend-exclude = ["__pycache__", "*.pyc"]
+
+[tool.ruff.lint]
+# ASYNC 抓 async/await 误用（LangGraph 节点里最常见）
+# B   = bugbear（可变默认参数、重复 try 等）
+# I   = import 排序，替代 isort
+# UP  = 语法现代化提示
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# Pylance / pyright
+[tool.pyright]
+pythonVersion = "3.11"
+# 项目没有类型标注，先从 basic 起步；reportMissingImports 是重点：
+# LangGraph / LangChain 的字段名拼错、不存在的模块导入主要靠它抓
+typeCheckingMode = "basic"
+reportMissingImports = true
+exclude = ["__pycache__"]

@@ -14,6 +14,9 @@ server/stock-agent-server
 server/stock-agent-server.exe
 server/tmp/
 
+# 冒烟测试产物（一次性文档，混进向量库会污染 RAG 检索）
+server/tmp_smoke/
+
 # 本地环境变量（目前配置都有默认值，若后续新增再放开）
 server/.env
 server/.env.local

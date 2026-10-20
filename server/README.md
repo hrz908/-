@@ -1,4 +1,4 @@
-# 股票小助手 · 后端服务（server）
+# 溜来 · 后端服务（server）
 
 技术栈：**Gin + GORM + PostgreSQL + go-redis/v9 + gorilla/websocket**
 

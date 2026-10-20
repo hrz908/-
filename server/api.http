@@ -1,0 +1,100 @@
+# 溜来后端接口集（REST Client 插件：humao.rest-client）
+# 用法：每条请求上方点 "Send Request"，或光标放请求里按 Ctrl+Alt+R
+# token 自动串联：先跑一次「登录」，后面的 {{token}} 自动填好
+#
+# 内容对应 server/README.md 第六节（原来那堆 curl），额外补了行情与 K 线
+# 前置：bash scripts/dev.sh up && bash scripts/dev.sh dev
+
+@host = http://localhost:8080
+@token = {{login.response.body.data.token}}
+
+### 健康检查（不需要 token）
+GET {{host}}/healthz
+
+### 登录拿 token
+# @name login
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{"code": "demo"}
+
+### 1）添加自选（带成本价与数量）
+POST {{host}}/api/v1/watchlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SH600519","cost_price":"1680.50","quantity":100}
+
+### 2）重复添加 → Upsert 更新成本价，不报错
+POST {{host}}/api/v1/watchlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SH 600519","cost_price":"1700.00","quantity":200}
+
+### 3）无效代码 → 400
+POST {{host}}/api/v1/watchlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"99999999"}
+
+### 4）查询列表（涨幅榜）
+GET {{host}}/api/v1/watchlist?filter=up
+Authorization: Bearer {{token}}
+
+### 5）手动刷新（触发行情拉取 + 提醒检查）
+POST {{host}}/api/v1/watchlist/refresh
+Authorization: Bearer {{token}}
+
+### 7）新建提醒规则
+POST {{host}}/api/v1/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"price_up","threshold":"1700.00","check_frequency":"close"}
+
+### 7b）成交量异动（额外带 volume_base）
+POST {{host}}/api/v1/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SZ300750","stock_name":"宁德时代","condition_type":"volume","threshold":"1.5","volume_base":20,"check_frequency":"realtime"}
+
+### 8）同股票同条件重复创建 → 409
+POST {{host}}/api/v1/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"price_up","threshold":"1850.00"}
+
+### 9）非法阈值 → 400
+POST {{host}}/api/v1/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stock_code":"SH600519","stock_name":"贵州茅台","condition_type":"pct_up","threshold":"120"}
+
+### 10）越权改他人规则 → 404（把 id 换成别人的规则 id；token 用另一个账号的）
+# @name update-other
+PUT {{host}}/api/v1/alerts/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"threshold":"1000.00"}
+
+### 11）删除规则
+DELETE {{host}}/api/v1/alerts/1
+Authorization: Bearer {{token}}
+
+### 实时报价（聊天页 quote_card 的数据来源，可用来核对卡片字段）
+GET {{host}}/api/v1/stock/quote?code=SH600519
+Authorization: Bearer {{token}}
+
+### 日 K（聊天页 kline_table 的数据来源）
+GET {{host}}/api/v1/stock/kline?code=SH600519&days=10
+Authorization: Bearer {{token}}
+
+### 搜索股票代码
+GET {{host}}/api/v1/stock/search?keyword=茅台
+Authorization: Bearer {{token}}

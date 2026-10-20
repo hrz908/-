@@ -1,0 +1,46 @@
+# golangci-lint 配置（v2 schema）
+# 安装：go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# 跑：  cd server && golangci-lint run ./...
+# 若你装的是 v1（无 version 字段那套），执行 golangci-lint migrate 转成 v1 即可
+
+version: "2"
+
+run:
+  timeout: 3m
+
+linters:
+  # standard = errcheck / govet / ineffassign / staticcheck / gosimple / unused
+  default: standard
+  enable:
+    - bodyclose # HTTP 响应体没关：本项目有转发上游响应的代码
+  settings:
+    errcheck:
+      # 显式赋值到 _ 的调用不算未检查（代码里大量有意为之的忽略）
+      check-blank: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # WS 写失败 / 心跳写失败是有意忽略的：客户端已断开，停止转发即可，
+      # 每次都判错只会淹没真问题。单引号包住，反斜杠才是字面量
+      - path: internal/agent/ws_agent.go
+        linters: [errcheck]
+        text: 'writeJSON|writePing|ws\.Close|SetWriteDeadline'
+
+      # 限流是旁路逻辑：Redis 故障时放行业务请求（代码里已注明 fail-open）
+      - path: internal/middleware/middleware.go
+        linters: [errcheck]
+        text: 'pipe\.Exec|rdb\.'
+
+      # 启动阶段的 Close 失败不影响进程起来
+      - path: main.go
+        linters: [errcheck]
+        text: 'Close'
+
+formatters:
+  enable:
+    - gofmt
