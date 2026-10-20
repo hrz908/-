@@ -36,13 +36,24 @@ _TOOL_SYSTEM = (
     "1. 需要行情/K线/代码时，必须调用工具，不要凭空作答。\n"
     "2. 用户只给了名称/拼音时，先用 symbol_search 拿到代码，下一轮再用代码查行情/K线/估值。\n"
     "3. 可分多轮逐步取数（先搜代码再查数据），也可一轮内并行调用多个工具。\n"
-    "4. 拿到足够数据后停止调用工具，直接回答。"
+    "4. 拿到足够数据后停止调用工具，直接回答。\n"
+    "5. K 线默认取最近 10 根（count=10）；只有用户明确要更长区间（如近三个月、半年）\n"
+    "   时才加大 count，上限 60。不要一次拉满：数据要进对话卡片，太多会挤爆前端。\n"
+    "6. 每轮提问都要重新取数：不得因为历史消息里已有数据就跳过工具调用，\n"
+    "   行情/ K 线是实时数据，沿用上一轮的数字等于给出过期答案。\n"
+    "7. 工具全部失败时如实说明「暂无法获取」，禁止编造数字，\n"
+    "   也禁止出现与用户提问无关的标的名称。"
 )
 
 # 多跳工具调用的轮次上限：tool_execute 每完成一轮就回到 tool_call，
 # 最多允许 _MAX_TOOL_ROUNDS 轮工具执行，超过则强制进入 synthesize，防止无限循环。
 # 3 轮足够覆盖「搜代码 -> 查行情 -> 查估值/资金流」这类常见链式取数。
 _MAX_TOOL_ROUNDS = 3
+
+# 单条消息允许进入 tool_call 上下文的最大字符数（见 _current_run_messages）
+_MAX_MSG_CHARS = 2000
+# synthesize 里塞进提示词的工具结果上限（字符）
+_MAX_TOOL_CHARS = 6000
 
 # 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）
 _TOOL_LABELS = {
@@ -81,9 +92,81 @@ def _recent_history(state: dict, limit: int = 6) -> list:
     return history
 
 
+def _shrink(msg):
+    """把单条消息的正文截到 _MAX_MSG_CHARS，字段（tool_call_id 等）原样保留。
+
+    只截正文、不重建消息类型：工具调用协议依赖 tool_call_id 与消息类型的配对，
+    重建不当会产出孤儿 ToolMessage / 残缺 tool_call，直接让 LLM 接口报错。
+    """
+    content = getattr(msg, "content", "")
+    if isinstance(content, str) and len(content) > _MAX_MSG_CHARS:
+        try:
+            return msg.model_copy(update={"content": content[:_MAX_MSG_CHARS] + "\n…[已截断]"})
+        except Exception:  # noqa: BLE001 - 拷贝失败就退回原消息，宁可长也不能破坏协议
+            return msg
+    return msg
+
+
+def _current_run_messages(state: dict) -> list:
+    """取「本轮」的消息：从最后一条 HumanMessage 起直到末尾。
+
+    tool_call 必须看到本轮已取到的工具结果，才能决定「继续取数」还是「收尾作答」
+    （ReAct 多跳）。但绝不能带上之前轮次的工具结果：实测第二轮会因为「历史里
+    已经有 K 线数据」而不再发起调用，直接凭印象作答（答成「无法获取」）。
+    只取本轮顺带把上下文锁在一轮之内，不会随会话轮数累积到几十万 token。
+    """
+    msgs = list(state.get("messages", []))
+    for i in range(len(msgs) - 1, -1, -1):
+        if isinstance(msgs[i], HumanMessage):
+            return msgs[i:]
+    return msgs
+
+
+# 取数类工具：只有它们的结果才能支撑回答里的数字
+_DATA_TOOLS = ("get_quote", "get_kline", "get_valuation")
+
+
+def _pending_nudge(state: dict) -> str:
+    """已搜到代码但还没取到任何行情数据时，追加一条强制继续取数的指令。
+
+    「一轮只调了 symbol_search 就作答」是实测中最常见的失效姿势：模型靠历史消息
+    里的旧数字拼出一份看似完整的答案，实际是过期数据。这里明确点名代码并要求
+    继续调工具，比单纯在 system 里写规则有效得多。
+    """
+    results = state.get("tool_results") or []
+    codes = []
+    got_data = False
+    for item in results:
+        name = item.get("tool")
+        res = item.get("result") or {}
+        if not res.get("ok"):
+            continue
+        if name in _DATA_TOOLS:
+            got_data = True
+        if name == "symbol_search":
+            for row in (res.get("data") or [])[:3]:
+                if isinstance(row, dict) and row.get("code"):
+                    codes.append(str(row["market"] or "") + str(row["code"]))
+    if got_data or not codes:
+        return ""
+    return (
+        "已检索到代码：" + "、".join(codes) + "。"
+        "本轮还没有取到任何行情/K线数据，必须继续调用 get_kline 或 get_quote 取真实数据；"
+        "禁止直接作答，也禁止引用历史消息里的数字（那是上一轮的过期数据）。"
+    )
+
+
 async def tool_call(state: dict) -> dict:
+    # 只喂本轮消息（含本轮已取到的工具结果），逐条截断正文，防止上下文膨胀
+    run_msgs = [_shrink(m) for m in _current_run_messages(state)]
+    if not run_msgs:
+        # 兜底：拿不到本轮消息时至少把问题本身交给模型
+        run_msgs = [HumanMessage(content=state.get("query", "") or "")]
+    msgs = [SystemMessage(content=_TOOL_SYSTEM)] + run_msgs
+    nudge = _pending_nudge(state)
+    if nudge:
+        msgs.append(SystemMessage(content=nudge))
     llm = get_llm(streaming=False, temperature=0.2).bind_tools(_tools())
-    msgs = [SystemMessage(content=_TOOL_SYSTEM)] + list(state.get("messages", []))
     ai = await llm.ainvoke(msgs)
     return {"messages": [ai]}
 
@@ -167,10 +250,46 @@ def _emit_structured(tool_results: list) -> None:
             emit_table("symbol_list", data)
 
 
+# 命中这些词说明用户就是要数据；此时若一个数据都没取到，绝不能让模型自由发挥
+_DATA_KEYWORDS = ("k线", "K线", "行情", "价格", "涨跌", "走势", "收盘", "报价", "涨幅")
+
+_NO_DATA_REPLY = (
+    "抱歉，这一轮没有取到行情数据（工具没返回有效结果），我无法给出价格或涨跌幅。"
+    "请稍后再试一次；也可以带上代码再问，例如「000568 最近10天日K」。"
+)
+
+
+def _no_data_fallback(state: dict, tool_results: list) -> str:
+    """本轮没有取到任何行情数据、且用户就是要数据时，返回固定兜底文案。
+
+    实测里最常见的坏答案：模型只搜到股票代码就作答，数字全部来自上一轮历史
+    （行情是实时的，照抄即过期数据），甚至凭空编出别的标的。提示词规则拦不住，
+    这里改成确定性兜底——宁可说「没取到」，也不给过期/编造的数字。
+    """
+    has_data = any(
+        item.get("tool") in _DATA_TOOLS and (item.get("result") or {}).get("ok")
+        for item in tool_results
+    )
+    if has_data:
+        return ""
+    query = (state.get("rewritten") or state.get("query") or "").upper()
+    if not any(k.upper() in query for k in _DATA_KEYWORDS):
+        return ""
+    return _NO_DATA_REPLY
+
+
 async def synthesize(state: dict) -> dict:
     tool_results = state.get("tool_results", []) or []
+    fallback = _no_data_fallback(state, tool_results)
+    if fallback:
+        # 不走 LLM：直接把兜底文案当成本轮回答。不另外 emit token——
+        # 返回的 AIMessage 本身会被 messages 流投递成一次 token，再 emit 就重复一遍
+        return {"messages": [AIMessage(content=fallback)]}
     # 无工具结果（模型直接回答）时也给一个空上下文
     tr_text = json.dumps(tool_results, ensure_ascii=False, default=str) if tool_results else "（无工具数据）"
+    # 同样防超限：用户要长区间 K 线时这段 JSON 会很大，截尾保留取数结论足够作答
+    if len(tr_text) > _MAX_TOOL_CHARS:
+        tr_text = tr_text[:_MAX_TOOL_CHARS] + "\n…[工具结果已截断]"
     query = state.get("rewritten") or state.get("query", "") or ""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     prompt = render("mcp.xml", now=now, query=query, tool_results=tr_text)
