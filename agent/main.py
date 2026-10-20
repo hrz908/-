@@ -75,10 +75,17 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
         inp["messages"] = [HumanMessage(content=query)]
 
         async for item in graph.astream(
-            inp, config=config, stream_mode=["messages", "custom", "updates"]
+            inp, config=config,
+            stream_mode=["messages", "custom", "updates"],
+            subgraphs=True,
         ):
-            # 多模式下每个 item 是 (mode, data)
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
+            # subgraphs=True 时每个 item 是 (namespace, mode, data) 三元组：
+            # mcp/rag/chat 子图内部的 token 与 card/table/tool 事件才会冒泡到父流，
+            # 否则子图被当成单个节点、内部事件全部丢失（前端只收到 done）。
+            # 同时兼容不含命名空间的 (mode, data) 二元组与单模式裸 data。
+            if isinstance(item, tuple) and len(item) == 3:
+                _ns, mode, data = item
+            elif isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
                 mode, data = item
             else:  # 兜底：单模式
                 mode, data = "messages", item

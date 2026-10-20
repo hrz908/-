@@ -19,6 +19,7 @@ import (
 	"stock-agent-server/internal/resp"
 	"stock-agent-server/internal/stock"
 	"stock-agent-server/internal/util"
+	"stock-agent-server/internal/wecom"
 	"stock-agent-server/internal/ws"
 )
 
@@ -375,7 +376,8 @@ func DeleteAlert(c *gin.Context) {
 
 /* ===================== 刷新后的提醒检查 ===================== */
 
-// checkAlerts 检查该用户的提醒规则，命中就通过 WebSocket 推送。
+// checkAlerts 检查该用户的提醒规则，命中就推送提醒（WebSocket 实时推送 +
+// 企业微信应用消息，两条通道并存）。
 // 防重复：SetNX alert:lock:{user_id}:{stock_code}:{condition_type}，TTL 60 秒；
 //
 //	写不进去说明 60 秒内已经推过，直接跳过
@@ -435,6 +437,19 @@ func checkAlerts(userID int64, ctx context.Context) {
 			"check_frequency": r.CheckFrequency,
 			"time":            now.Format(time.RFC3339),
 		})
+
+		// 额外走企业微信应用消息（@all）：与 WebSocket 提醒并存。
+		// 异步发送，避免同步 HTTP 阻塞行情刷新循环；失败只记日志，
+		// 不影响已完成的 WebSocket 提醒
+		if wecom.Enabled() {
+			content := buildWecomText(snap, r, now)
+			stockCode := r.StockCode
+			go func() {
+				if err := wecom.SendTextToAll(content); err != nil {
+					log.Printf("wecom push failed: code=%s err=%v", stockCode, err)
+				}
+			}()
+		}
 
 		if err := deps.DB.WithContext(ctx).Model(&AlertRule{}).
 			Where("id = ? AND user_id = ?", r.ID, userID).
@@ -567,4 +582,39 @@ func normalizeVolumeBase(condType string, n int) (int, string) {
 // 否则 " price_up" 会被判成非法
 func normalizeCondition(t string) string {
 	return strings.ToLower(strings.TrimSpace(t))
+}
+
+// buildWecomText 组装企业微信文本消息内容。
+// 字段与 WebSocket 推送保持一致；text 类型不渲染 markdown，故用纯文本
+func buildWecomText(snap *quote.StockSnapshot, r AlertRule, t time.Time) string {
+	name := r.StockName
+	if name == "" {
+		name = snap.Name
+	}
+	var b strings.Builder
+	b.WriteString("📊 股票提醒\n")
+	fmt.Fprintf(&b, "%s（%s）%s\n", name, r.StockCode, conditionLabel(r.ConditionType))
+	fmt.Fprintf(&b, "当前价：%s\n", util.Money(snap.Price))
+	fmt.Fprintf(&b, "涨跌幅：%s%%\n", snap.ChangePercent.StringFixed(2))
+	fmt.Fprintf(&b, "触发阈值：%s\n", r.Threshold.StringFixed(2))
+	b.WriteString("时间：" + t.Format("2006-01-02 15:04:05"))
+	return b.String()
+}
+
+// conditionLabel 条件类型的中文描述，用于企业微信消息文案
+func conditionLabel(condType string) string {
+	switch condType {
+	case CondPriceUp:
+		return "价格突破"
+	case CondPriceDown:
+		return "价格跌破"
+	case CondPctUp:
+		return "涨幅提醒"
+	case CondPctDown:
+		return "跌幅提醒"
+	case CondVolume:
+		return "成交量异动"
+	default:
+		return "提醒触发"
+	}
 }

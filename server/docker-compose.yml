@@ -56,10 +56,23 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/stock_agent?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
-      SMALL_MODEL: ${SMALL_MODEL:-gpt-4o-mini}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-ai/DeepSeek-V3}
+      SMALL_MODEL: ${SMALL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      # Tushare Pro 数据增强 token（财务/资金流/龙虎榜/北向/资讯/历史K线）；
+      # 为空时这些工具不注册，agent 仅用 Go 网关行情
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+      # Agent 工具回调 Go 网关：容器内 127.0.0.1 指向自身，
+      # 必须用 host.docker.internal 才能访问跑在宿主机上的 Go server
+      GO_SERVER_URL: ${GO_SERVER_URL:-http://host.docker.internal:8080}
+      # 回调 /api/v1/stocks/search 等受保护接口需带合法 JWT，留空则工具必然 401
+      GO_SERVER_TOKEN: ${GO_SERVER_TOKEN:-}
+    # host.docker.internal 在 Docker Desktop 内置可解析；
+    # host-gateway 保证 Linux 宿主上也能解析到宿主机
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - '8000:8000'
     depends_on:
@@ -77,7 +90,13 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/stock_agent?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       WATCH_DIR: /data/docs
-      EMBED_MODEL: BAAI/bge-m3
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      # ingest 默认未装 FlagEmbedding，会走 OpenAI 兼容降级路径，故必须给齐下面几项；
+      # embedding 模型要与 agent 端一致（同为 1024 维 bge-m3），否则向量空间不匹配
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-BAAI/bge-m3}
+      EMBED_DIM: ${EMBED_DIM:-1024}
     volumes:
       - ingestdata:/data/docs
     depends_on:

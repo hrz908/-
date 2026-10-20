@@ -9,7 +9,7 @@ from typing import Any, Callable, Awaitable, Optional
 
 import httpx
 
-from config import GO_SERVER_URL, GO_SERVER_TOKEN, TOOL_TIMEOUT
+from config import GO_SERVER_URL, GO_SERVER_TOKEN, TOOL_TIMEOUT, TUSHARE_TOKEN, TUSHARE_API
 
 # Go 网关统一响应体 { code, message, data } 里的成功码
 _CODE_OK = 0
@@ -90,10 +90,73 @@ async def go_get(path: str, params: Optional[dict] = None) -> dict:
     return {"ok": True, "data": data}
 
 
+def to_ts_code(code: str) -> str:
+    """把股票代码转成 Tushare 的 ts_code 格式（600519 -> 600519.SH）。
+
+    兼容项目里出现的多种写法："600519"、"SH600519"、"600519.SH"。
+    已带 .SH/.SZ/.BJ 后缀的原样返回（统一大写）。
+    """
+    c = (code or "").strip().upper()
+    if "." in c:
+        return c
+    for p in ("SH", "SZ", "BJ"):
+        if c.startswith(p):
+            c = c[len(p):]
+            break
+    if c.startswith("6"):
+        return f"{c}.SH"
+    if c.startswith(("0", "3")):
+        return f"{c}.SZ"
+    if c.startswith(("4", "8")):
+        return f"{c}.BJ"
+    return f"{c}.SH"
+
+
+async def tushare_query(api_name: str, params: Optional[dict] = None, fields: str = "") -> dict:
+    """调 Tushare Pro HTTP REST 接口，返回统一 {"ok":..., "data":[dict,...]} 结构。
+
+    协议：POST，body {api_name, token, params, fields}；
+    响应 {code, msg, data:{fields:[...], items:[[...]]}}，这里把 fields/items
+    组装成 list[dict] 方便 LLM 直接读。
+    积分不足 / 无权限时 Tushare 返回 code!=0，转为 {"ok": False, "error": msg}。
+    HTTP 层异常（非 2xx / 网络错误）仍抛出，由 call_tool_safe 兜底降级重试。
+    """
+    if not TUSHARE_TOKEN:
+        return {"ok": False, "error": "tushare token not configured"}
+    payload: dict = {"api_name": api_name, "token": TUSHARE_TOKEN, "params": params or {}}
+    if fields:
+        payload["fields"] = fields
+    client = get_http_client()
+    resp = await client.post(TUSHARE_API, json=payload, headers={"Accept": "application/json"})
+    resp.raise_for_status()
+    body = resp.json()
+    if body.get("code") != _CODE_OK:
+        return {"ok": False, "error": body.get("msg") or "tushare error"}
+    data = body.get("data") or {}
+    cols = data.get("fields") or []
+    rows = [dict(zip(cols, it)) for it in (data.get("items") or [])]
+    return {"ok": True, "data": rows}
+
+
 def get_tools() -> list:
     """返回全部可供 LLM 绑定的工具（惰性导入，避免包内循环依赖）。"""
     from tools.quote import get_quote
     from tools.kline import get_kline
     from tools.search import symbol_search
 
-    return [get_quote, get_kline, symbol_search]
+    tools = [get_quote, get_kline, symbol_search]
+
+    # Tushare 增强工具：仅在配置了 token 时注册，
+    # 否则 LLM 选中后必然失败（白白消耗一次工具往返与降级）
+    if TUSHARE_TOKEN:
+        from tools.fundamental import get_valuation, get_financial_indicator
+        from tools.moneyflow import get_money_flow, get_top_list, get_hsgt_flow
+        from tools.news import get_stock_news
+        from tools.history import get_history_daily
+
+        tools += [
+            get_valuation, get_financial_indicator,
+            get_money_flow, get_top_list, get_hsgt_flow,
+            get_stock_news, get_history_daily,
+        ]
+    return tools

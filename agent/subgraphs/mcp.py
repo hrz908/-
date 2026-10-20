@@ -1,14 +1,21 @@
-r"""MCP 行情工具子图。
+r"""MCP 行情工具子图（有界 ReAct 循环）。
 
-流程: tool_call --(有 tool_calls?)--> tool_execute --> synthesize
-                 \--(无)----------------------------> synthesize
+流程:
+    tool_call --(有 tool_calls 且未超轮次)--> tool_execute --┐
+       ↑                                                    │
+       └────────────────────────────────────────────────────┘
+    tool_call --(无 tool_calls / 已达轮次上限)--> synthesize --> END
 
-- tool_call: LLM 绑定工具，决定是否/如何调用工具。
-- tool_execute: 并发执行工具（每个工具已内置 8s 超时 + 重试 + 失败降级），
-  每个工具调用前后发射 tool_start / tool_end 事件，
-  产出 ToolMessage 与结构化 tool_results。
-- synthesize: 用 prompts/mcp.xml + tool_results 流式生成最终回答，
-  并把行情/K线结构化数据以 card/table 事件独立发射。
+tool_execute 执行完工具后回到 tool_call，让模型看到工具结果再决定「继续调」还是
+「收尾作答」。这样才能完成「先 symbol_search 拿代码、再用代码 get_quote/get_valuation」
+的多跳链路。轮次由 _MAX_TOOL_ROUNDS 封顶，避免无限循环。
+
+- tool_call: LLM 绑定工具，决定是否/如何调用工具（streaming=False，不外泄推理 token）。
+- tool_execute: 并发执行本轮所有 tool_calls（每个工具已内置超时 + 重试 + 失败降级），
+  每个工具调用前后发射 tool_start / tool_end 事件，产出 ToolMessage；
+  tool_results 跨轮累加（读取已有 + 本轮），保证 synthesize 能看到全部工具数据。
+- synthesize: 用 prompts/mcp.xml + 累计 tool_results 流式生成最终回答，
+  并把行情/K线/估值等结构化数据以 card/table 事件独立发射。
 """
 import asyncio
 import json
@@ -27,10 +34,15 @@ from subgraphs import emit, emit_card, emit_table
 _TOOL_SYSTEM = (
     "你是股票行情助手，可调用工具获取实时数据。规则：\n"
     "1. 需要行情/K线/代码时，必须调用工具，不要凭空作答。\n"
-    "2. 用户只给了名称/拼音时，先用 symbol_search 拿到代码，再查行情或K线。\n"
-    "3. 一次性把需要的工具都调用齐（可并行多个 tool_call）。\n"
+    "2. 用户只给了名称/拼音时，先用 symbol_search 拿到代码，下一轮再用代码查行情/K线/估值。\n"
+    "3. 可分多轮逐步取数（先搜代码再查数据），也可一轮内并行调用多个工具。\n"
     "4. 拿到足够数据后停止调用工具，直接回答。"
 )
+
+# 多跳工具调用的轮次上限：tool_execute 每完成一轮就回到 tool_call，
+# 最多允许 _MAX_TOOL_ROUNDS 轮工具执行，超过则强制进入 synthesize，防止无限循环。
+# 3 轮足够覆盖「搜代码 -> 查行情 -> 查估值/资金流」这类常见链式取数。
+_MAX_TOOL_ROUNDS = 3
 
 # 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）
 _TOOL_LABELS = {
@@ -76,11 +88,20 @@ async def tool_call(state: dict) -> dict:
     return {"messages": [ai]}
 
 
+def _tool_rounds(state: dict) -> int:
+    """已发生的工具执行轮数 = 消息里带 tool_calls 的 AIMessage 数量。"""
+    return sum(
+        1 for m in state.get("messages", [])
+        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
+    )
+
+
 def route_after_call(state: dict) -> str:
-    """有 tool_calls 就去执行，否则直接合成。"""
+    """有 tool_calls 且未超轮次上限 -> 执行；否则（无工具 / 已达上限）-> 合成。"""
     msgs = state.get("messages", [])
     if msgs and isinstance(msgs[-1], AIMessage) and getattr(msgs[-1], "tool_calls", None):
-        return "tool_execute"
+        if _tool_rounds(state) <= _MAX_TOOL_ROUNDS:
+            return "tool_execute"
     return "synthesize"
 
 
@@ -124,7 +145,10 @@ async def tool_execute(state: dict) -> dict:
         ))
         tool_results.append({"tool": name, "result": result})
 
-    return {"messages": tool_messages, "tool_results": tool_results}
+    # 跨轮累加：tool_results 无 reducer（覆盖式写入），这里手动拼接已有结果，
+    # 否则多跳循环里后一轮会覆盖前一轮，synthesize 就看不到早先轮次的工具数据
+    prev = state.get("tool_results") or []
+    return {"messages": tool_messages, "tool_results": prev + tool_results}
 
 
 def _emit_structured(tool_results: list) -> None:
@@ -175,6 +199,7 @@ def build_mcp_subgraph():
         "tool_execute": "tool_execute",
         "synthesize": "synthesize",
     })
-    g.add_edge("tool_execute", "synthesize")
+    # 执行完工具回到 tool_call：让模型基于工具结果决定「继续调」还是「收尾作答」（多跳 ReAct）
+    g.add_edge("tool_execute", "tool_call")
     g.add_edge("synthesize", END)
     return g.compile()

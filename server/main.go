@@ -21,6 +21,7 @@ import (
 	"stock-agent-server/internal/router"
 	"stock-agent-server/internal/upload"
 	"stock-agent-server/internal/wechat"
+	"stock-agent-server/internal/wecom"
 	"stock-agent-server/internal/ws"
 )
 
@@ -61,6 +62,11 @@ func main() {
 	// 小程序凭据：两个都有值时登录走微信 code2session，否则退化为演示账号
 	wechat.AppID = cfg.WechatAppID
 	wechat.Secret = cfg.WechatSecret
+	// 企业微信自建应用凭据：三项齐全时，命中的提醒会额外推送给企业成员（@all），
+	// 与小程序内的 WebSocket 提醒并存；未配置则只走 WebSocket
+	wecom.CorpID = cfg.WeComCorpID
+	wecom.Secret = cfg.WeComSecret
+	wecom.AgentID = cfg.WeComAgentID
 	if err := upload.Init(cfg.UploadDir); err != nil {
 		log.Fatalf("init upload dir: %v", err)
 	}
