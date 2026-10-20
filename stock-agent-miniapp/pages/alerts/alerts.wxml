@@ -31,15 +31,15 @@
         >
           <view class="alert-card-head">
             <view class="alert-card-name">{{item.name}}<text class="alert-card-code">{{item.code}}</text></view>
-            <!-- 编辑：打开与新增同款弹窗，预填当前规则，底部为「取消 / 删除」 -->
-            <view class="alert-card-edit" data-id="{{item.id}}" catchtap="onEdit">
-              <t-icon name="edit" size="32rpx" color="var(--c-gray)" />
-              <text class="alert-card-edit-text">编辑</text>
+            <!-- 删除：二次确认后直接删除该提醒，不再进编辑弹窗 -->
+            <view class="alert-card-edit" data-id="{{item.id}}" catchtap="onDelete">
+              <t-icon name="delete" size="32rpx" color="var(--c-gray)" />
+              <text class="alert-card-edit-text">删除</text>
             </view>
           </view>
 
           <view class="alert-card-price">
-            <t-icon class="alert-card-trend" name="{{item.trendIcon}}" size="44rpx" color="{{item.trendColor}}" />
+            <t-icon class="alert-card-trend" name="{{item.trendIcon}}" size="56rpx" color="{{item.trendColor}}" />
             <text class="alert-card-price-text" style="color: {{item.trendColor}};">{{item.priceText}}</text>
           </view>
 
@@ -82,8 +82,8 @@
        custom-style 关掉 t-popup 的 scale 入场动画，防止原生 input 错位 -->
   <t-dialog
     visible="{{popupVisible}}"
-    title="{{editMode ? '编辑提醒' : '新增提醒'}}"
-    confirm-btn="{{editMode ? deleteBtn : '确认添加'}}"
+    title="新增提醒"
+    confirm-btn="确认添加"
     cancel-btn="取消"
     custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
     bind:confirm="onPopupConfirm"

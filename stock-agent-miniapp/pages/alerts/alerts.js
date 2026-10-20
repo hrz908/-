@@ -155,13 +155,8 @@ Page({
     alerts: [],          // 由 GET /api/v1/alerts 填充
     stats: makeStats([]),
 
-    // ===== 新增 / 编辑提醒弹窗状态 =====
-    // 同一套表单两种用法：editMode=false 新增（底部「确认添加」），
-    // editMode=true 编辑（底部「删除」，字段改动即时保存）
+    // ===== 新增提醒弹窗状态 =====
     popupVisible: false,
-    editMode: false,
-    editingId: 0,
-    deleteBtn: { content: '删除', theme: 'danger' },
     searchKeyword: '',
     searchResults: [],
     selectedStock: null,        // { name, code }
@@ -230,49 +225,42 @@ Page({
       });
   },
 
-  /* ================= 新增 / 编辑提醒弹窗 ================= */
+  /* ================= 新增提醒弹窗 ================= */
 
   // 打开「新增」弹窗（表单不再滚动，高度由 dialog 自己撑）
   onAdd() {
-    this.setData({ popupVisible: true, editMode: false, editingId: 0 });
+    this.setData({ popupVisible: true });
   },
 
-  // 打开「编辑」弹窗：把这条规则回填到表单里，其余与新增完全一致
-  onEdit(e) {
+  // 卡片右上「删除」：二次确认后直接删除该提醒（不再进编辑弹窗）。
+  // 删除不可逆，故用原生 wx.showModal 确认；确定按钮用 danger 红
+  onDelete(e) {
     const id = Number((e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || 0);
+    if (!id) return;
     const target = this.data.alerts.filter((a) => a.id === id)[0];
-    if (!target) return;
-
-    // 列表里的 code 是带交易所前缀的全码（SH600519），拆成市场 + 6 位代码，
-    // 与搜索结果的字段结构保持一致，弹窗里的选中态才能正常显示
-    const code = String(target.code || '');
-    const market = code.slice(0, 2);
-    const digits = code.slice(2);
-
-    const cfg = THRESHOLD_CONFIG[target.conditionType] || THRESHOLD_CONFIG.priceUp;
-    const condOpt = CONDITION_OPTIONS.filter((o) => o.value === target.conditionType)[0];
-    const baseOpt = VOLUME_BASE_OPTIONS.filter((o) => o.value === (target.volumeBase || 20))[0];
-    const freqOpt = FREQUENCY_OPTIONS.filter((o) => o.value === target.checkFrequency)[0];
-
-    this.setData({
-      popupVisible: true,
-      editMode: true,
-      editingId: id,
-      searchKeyword: '',
-      searchResults: [],
-      selectedStock: { name: target.name, code: digits, market: market },
-      conditionType: target.conditionType,
-      conditionText: condOpt ? condOpt.label : '',
-      conditionPickerValue: [target.conditionType],
-      threshold: String(target.threshold || ''),
-      thresholdPlaceholder: cfg.placeholder,
-      thresholdUnit: cfg.unit,
-      volumeBase: target.volumeBase || 20,
-      volumeBaseText: baseOpt ? baseOpt.label : '',
-      volumeBasePickerValue: [target.volumeBase || 20],
-      checkFrequency: target.checkFrequency,
-      frequencyText: freqOpt ? freqOpt.label : '',
-      frequencyPickerValue: [target.checkFrequency]
+    const label = target ? `${target.name}（${target.code}）` : '该提醒';
+    wx.showModal({
+      title: '删除提醒',
+      content: `确定删除 ${label} 的提醒吗？此操作不可恢复。`,
+      confirmText: '删除',
+      confirmColor: '#E34D59',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm || this._submitting) return;
+        this._submitting = true;
+        alertApi
+          .remove(id)
+          .then(() => {
+            Toast({ context: this, message: '提醒已删除' });
+            this.loadList();
+          })
+          .catch((err) => {
+            Toast({ context: this, message: (err && err.message) || '删除提醒失败' });
+          })
+          .then(() => {
+            this._submitting = false;
+          });
+      }
     });
   },
 
@@ -281,12 +269,10 @@ Page({
     this._closePopup();
   },
 
-  // 关闭弹窗并重置表单（同时退出编辑态）
+  // 关闭弹窗并重置表单
   _closePopup() {
     this.setData({
       popupVisible: false,
-      editMode: false,
-      editingId: 0,
       searchKeyword: '',
       searchResults: [],
       selectedStock: null,
@@ -355,13 +341,8 @@ Page({
     });
   },
 
-  // 清除已选股票。编辑模式下不允许换股（后端 PUT 不支持改股票代码），
-  // 点了也不清空，只提示一声，避免表单变成「没选股票」的非法状态
+  // 清除已选股票
   onClearStock() {
-    if (this.data.editMode) {
-      Toast({ context: this, message: '编辑提醒时不能更换股票，可删除后重新添加' });
-      return;
-    }
     this.setData({ selectedStock: null });
   },
 
@@ -395,8 +376,6 @@ Page({
       thresholdPlaceholder: cfg.placeholder,
       thresholdUnit: cfg.unit
     });
-    // 切到成交量时基准周期才有意义；切走时把残留值清掉
-    this._syncEdit();
   },
 
   // ----- 阈值输入 -----
@@ -405,19 +384,10 @@ Page({
     this.setData({ threshold: val });
   },
 
-  // 阈值失焦时才保存：输入过程中一路 PUT 会打出大量无效请求。
-  // 非空但非法（如涨跌幅 120）明确提示，空着则视为还没输完、静默跳过
+  // 阈值失焦：兜底把最终值同步进 data（输入过程 onThresholdInput 已实时同步）
   onThresholdBlur(e) {
     const val = (e && e.detail && e.detail.value) || '';
     this.setData({ threshold: val });
-    if (!this.data.editMode || !this.data.editingId || !val) return;
-
-    const errMsg = this._validateForm();
-    if (errMsg) {
-      Toast({ context: this, message: errMsg });
-      return;
-    }
-    this._syncEdit();
   },
 
   // ----- 基准周期：与触发条件同一套「带标题的选择器」 -----
@@ -444,7 +414,6 @@ Page({
       volumeBaseText: opt ? opt.label : '',
       volumeBasePickerValue: [numVal]
     });
-    this._syncEdit();
   },
 
   // ----- 检查频率：同样用带标题的选择器 -----
@@ -469,7 +438,6 @@ Page({
       frequencyText: opt ? opt.label : '',
       frequencyPickerValue: [val]
     });
-    this._syncEdit();
   },
 
   // ----- 表单校验 -----
@@ -496,15 +464,8 @@ Page({
     return null;
   },
 
-  // ----- 确认按钮 -----
-  // 新增模式：确认添加；编辑模式：确认删除
-  // （编辑时改字段是即时保存的，所以右侧按钮留给删除这个不可逆操作）
+  // ----- 确认按钮（新增提醒）-----
   onPopupConfirm() {
-    if (this.data.editMode) {
-      this._deleteAlert();
-      return;
-    }
-
     // 校验
     const errMsg = this._validateForm();
     if (errMsg) {
@@ -547,45 +508,6 @@ Page({
       volumeBase: conditionType === 'volume' ? volumeBase : 0,
       checkFrequency: checkFrequency
     };
-  },
-
-  // 编辑态即时保存：字段一改就 PUT 整条表单，成功刷新列表，失败提示原因。
-  // 校验还没过（比如阈值刚清空正在重输）就静默跳过，等下次变更再提交，
-  // 避免边打字边弹错误 Toast
-  _syncEdit() {
-    if (!this.data.editMode || !this.data.editingId || this._syncing) return;
-    if (this._validateForm()) return;
-
-    this._syncing = true;
-    alertApi
-      .update(this.data.editingId, this._payload())
-      .then(() => this.loadList())
-      .catch((err) => {
-        Toast({ context: this, message: (err && err.message) || '保存修改失败' });
-      })
-      .then(() => {
-        this._syncing = false;
-      });
-  },
-
-  // 编辑态删除：先删再关弹窗，失败保留弹窗让用户可以重试
-  _deleteAlert() {
-    if (!this.data.editingId || this._submitting) return;
-    this._submitting = true;
-
-    alertApi
-      .remove(this.data.editingId)
-      .then(() => {
-        Toast({ context: this, message: '提醒已删除' });
-        this._closePopup();
-        this.loadList();
-      })
-      .catch((err) => {
-        Toast({ context: this, message: (err && err.message) || '删除提醒失败' });
-      })
-      .then(() => {
-        this._submitting = false;
-      });
   },
 
   goBack() {

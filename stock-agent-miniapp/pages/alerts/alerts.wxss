@@ -89,11 +89,14 @@
   margin-bottom: 0;
 }
 
-/* 头部：股票名 + 代码 在左，状态标签在右 */
+/* 头部：股票名 + 代码 在左，删除键在右。
+   右侧内边距与 .alert-card-foot 保持一致（同一档 --sp-2），
+   让删除键右缘与下方触发标签右缘对齐 */
 .alert-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-right: var(--sp-2);
 }
 
 .alert-card-name {
@@ -153,7 +156,7 @@
 
 /* 价格数字颜色由内联 style 按涨跌下发（红/绿），这里只留字号与等宽数字 */
 .alert-card-price-text {
-  font-size: 48rpx;
+  font-size: 60rpx;
   font-weight: 700;
   font-feature-settings: 'tnum';
 }

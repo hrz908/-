@@ -23,6 +23,8 @@
 /* 分组标题与它自己的卡片之间的距离，规则见 app.wxss 的 --gap-title：
    比区块间距小一档，标题才「属于」下面的卡片 */
 .watch-title {
+  /* 标题文字整体下移一点（与上方 navbar 拉开距离） */
+  margin-top: var(--sp-2);
   margin-bottom: var(--gap-title);
 }
 
@@ -81,6 +83,10 @@
 
 .hero-tags {
   display: flex;
+  /* 纵向排列：上涨在上、下跌在下（markup 顺序即上下顺序）；
+     note 插槽在右侧，flex-end 让两个标签靠右对齐 */
+  flex-direction: column;
+  align-items: flex-end;
   gap: var(--sp-1);
 }
 
