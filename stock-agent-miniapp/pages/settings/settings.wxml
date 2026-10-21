@@ -13,6 +13,7 @@
       </view>
       <view class="profile-info">
         <view class="profile-nickname">{{nickname}}</view>
+        <view class="profile-desc">点击编辑头像与昵称</view>
       </view>
       <base-icon name="chevron-right" size="36rpx" color="var(--ink-3)" />
     </view>
@@ -33,9 +34,11 @@
             <view class="pref-title">消息推送</view>
             <view class="pref-desc">接收订单状态与活动提醒</view>
           </view>
+          <!-- 原生 switch 的 color 只接受具体色值、不解析 var()，
+               这里与设计 token --accent (#2559EB) 保持一致 -->
           <switch
             class="pref-switch"
-            color="#1AA97C"
+            color="#2559EB"
             checked="{{pushEnabled}}"
             bindchange="onTogglePush"
           />
@@ -74,7 +77,9 @@
         bind:chooseavatar="onChooseWechatAvatar"
       >
         <image wx:if="{{editAvatar}}" class="edit-avatar" src="{{editAvatar}}" mode="aspectFill" />
-        <view wx:else class="edit-avatar edit-avatar--empty"></view>
+        <view wx:else class="edit-avatar edit-avatar--empty">
+          <base-icon name="user" size="64rpx" color="var(--ink-3)" />
+        </view>
       </button>
 
       <view class="edit-field">

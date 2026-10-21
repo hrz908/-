@@ -34,15 +34,15 @@
 
 /* 三条主数据配色（视觉稿规格；浅色主题下金色换成琥珀，白底上才看得清） */
 .bar-fill--revenue {
-  background: linear-gradient(90deg, #3E7BD6, #5B9BEF);
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent-soft));
 }
 
 .bar-fill--profit {
-  background: linear-gradient(90deg, #F5A623, #FFC53D);
+  background: linear-gradient(90deg, var(--warn), var(--warn-soft));
 }
 
 .bar-fill--cash {
-  background: #C0C9D4;
+  background: var(--flat);
 }
 
 .bar-v {

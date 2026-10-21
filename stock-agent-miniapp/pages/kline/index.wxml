@@ -22,22 +22,25 @@
     <view wx:elif="{{errorMsg}}" class="mask">{{errorMsg}}</view>
   </view>
 
-  <view class="stats">
-    <view class="stat">
-      <view class="stat-k">区间涨跌幅</view>
-      <view class="stat-v num {{stats.pctDir}}">{{stats.pctText}}</view>
-    </view>
-    <view class="stat">
-      <view class="stat-k">区间振幅</view>
-      <view class="stat-v num">{{stats.ampText}}</view>
-    </view>
-    <view class="stat">
-      <view class="stat-k">区间最高</view>
-      <view class="stat-v num up">{{stats.highText}}</view>
-    </view>
-    <view class="stat">
-      <view class="stat-k">区间最低</view>
-      <view class="stat-v num down">{{stats.lowText}}</view>
+  <!-- 区间统计：与图表卡同一套卡片语言（白底 + 细描边 + 轻投影） -->
+  <view class="stats-card">
+    <view class="stats">
+      <view class="stat">
+        <view class="stat-k">区间涨跌幅</view>
+        <view class="stat-v num {{stats.pctDir}}">{{stats.pctText}}</view>
+      </view>
+      <view class="stat">
+        <view class="stat-k">区间振幅</view>
+        <view class="stat-v num">{{stats.ampText}}</view>
+      </view>
+      <view class="stat">
+        <view class="stat-k">区间最高</view>
+        <view class="stat-v num up">{{stats.highText}}</view>
+      </view>
+      <view class="stat">
+        <view class="stat-k">区间最低</view>
+        <view class="stat-v num down">{{stats.lowText}}</view>
+      </view>
     </view>
   </view>
 

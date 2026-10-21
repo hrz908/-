@@ -69,3 +69,24 @@ PC 端微信仍不支持 ES2020+ 语法，报 `module 'app.js' is not defined` �
 `SENDER_BAR_RPX` / `SENDER_PAD_TOP_RPX` / `SENDER_BAR_MARGIN_BOTTOM_RPX` / `KEYBOARD_GAP_RPX` 等。
 改胶囊尺寸或间距要同步：首帧估算（这几个常量）+ `onReady` 里的 `measureSender()` 实测值。
 容器是 `bottom: 0` 底部锚定的，加大 `padding-top` 只会挤短对话区，**不会让胶囊上移**。
+
+## 9. WXML 标签的属性区里不能放注释
+
+`<!-- -->` 只能出现在**标签外**的元素内容区。写进标签的属性列表中间（多行属性之间）会被 WXML 编译器
+当成属性文本解析：
+
+```
+[transwxmltojs] CustomError: ./pages/chat/chat.wxml:250:11: unexpected character `<`
+```
+
+**症状极具迷惑性**：模拟器里 `simulator_open_page` 照样返回 `success: true`、控制台也没有 error，
+但**点「预览」/「上传」失败**，开发者工具只弹一个没有信息量的 `错误 undefined (code 10)`
+（code 10 = 上传任务执行失败，真实原因被吞掉）。真实报错只在开发者工具日志里：
+`%LOCALAPPDATA%\微信开发者工具\User Data\<hash>\WeappLog\logs\*.log`，搜 `transwxmltojs`。
+
+**How to apply**：
+- 要解释某个属性，注释放到**标签之前**（作为上一个兄弟节点的注释），别塞进属性列表中间
+- 改完 WXML 想确认能上传，**必须走一次真上传/预览**（`create_preview_qrcode` / `upload`）——
+  `simulator_open_page` 的 success 不算数（它不校验 WXML 编译错误，也不校验 JS 语法）
+- 全量自查：把 wxml 的注释先替换成等长空白，再扫 `<tag ...>` 的属性区里有没有残留 `<!--`
+- 同一批改的其它文件要一起查：`textarea` / `switch` / `input` 这类多行属性标签最容易踩

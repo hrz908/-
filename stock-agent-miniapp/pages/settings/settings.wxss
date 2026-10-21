@@ -13,7 +13,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--sp-3) var(--sp-4);
+  /* 顶部留白统一到各页一致（--sp-3） */
+  padding: var(--sp-3) var(--sp-4) 0;
 }
 
 /* ===== 个人信息卡 ===== */
@@ -25,10 +26,11 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
 }
 
 .profile-card--hover {
-  background: var(--surface-2);
+  background: var(--press);
 }
 
 .profile-avatar {
@@ -61,6 +63,12 @@
   white-space: nowrap;
 }
 
+.profile-desc {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
 /* ===== 偏好设置分组 ===== */
 .pref-group {
   margin-top: var(--sp-4);
@@ -79,6 +87,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -150,13 +159,13 @@
 
 /* 危险操作：红色描边 + 红字，不用实底（退出登录不是主流程动作） */
 .footer-btn--danger {
-  color: var(--up);
-  border: 1px solid var(--up-border);
-  background: var(--up-tint);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-tint);
 }
 
 .footer-btn--danger-hover {
-  background: rgba(240, 74, 74, 0.16);
+  background: var(--danger-strong);
 }
 
 .footer-hint {
@@ -198,6 +207,13 @@
   border: 1px solid var(--line);
 }
 
+/* 空头像：与个人资料页的空头像同一套（次级面底 + user 图标） */
+.edit-avatar--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .edit-field {
   width: 100%;
   margin-top: var(--sp-4);
@@ -225,7 +241,7 @@
 .edit-tip {
   margin-top: var(--sp-1);
   font-size: var(--fs-aux);
-  color: var(--up);
+  color: var(--danger);
   text-align: center;
 }
 

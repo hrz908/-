@@ -33,6 +33,6 @@
 /* 原文链接：可点，复制到剪贴板 */
 .src-link {
   margin-left: var(--sp-2);
-  color: #5B9BEF;
+  color: var(--accent);
   text-decoration: underline;
 }
