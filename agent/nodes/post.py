@@ -14,7 +14,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import AIMessage, HumanMessage
 
 from config import DATABASE_URL, REDIS_URL, SUMMARY_TOKEN_LIMIT
-from llm import get_small_llm
+from llm import get_small_llm, count_message_tokens
 
 logger = logging.getLogger("stocka.agent")
 
@@ -33,21 +33,6 @@ def _get_redis():
     return _redis
 
 
-def _count_tokens(messages: list) -> int:
-    """粗略统计 token：优先 tiktoken，失败则按字符数估算。"""
-    text = ""
-    for m in messages:
-        c = m.content if isinstance(m.content, str) else str(m.content)
-        text += c
-    try:
-        import tiktoken
-        enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(text))
-    except Exception:  # noqa: BLE001
-        # 中英混合下 ~2 char/token 的保守估计
-        return max(1, len(text) // 2)
-
-
 def _collect_usage(messages: list) -> dict:
     """从消息的 usage_metadata 聚合 token 用量。"""
     total = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -63,7 +48,7 @@ def _collect_usage(messages: list) -> dict:
 async def _roll_summary(state: dict) -> None:
     """超阈值时做滚动摘要写 Redis。失败静默。"""
     messages = state.get("messages", [])
-    if _count_tokens(messages) <= SUMMARY_TOKEN_LIMIT:
+    if count_message_tokens(messages) <= SUMMARY_TOKEN_LIMIT:
         return
     lines = []
     for m in messages:

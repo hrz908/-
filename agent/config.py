@@ -31,3 +31,14 @@ TUSHARE_API = os.getenv("TUSHARE_API", "http://api.tushare.pro")
 
 # 对话 token 超过该值触发滚动摘要
 SUMMARY_TOKEN_LIMIT = int(os.getenv("SUMMARY_TOKEN_LIMIT", "6000"))
+
+# 单次 LLM 请求允许的最大输入 token（保守上限，留足余量）。
+# 上游模型上下文是 163840（DeepSeek-V3），但一旦超了上游直接返回 400：
+#   'number of input tokens (301046) has exceeded max_seq_len (163840) limit'
+# 这类错误冒泡会让整轮回答变成空，所以发送前先按这个预算裁剪。
+MAX_INPUT_TOKENS = int(os.getenv("MAX_INPUT_TOKENS", "60000"))
+
+# Tushare 单个接口返回的最大行数（硬上限）。
+# daily / daily_basic / moneyflow 这类接口在只给 ts_code 时会返回该股全部历史
+# （茅台约 6000 行），整段 JSON 进对话会直接撑爆模型上下文。
+MAX_TUSHARE_ROWS = int(os.getenv("MAX_TUSHARE_ROWS", "200"))

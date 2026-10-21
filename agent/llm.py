@@ -27,3 +27,43 @@ def get_small_llm(streaming: bool = False, temperature: float = 0.0) -> ChatOpen
         streaming=streaming,
         temperature=temperature,
     )
+
+
+def estimate_tokens(text: str) -> int:
+    """粗略估算 token 数：优先 tiktoken，失败则按字符数估算。"""
+    if not text:
+        return 0
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+    except Exception:  # noqa: BLE001
+        # 中英混合下 ~2 char/token 的保守估计
+        return max(1, len(text) // 2)
+
+
+def count_message_tokens(messages: list) -> int:
+    """统计一组消息的 token 总量（发送前的上下文预算用）。"""
+    text = ""
+    for m in messages:
+        c = getattr(m, "content", "")
+        text += c if isinstance(c, str) else str(c)
+    return estimate_tokens(text)
+
+
+def is_context_overflow(exc: Exception) -> bool:
+    """判断异常是不是「上下文超长」。
+
+    上游 OpenAI 兼容接口在输入超限时返回 400，例如：
+      'number of input tokens (301046) has exceeded max_seq_len (163840) limit'
+    这类错误一旦冒泡出去，整条回答就是空的（只剩一个 error 事件），
+    所以必须识别出来并就地降级，而不是让整个请求失败。
+    """
+    msg = str(exc).lower()
+    return (
+        "max_seq_len" in msg
+        or "context length" in msg
+        or "maximum context" in msg
+        or "too many tokens" in msg
+        or "reduce the length" in msg
+    )

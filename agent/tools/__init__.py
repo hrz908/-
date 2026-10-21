@@ -9,7 +9,14 @@ from typing import Any, Callable, Awaitable, Optional
 
 import httpx
 
-from config import GO_SERVER_URL, GO_SERVER_TOKEN, TOOL_TIMEOUT, TUSHARE_TOKEN, TUSHARE_API
+from config import (
+    GO_SERVER_URL,
+    GO_SERVER_TOKEN,
+    MAX_TUSHARE_ROWS,
+    TOOL_TIMEOUT,
+    TUSHARE_TOKEN,
+    TUSHARE_API,
+)
 
 # Go 网关统一响应体 { code, message, data } 里的成功码
 _CODE_OK = 0
@@ -135,7 +142,32 @@ async def tushare_query(api_name: str, params: Optional[dict] = None, fields: st
     data = body.get("data") or {}
     cols = data.get("fields") or []
     rows = [dict(zip(cols, it)) for it in (data.get("items") or [])]
+    # 行数硬上限：Tushare 的 daily / daily_basic / moneyflow 等接口在只给 ts_code
+    # 时会返回该股全部历史（茅台约 6000 行），整段 JSON 进对话会撑爆模型上下文
+    # （实测单次估值工具就产生 30 万 token，直接触发上游 max_seq_len 报错）。
+    # 这些接口默认按日期倒序返回（最新的在最前），保留前 N 行即「最近 N 条」，
+    # 不改变时序语义。真正的「取最近 N 条」由各工具自己用日期区间收窄。
+    if len(rows) > MAX_TUSHARE_ROWS:
+        rows = rows[:MAX_TUSHARE_ROWS]
     return {"ok": True, "data": rows}
+
+
+def take_latest(rows: Any, key: str = "trade_date", limit: int = 30) -> list:
+    """取按日期倒序的前 N 行（工具层统一的「只要最近若干条」出口）。
+
+    Tushare 对部分接口不保证返回顺序，这里显式按日期字段排序后再截断，
+    保证拿到的永远是「最近 N 条」而不是「随机 N 条」。
+    """
+    if not isinstance(rows, list):
+        return []
+
+    def _sort_key(r: dict) -> str:
+        v = r.get(key)
+        return str(v) if v is not None else ""
+
+    valid = [r for r in rows if isinstance(r, dict)]
+    valid.sort(key=_sort_key, reverse=True)
+    return valid[:limit] if limit and limit > 0 else valid
 
 
 def get_tools() -> list:
