@@ -17,7 +17,7 @@
     "backgroundColor": "#F5F6F8",
     "backgroundColorTop": "#F5F6F8",
     "backgroundColorBottom": "#F5F6F8",
-    "navigationBarTextStyle": "dark"
+    "navigationBarTextStyle": "black"
   },
   "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json"

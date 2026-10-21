@@ -1,7 +1,7 @@
 {
   "navigationStyle": "default",
   "navigationBarBackgroundColor": "#F5F6F8",
-  "navigationBarTextStyle": "dark",
+  "navigationBarTextStyle": "black",
   "navigationBarTitleText": "K线",
   "disableScroll": true,
   "usingComponents": {}
