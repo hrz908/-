@@ -7,10 +7,11 @@
   ],
   "window": {
     "navigationStyle": "custom",
-    "backgroundColor": "#F5F6F8",
-    "backgroundColorTop": "#F5F6F8",
-    "backgroundColorBottom": "#F5F6F8",
-    "navigationBarTextStyle": "black"
+    "backgroundColor": "#0B1219",
+    "backgroundColorTop": "#0B1219",
+    "backgroundColorBottom": "#0B1219",
+    "navigationBarTextStyle": "white"
   },
+  "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json"
 }

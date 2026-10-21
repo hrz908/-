@@ -9,7 +9,7 @@
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-input": "tdesign-miniprogram/input/input"
   },
-  "backgroundColor": "#F5F6F8",
-  "backgroundColorTop": "#F5F6F8",
-  "backgroundColorBottom": "#F5F6F8"
+  "backgroundColor": "#0B1219",
+  "backgroundColorTop": "#0B1219",
+  "backgroundColorBottom": "#0B1219"
 }

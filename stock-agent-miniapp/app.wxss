@@ -1,7 +1,13 @@
-/* 设计变量（取自 Ardot 设计稿）
-   项目只有一套浅色配色：色值在这里定义成 --c-*，页面一律引用这些名字，
-   不要在各页写死颜色 */
+/* 深色专业终端的设计变量与全局基线（本次改造新增） */
+@import "styles/token.wxss";
+@import "styles/base.wxss";
+
+/* ===== 过渡期遗留变量（阶段二页面迁移完成、阶段五统一清理）=====
+   页面仍在引用 --c-* / --td-*，先保留定义避免样式断裂；
+   page 的基线属性（height/background/color/font-family/font-size）
+   已由 styles/base.wxss 接管，本块只留变量，不再写基线样式 */
 page {
+  /* 原浅色主题 token，见 stock-agent-miniapp 改造前版本 */
   --c-bg: #F5F6F8;           /* 页面背景 */
   --c-blue: #2559EB;         /* 主色：品牌蓝 */
   --c-ink: #181A1C;          /* 主文字 */
@@ -50,13 +56,6 @@ page {
 
   /* 所有页面 navbar 标题字号：TDesign 默认 36rpx，统一调大到 40rpx */
   --td-navbar-title-font: 600 40rpx / 56rpx "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-
-  height: 100%;
-  background: var(--c-bg);
-  color: var(--c-ink);
-  font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
-  font-size: 15px;
-  -webkit-font-smoothing: antialiased;
 }
 
 /* 子页面 navbar 返回箭头：固定左边距，控制其离屏幕左边缘的距离。

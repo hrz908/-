@@ -6,7 +6,7 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--c-bg);
+  background: var(--bg);
   /* 底部按钮用 absolute 而非 fixed，转场时随页面整体移动 */
   position: relative;
   will-change: transform;

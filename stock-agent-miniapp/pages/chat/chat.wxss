@@ -5,7 +5,7 @@
   /* 用 100% 而非 100vh：vh 是固定像素，键盘弹起时重算会与键盘动画不同步导致跳变 */
   height: 100%;
   overflow: hidden;
-  background: var(--c-bg);
+  background: var(--bg);
   /* 自身作为定位容器：输入栏用 absolute 而非 fixed，
      页面转场动画期间不会因 fixed 元素单独定位而与页面错位 */
   position: relative;
@@ -340,7 +340,7 @@
   right: 0;
   /* bottom 由页面按键盘高度驱动：卡片上移与对话区收窄共用同一份数据 */
   bottom: 0;
-  background: var(--c-bg);
+  background: var(--bg);
   transition: bottom 0.25s ease;
   /* 胶囊与屏幕两侧留白（--pad-page 与 TDesign 卡片一致）；
      下内边距由内联样式给：键盘弹起时为 0，否则让出安全区 */

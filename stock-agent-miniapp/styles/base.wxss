@@ -1,0 +1,45 @@
+/* =============================================================
+   全局基线：reset + page 默认样式
+   WXSS 是 CSS 受限子集，本文件遵守以下禁令：
+   - 不用 * 通配符，逐一列举实际用到的原生标签
+   - 不用 div/p 等 HTML 标签选择器，只用 view/text
+   - 不用 :hover/:active/:focus，按压态一律走 hover-class
+   - 不用 @media / rem / vh / vw，统一 rpx（750rpx = 屏宽）
+   ============================================================= */
+
+/* reset：只列项目实际用到的原生标签，刻意不含 button ——
+   原生 button 的平台默认样式暂不清（t-button 仍在用），
+   待阶段五移除 TDesign 后随清理一并补上 */
+page,
+view,
+text,
+image,
+scroll-view,
+swiper,
+swiper-item,
+input,
+textarea,
+navigator {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 页面基线：深色底 + 浅色字 + 系统中文字体栈。
+   不引中文字体包，中文层次靠字重与留白实现（主包 ≤2MB 约束） */
+page {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字等宽：所有金额、比例、涨跌幅所在节点必须挂 class="num"，
+   否则数值跳动时整行宽度抖动。两个属性都写：iOS 认前者，旧 Android 认后者 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
