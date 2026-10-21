@@ -16,7 +16,7 @@
     </view>
   </view>
 
-  <!-- 参考图：主价格保持主文字色（深色），只有涨跌额/涨跌幅跟随涨跌着色 -->
+  <!-- 参考图：主价格保持主文字色（--ink），只有涨跌额/涨跌幅跟随涨跌着色 -->
   <view class="price-row">
     <text class="price num">{{priceText}}</text>
     <text class="chg num {{dir}}">{{changeText}}  {{pctText}}</text>

@@ -1,6 +1,8 @@
 <view class="navbar navbar-class" style="padding-top: {{statusBarHeight}}px; height: {{barHeight + statusBarHeight}}px;">
   <view class="navbar-inner">
-    <!-- 左侧：返回箭头（leftArrow）或菜单插槽（slot left），二选一 -->
+    <!-- 左侧：返回箭头（leftArrow）或菜单插槽（slot left），二选一。
+         插槽不能挂 wx:else（slot 不支持条件渲染指令），改成常驻渲染：
+         用返回箭头的子页面不传 left 插槽内容，这里自然为空 -->
     <view
       wx:if="{{leftArrow}}"
       class="nav-btn"
@@ -11,7 +13,7 @@
     >
       <base-icon name="arrow-left" size="44rpx" color="var(--ink)" />
     </view>
-    <slot wx:else name="left" />
+    <slot name="left" />
 
     <!-- 标题：铺满整行居中，max-width 避开胶囊，pointer-events 不挡手势 -->
     <view class="nav-title" style="max-width: {{titleMaxWidth}}px;">

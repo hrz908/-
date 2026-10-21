@@ -23,7 +23,6 @@ const C = {
   axis: '#9AA1AC',
   up: '#F04A4A',
   down: '#1AA97C',
-  vol: '#C0C9D4',
   ma5: '#2559EB',
   ma10: '#F5A623',
   ma20: '#8B5CF6'
@@ -38,6 +37,9 @@ Page({
   data: {
     code: '',
     name: '',
+    // 导航栏标题：优先股票名，其次代码；都没有时用「K线」。
+    // 不再拼「XX K线」——缺参数时会退化成「K线 K线」（重复且别扭）
+    titleText: 'K线',
     periods: PERIODS,
     activePeriod: 'day',
     loading: true,
@@ -49,8 +51,12 @@ Page({
   onLoad(query) {
     const code = (query && query.code) || '';
     const name = (query && query.name) || '';
-    this.setData({ code: code, name: name });
-    wx.setNavigationBarTitle({ title: (name || code || 'K线') + ' K线' });
+    this.setData({ code: code, name: name, titleText: name || code || 'K线' });
+  },
+
+  // 自研导航栏的返回（与其它子页一致）
+  onBack() {
+    wx.navigateBack();
   },
 
   onReady() {
@@ -61,12 +67,11 @@ Page({
     this._charts = null;
   },
 
-  // 周期切换：受控 chips，点了就换数据
-  onPeriodTap(e) {
-    const index = Number(e.currentTarget.dataset.index);
-    const item = this.data.periods[index];
-    if (!item || item.key === this.data.activePeriod) return;
-    this.setData({ activePeriod: item.key });
+  // 周期切换：base-tabs 受控，点了就换数据
+  onPeriodChange(e) {
+    const key = e.detail && e.detail.value;
+    if (!key || key === this.data.activePeriod) return;
+    this.setData({ activePeriod: key });
     this.loadKline();
   },
 
@@ -123,7 +128,11 @@ Page({
       const width = res[0].width;
       const height = res[0].height;
       // 高分屏：画布按物理像素开（重设 width 会顺带清空画布），
-      // 上下文再缩放回来，图表布局全程用 CSS 像素
+      // 上下文再缩放回来，图表布局全程用 CSS 像素。
+      // uCharts 的约定：字号/间距/线宽等内部尺寸都按 pixelRatio 放大，
+      // 所以这里必须传 pixelRatio: 1 并自己 ctx.scale(dpr, dpr)；
+      // 若把 pixelRatio 传成 dpr（同时又 scale 一次），所有文字与留白会
+      // 被放大 dpr 倍——实测 x 轴日期标签涨到 30px 且互相重叠。
       node.width = width * dpr;
       node.height = height * dpr;
       ctx.scale(dpr, dpr);
@@ -132,14 +141,14 @@ Page({
       const categories = rows.map((r) => String(r.date || '').slice(5)); // MM-DD
       // uCharts 蜡烛数据格式：[开, 收, 低, 高]（库内 calCandleMA 取 [1] 收盘）
       const kdata = rows.map((r) => [num(r.open), num(r.close), num(r.low), num(r.high)]);
-      const volumes = rows.map((r) => num(r.volume));
 
       this._charts = new uCharts({
         type: 'candle',
         context: ctx,
         width: width,
         height: height,
-        pixelRatio: dpr,
+        // 见上：上下文已按 dpr 缩放，uCharts 的 pixelRatio 必须保持 1
+        pixelRatio: 1,
         background: C.bg,
         fontSize: 11,
         fontColor: C.axis,
@@ -149,9 +158,7 @@ Page({
         legend: { show: true, position: 'top', float: 'left', fontSize: 10, lineHeight: 14, fontColor: C.axis, padding: 5, margin: 0, itemGap: 12 },
         categories: categories,
         series: [
-          { name: 'K线', data: kdata },
-          // 成交量柱绑第二个 Y 轴（index: 1），只借它的 range 定高度，不显示刻度
-          { name: '成交量', type: 'bar', data: volumes, index: 1, color: C.vol }
+          { name: 'K线', type: 'candle', data: kdata, index: 0 }
         ],
         xAxis: {
           disableGrid: true,
@@ -161,16 +168,20 @@ Page({
           axisLineColor: C.grid,
           fontColor: C.axis
         },
-        yAxis: [
-          {
-            disableGrid: false,
-            gridType: 'dash',
-            gridColor: C.grid,
-            splitNumber: 4,
-            fontColor: C.axis
-          },
-          { disabled: true, disableGrid: true }
-        ],
+        // 单价格轴。uCharts 的 candle 渲染器要求「每个 series 的每个数据项都是数组」
+        // （内部按 item.forEach 展开），成交量那种标量 series 会直接抛 TypeError，
+        // 每一帧都中断——价格刻度与图例也跟着画不出来。
+        // 成交量因此不画在图内（页面下方的区间统计仍给出涨跌幅/振幅/最高/最低）。
+        yAxis: {
+          disableGrid: false,
+          gridType: 'dash',
+          gridColor: C.grid,
+          splitNumber: 4,
+          fontColor: C.axis,
+          fontSize: 11,
+          // 价格刻度：高价股取整、低价股保留两位，避免「5.36」被写成「5」
+          formatter: (val) => (Math.abs(val) >= 100 ? val.toFixed(0) : val.toFixed(2))
+        },
         extra: {
           candle: {
             // 国内习惯：涨红跌绿

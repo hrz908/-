@@ -257,7 +257,7 @@
         catchtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
 
-      <!-- 发送键：无内容时是次级面，有内容才点亮成金色行动点 -->
+      <!-- 发送键：无内容时是次级面，有内容才点亮成主行动蓝 -->
       <view
         class="bar-send {{input ? 'bar-send--active' : ''}}"
         hover-class="bar-send--hover"

@@ -77,7 +77,7 @@
     </scroll-view>
   </view>
 
-  <!-- 底部主操作：金色行动点（唯一强调色的合法用途） -->
+  <!-- 底部主操作：主行动蓝（唯一强调色的合法用途） -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
     <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
       <base-icon name="add" size="36rpx" color="#FFFFFF" />

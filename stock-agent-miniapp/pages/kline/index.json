@@ -1,8 +1,8 @@
 {
-  "navigationStyle": "default",
-  "navigationBarBackgroundColor": "#F5F6F8",
-  "navigationBarTextStyle": "black",
-  "navigationBarTitleText": "K线",
+  "navigationStyle": "custom",
   "disableScroll": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "base-navbar": "/components/base/navbar/navbar",
+    "base-tabs": "/components/base/tabs/tabs"
+  }
 }

@@ -46,10 +46,12 @@ function toViewItem(item) {
   };
 }
 
-// 盈亏为正显示红色、为负显示绿色（A 股习惯：红涨绿跌）
+// 盈亏为正显示红色、为负显示绿色（A 股习惯：红涨绿跌）；
+// 为 0 时用中性色：空仓用户的「¥ 0.00」标成红色会看着像在亏
 function profitClass(totalProfit) {
-  if (totalProfit && String(totalProfit).indexOf('-') === 0) return 'is-down';
-  return 'is-up';
+  const n = Number(totalProfit);
+  if (!isFinite(n) || n === 0) return 'is-flat';
+  return n < 0 ? 'is-down' : 'is-up';
 }
 
 function nowHM() {

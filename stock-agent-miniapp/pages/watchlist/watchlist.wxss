@@ -42,12 +42,13 @@
   gap: var(--sp-1);
 }
 
-/* 小标签：圆角 6px + 边框 + 浅底（设计稿 .tag 规格） */
+/* 小标签：圆角 6px + 边框 + 浅底（设计稿 .tag 规格）。
+   数据计数用辅助级字号（11px），弱辅助级（10px）在小字号下读不清 */
 .mini-tag {
   padding: 3rpx 12rpx;
   border-radius: var(--r-tag);
   border: 1rpx solid var(--line);
-  font-size: var(--fs-min);
+  font-size: var(--fs-aux);
   background: var(--surface-2);
   color: var(--ink-2);
   white-space: nowrap;
@@ -66,16 +67,21 @@
   background: var(--down-tint);
 }
 
-/* 总浮动金额：价格级字号 + 等宽 */
+/* 总浮动金额：主数字级字号（--fs-hero）+ 等宽 */
 .hero-amount {
   margin-top: var(--sp-2);
-  font-size: 56rpx;
+  font-size: var(--fs-hero);
   font-weight: 700;
   letter-spacing: -0.5rpx;
 }
 
 .hero-amount.is-up {
   color: var(--up);
+}
+
+/* 盈亏为 0：中性色（与行情卡主价格同色），既不标红也不标绿 */
+.is-flat {
+  color: var(--ink);
 }
 
 .hero-amount.is-down {
@@ -209,7 +215,7 @@
 }
 
 .p1 {
-  font-size: 32rpx;
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 

@@ -67,11 +67,12 @@
 }
 
 /* 分组标题与卡片的间距刻意比区块间距小一档：标题才「属于」下面的卡片 */
+/* 分组标题：与提醒页同一层级（比字段说明高一层） */
 .group-title {
   margin-bottom: var(--sp-2);
   font-size: var(--fs-aux);
-  color: var(--ink-3);
-  letter-spacing: 1rpx;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 .pref-card {

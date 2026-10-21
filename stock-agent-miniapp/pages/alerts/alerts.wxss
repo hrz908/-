@@ -32,7 +32,7 @@
 }
 
 .g-num {
-  font-size: 56rpx;
+  font-size: var(--fs-hero);
   font-weight: 700;
   line-height: 1.1;
   color: var(--ink);
@@ -49,8 +49,8 @@
   flex: none;
   margin: var(--sp-4) 0 var(--sp-2);
   font-size: var(--fs-aux);
-  color: var(--ink-3);
-  letter-spacing: 1rpx;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 /* ===== 列表滚动区 =====
@@ -122,7 +122,7 @@
 }
 
 .alert-card-price-text {
-  font-size: 56rpx;
+  font-size: var(--fs-hero);
   font-weight: 700;
   line-height: 1.1;
 }

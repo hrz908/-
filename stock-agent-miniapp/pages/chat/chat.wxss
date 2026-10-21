@@ -482,7 +482,7 @@
      最多两行 = 88rpx，超出后 textarea 内部滚动，不再把对话区顶掉 */
   min-height: 44rpx;
   max-height: 88rpx;
-  font-size: 30rpx;
+  font-size: var(--fs-body);
   line-height: 44rpx;
   color: var(--ink);
 }
@@ -495,7 +495,7 @@
   border-radius: 999rpx;
   background: var(--surface-2);
   color: var(--ink);
-  font-size: 30rpx;
+  font-size: var(--fs-body);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -508,7 +508,7 @@
   transform: scale(0.99);
 }
 
-/* 发送键：无内容时是次级面，有内容才点亮成金色 */
+/* 发送键：无内容时是次级面，有内容才点亮成主行动蓝 */
 .bar-send {
   flex: none;
   width: 76rpx;
@@ -578,7 +578,7 @@
 }
 
 .drawer-title {
-  font-size: 40rpx;
+  font-size: var(--fs-brand);
   font-weight: 700;
   color: var(--ink);
 }
@@ -594,9 +594,9 @@
 
 .drawer-section-title {
   margin-bottom: var(--sp-2);
-  font-size: var(--fs-min);
-  color: var(--ink-3);
-  letter-spacing: 1rpx;
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 /* 导航菜单：分组卡片承载 */

@@ -16,8 +16,10 @@
   letter-spacing: -0.5rpx;
 }
 
+/* 涨跌幅：紧跟主价格，但要比辅助级大一档——它是卡片上第二重要的数字，
+   用 --fs-aux（11px）贴在 32px 价格旁边会小到读不出来 */
 .chg {
-  font-size: var(--fs-aux);
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 

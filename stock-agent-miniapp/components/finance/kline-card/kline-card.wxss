@@ -1,6 +1,6 @@
 @import "../_card.wxss";
 
-/* 周期 chips：横向不换行，激活项金色描边 + 金字（单一强调色） */
+/* 周期 chips：横向不换行，激活项用主行动蓝描边（单一强调色） */
 .chips {
   display: flex;
   flex-wrap: wrap;

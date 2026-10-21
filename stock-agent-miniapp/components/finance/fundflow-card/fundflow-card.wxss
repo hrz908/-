@@ -9,9 +9,9 @@
   margin-top: var(--sp-3);
 }
 
-/* 主数字 22px 级（44rpx） */
+/* 主数字 22px 级（--fs-value） */
 .flow-big {
-  font-size: 44rpx;
+  font-size: var(--fs-value);
   font-weight: 700;
   line-height: 1.1;
 }

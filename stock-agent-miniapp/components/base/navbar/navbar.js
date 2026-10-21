@@ -5,6 +5,12 @@
 // 组件自身在文档流内占位（非 fixed），页面无需再测 placeholder 高度：
 // 高度 = 状态栏高度 + 44px 内容区，完全确定。
 Component({
+  options: {
+    // 命名插槽必须显式开启 multipleSlots，否则 <slot name="left"> 收不到
+    // 页面传入的菜单按钮（实测：不开时聊天页的菜单按钮整块不渲染，
+    // 侧边抽屉无从打开）
+    multipleSlots: true
+  },
   externalClasses: ['navbar-class'],
   properties: {
     title: { type: String, value: '' },

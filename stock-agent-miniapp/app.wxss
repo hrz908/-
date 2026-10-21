@@ -1,4 +1,4 @@
-/* 深色专业终端的设计变量与全局基线（styles/token.wxss + styles/base.wxss） */
+/* 浅色专业金融主题的设计变量与全局基线（styles/token.wxss + styles/base.wxss） */
 @import "styles/token.wxss";
 @import "styles/base.wxss";
 

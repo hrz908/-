@@ -1,21 +1,11 @@
-<!-- K 线详情页：原生导航栏 + 周期 chips + uCharts 画布 + 区间统计。
+<!-- K 线详情页：自研导航栏 + 周期 chips（base-tabs）+ uCharts 画布 + 区间统计。
      画布触摸绑定 scroll/showToolTip（uCharts 实例方法），页面级 disableScroll
      开启，画布上再加 disable-scroll 双保险 -->
 <view class="page">
-  <view class="chips">
-    <view
-      class="chip {{p.key === activePeriod ? 'chip--on' : ''}}"
-      wx:for="{{periods}}"
-      wx:for-item="p"
-      wx:for-index="i"
-      wx:key="key"
-      hover-class="chip--hover"
-      data-index="{{i}}"
-      bindtap="onPeriodTap"
-    >
-      <text class="chip-text">{{p.label}}</text>
-    </view>
-  </view>
+  <!-- 导航栏与周期 chips 都用主包组件：标题字号、返回键、chips 规格与其余页面一致 -->
+  <base-navbar title="{{titleText}}" left-arrow="{{true}}" bind:back="onBack" />
+
+  <base-tabs class="period-tabs" items="{{periods}}" value="{{activePeriod}}" bind:change="onPeriodChange" />
 
   <view class="chart-card">
     <canvas

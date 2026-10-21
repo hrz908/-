@@ -1,53 +1,24 @@
-/* K 线详情页：深色终端风。样式全部自绘（未引任何 UI 库），
-   间距与字号沿用主包 token 的 rpx 档位，视觉与其它页一致 */
+/* K 线详情页：自研导航栏 + base-tabs 周期 chips + uCharts 画布 + 区间统计。
+   样式全部自绘（未引任何 UI 库），间距与字号沿用主包 token 的 rpx 档位，
+   视觉与其它页一致。导航栏与 chips 复用主包组件，页面只负责区块排版。 */
 .page {
-  min-height: 100vh;
-  padding: var(--sp-3) var(--sp-4) var(--sp-5);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
 }
 
-/* 周期 chips：激活项金色描边（单一强调色仅用于当前态） */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 88rpx;
-  height: 56rpx;
-  padding: 0 var(--sp-2);
-  box-sizing: border-box;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-tag);
-}
-
-.chip-text {
-  font-size: var(--fs-aux);
-  color: var(--ink-2);
-}
-
-.chip--on {
-  background: var(--accent-tint);
-  border-color: var(--accent-border);
-}
-
-.chip--on .chip-text {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.chip--hover {
-  opacity: 0.85;
+/* 周期 chips：直接用 base-tabs（与自选/提醒页同一套 chip 规格），
+   页面侧只补左右留白，与页面其它区块对齐 */
+.period-tabs {
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 
 /* 图表卡：surface 底 + 描边，画布高度 520rpx（K 线区约 400rpx） */
 .chart-card {
   position: relative;
+  margin: 0 var(--sp-4);
   margin-top: var(--sp-3);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -77,6 +48,7 @@
 /* 区间统计：四列 */
 .stats {
   display: flex;
+  margin: 0 var(--sp-4);
   margin-top: var(--sp-3);
   padding-top: var(--sp-3);
   border-top: 1rpx solid var(--line);
@@ -92,6 +64,7 @@
   padding-right: 0;
 }
 
+/* 字段名弱辅助级、字段值正文级：与金融卡栅格的层级一致 */
 .stat-k {
   font-size: var(--fs-min);
   color: var(--ink-3);
@@ -105,6 +78,7 @@
 
 /* 口径与免责声明（合规：数据口径 + 不构成建议） */
 .note {
+  margin: 0 var(--sp-4);
   margin-top: var(--sp-3);
   font-size: var(--fs-min);
   line-height: 1.75;
