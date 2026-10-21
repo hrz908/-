@@ -7,6 +7,7 @@
 // 这里按指南对「迷你走势线」的同一思路（SVG polyline 手写）扩展到 K 线，
 // 数据字段与版式与设计稿一致，后续若要交互式图表可平滑替换图表区。
 const { fmtNum, fmtPct, direction } = require('../../../utils/format');
+const { svgToDataUri } = require('../../../utils/svg-uri');
 
 // viewBox 与分区（对齐视觉稿：K 线区 ≥180rpx，下方成交量）
 const VB_W = 340;
@@ -70,8 +71,13 @@ function buildChart(klines, ma) {
   const xOf = (i) => step * (i + 0.5);
   const yPrice = (v) => PRICE_TOP + (1 - (v - min) / span) * (PRICE_BOTTOM - PRICE_TOP);
 
+  // 显式写 width/height：无固有尺寸的 SVG 作背景图时，各引擎兜底尺寸不一致
   let svg =
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " +
+    "<svg xmlns='http://www.w3.org/2000/svg' width='" +
+    VB_W +
+    "' height='" +
+    VB_H +
+    "' viewBox='0 0 " +
     VB_W +
     ' ' +
     VB_H +
@@ -169,7 +175,7 @@ function buildChart(klines, ma) {
   }
 
   svg += '</svg>';
-  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  return svgToDataUri(svg);
 }
 
 Component({

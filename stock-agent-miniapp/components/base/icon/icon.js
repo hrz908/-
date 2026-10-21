@@ -13,6 +13,7 @@
 // 注意：背景图里的颜色在编码时已固化，因此 color 只接受具体色值；
 // 为保持页面写法顺手，var(--xx) 名称由 utils/color.js 统一翻译成 hex
 const { resolveColor } = require('../../../utils/color');
+const { svgToDataUri } = require('../../../utils/svg-uri');
 
 // 描边图标：统一 stroke-width 2 / round 端点（Lucide 默认规格）
 const ICONS_STROKE = {
@@ -79,24 +80,25 @@ function buildSrc(name, color) {
   const c = resolveColor(color);
   const stroke = ICONS_STROKE[name];
   if (stroke) {
-    return (
-      'data:image/svg+xml,' +
-      encodeURIComponent(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='" +
-          c +
-          "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" +
-          stroke +
-          '</svg>'
-      )
+    // 显式写 width/height：只有 viewBox 的 SVG 没有固有尺寸，
+    // 各引擎对「无固有尺寸 SVG 作背景图」的兜底尺寸不一致（有的按 300×150 再缩放），
+    // 写了尺寸 + CSS contain 才能在各端稳定铺满
+    return svgToDataUri(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='" +
+        c +
+        "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" +
+        stroke +
+        '</svg>'
     );
   }
   const fill = ICONS_FILL[name];
   if (fill) {
-    return (
-      'data:image/svg+xml,' +
-      encodeURIComponent(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='" + c + "'>" + fill + '</svg>'
-      )
+    return svgToDataUri(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='" +
+        c +
+        "'>" +
+        fill +
+        '</svg>'
     );
   }
   return '';

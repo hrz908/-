@@ -4,6 +4,7 @@
 // data-URI 是唯一的内联方式。
 // 颜色在编码时固化：trend（up/down/flat）或 color（hex / var(--xx)）二选一。
 const { resolveColor } = require('../../../utils/color');
+const { svgToDataUri } = require('../../../utils/svg-uri');
 
 // viewBox 尺寸：与常见卡片内容宽（约 345px）接近，缩放失真最小
 const VB_W = 340;
@@ -30,7 +31,12 @@ function buildSrc(points, color, strokeWidth, fill) {
   // 面积填充的折线要闭合到viewBox底边
   const areaCoords = coords + ' ' + VB_W + ',' + VB_H + ' 0,' + VB_H;
   const svg =
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " +
+    // 显式写 width/height：无固有尺寸的 SVG 作背景图时，各引擎兜底尺寸不一致
+    "<svg xmlns='http://www.w3.org/2000/svg' width='" +
+    VB_W +
+    "' height='" +
+    VB_H +
+    "' viewBox='0 0 " +
     VB_W +
     ' ' +
     VB_H +
@@ -57,7 +63,7 @@ function buildSrc(points, color, strokeWidth, fill) {
     "'/>" +
     '</svg>';
 
-  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  return svgToDataUri(svg);
 }
 
 Component({
