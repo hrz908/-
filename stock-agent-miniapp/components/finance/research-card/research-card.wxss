@@ -1,0 +1,38 @@
+@import "../_card.wxss";
+
+/* 结论位：评级 + 目标价，右对齐；买入红 / 中性灰 / 减持绿（视觉稿 .rating） */
+.rating {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rating-r {
+  font-size: var(--fs-body);
+}
+
+.rating-t {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* 核心观点：左竖线 + 次级文字（视觉稿 .quote） */
+.quote {
+  margin-top: var(--sp-3);
+  padding-left: var(--sp-2);
+  border-left: 4rpx solid var(--line);
+  font-size: var(--fs-aux);
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+/* 原文链接：可点，复制到剪贴板 */
+.src-link {
+  margin-left: var(--sp-2);
+  color: #5B9BEF;
+  text-decoration: underline;
+}

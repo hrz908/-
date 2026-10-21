@@ -1,0 +1,28 @@
+@import "../_card.wxss";
+
+/* 价格行：大号价格 + 涨跌幅，基线对齐 */
+.price-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* 价格 32px 级（--fs-price = 64rpx） */
+.price {
+  font-size: var(--fs-price);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5rpx;
+}
+
+.chg {
+  font-size: var(--fs-aux);
+  font-weight: 600;
+}
+
+/* 迷你走势线：与栅格之间留一档 */
+.spark {
+  margin-top: var(--sp-3);
+  height: 88rpx;
+}

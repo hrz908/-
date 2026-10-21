@@ -1,0 +1,59 @@
+<!-- 行情速览卡：价格大号左对齐 + 涨跌幅紧随，下方 3 列 × 2 行数据栅格，
+     中部迷你走势线；上方悬浮资金/异动标签 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <view class="fcard-name">{{name}}</view>
+      <view class="fcard-code num">{{code}}{{status ? ' · ' + status : ''}}</view>
+    </view>
+    <view class="fcard-tags">
+      <view
+        class="ftag {{t.theme ? 'ftag--' + t.theme : ''}}"
+        wx:for="{{tags}}"
+        wx:for-item="t"
+        wx:key="*this"
+      >{{t.text}}</view>
+    </view>
+  </view>
+
+  <view class="price-row">
+    <text class="price num {{dir}}">{{priceText}}</text>
+    <text class="chg num {{dir}}">{{changeText}}  {{pctText}}</text>
+  </view>
+
+  <!-- 迷你走势线：分时点位不足两个点时没有可画的线，整块不渲染 -->
+  <sparkline wx:if="{{points.length >= 2}}" class="spark" points="{{points}}" trend="{{dir}}" />
+
+  <view class="fgrid">
+    <view class="fgrid-row">
+      <view class="fcell">
+        <view class="fcell-k">今开</view>
+        <view class="fcell-v num">{{openText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">最高</view>
+        <view class="fcell-v num up">{{highText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">最低</view>
+        <view class="fcell-v num down">{{lowText}}</view>
+      </view>
+    </view>
+    <view class="fgrid-row fgrid-row--gap">
+      <view class="fcell">
+        <view class="fcell-k">成交额</view>
+        <view class="fcell-v num">{{amountText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">换手率</view>
+        <view class="fcell-v num">{{turnoverText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">总市值</view>
+        <view class="fcell-v num">{{capText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{note}}" class="fnote">{{note}}</view>
+</view>

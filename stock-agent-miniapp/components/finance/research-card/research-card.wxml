@@ -1,0 +1,45 @@
+<!-- 研报观点卡：右上角评级 + 目标价为「结论位」；左竖线引用核心观点。
+     合规：来源机构名常驻，原文链接可复制；全文无买卖建议措辞 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <view class="fcard-name">{{org}} · 最新研报</view>
+      <view class="fcard-code num">{{publishDate}} · {{reportType}}</view>
+    </view>
+    <view class="rating {{ratingTone}}">
+      <text class="rating-r">{{rating}}</text>
+      <text wx:if="{{targetPriceText !== '--'}}" class="rating-t num">目标价 {{targetPriceText}}</text>
+    </view>
+  </view>
+
+  <!-- 核心观点：左竖线引用式排版 -->
+  <view class="quote">{{summary}}</view>
+
+  <view class="fgrid">
+    <view class="fgrid-row">
+      <view class="fcell">
+        <view class="fcell-k">机构评级</view>
+        <view class="fcell-v num {{ratingTone}}">{{rating}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">目标价</view>
+        <view class="fcell-v num">{{targetPriceText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">上行空间</view>
+        <view class="fcell-v num {{upsideDir}}">{{upsideText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="fnote">
+    <view wx:if="{{forecastDir}}">盈利预测：{{forecastDir}}</view>
+    <view wx:if="{{distText}}">近90天评级分布：{{distText}}</view>
+    <view wx:if="{{note}}">{{note}}</view>
+    <!-- 来源可追溯：机构名 + 可复制原文链接 -->
+    <view wx:if="{{sourceName || sourceUrl}}" class="fnote-src">
+      <text wx:if="{{sourceName}}">来源：{{sourceName}}</text>
+      <text wx:if="{{sourceUrl}}" class="src-link" bindtap="onSourceTap">原文链接</text>
+    </view>
+  </view>
+</view>

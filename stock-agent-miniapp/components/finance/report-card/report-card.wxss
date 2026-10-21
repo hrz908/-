@@ -1,0 +1,58 @@
+@import "../_card.wxss";
+
+/* 条形数据行：标签 + 槽 + 值（值列固定宽度，右对齐） */
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-grid);
+  margin-top: var(--sp-2);
+}
+
+.bar-row:first-of-type {
+  margin-top: var(--sp-3);
+}
+
+.bar-lb {
+  flex: none;
+  width: 128rpx;
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+.bar-track {
+  flex: 1;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 6rpx;
+}
+
+/* 三条主数据配色（视觉稿规格） */
+.bar-fill--revenue {
+  background: linear-gradient(90deg, #3E7BD6, #5B9BEF);
+}
+
+.bar-fill--profit {
+  background: linear-gradient(90deg, #C99433, #E9B949);
+}
+
+.bar-fill--cash {
+  background: #4E5B68;
+}
+
+.bar-v {
+  flex: none;
+  width: 220rpx;
+  text-align: right;
+  font-size: var(--fs-aux);
+  color: var(--ink);
+}
+
+.bar-yoy {
+  margin-left: var(--sp-1);
+}

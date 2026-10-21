@@ -1,0 +1,64 @@
+@import "../_card.wxss";
+
+/* 表格：横向滚动容器，内部表格按列数撑开 */
+.cmp-scroll {
+  margin-top: var(--sp-3);
+  width: 100%;
+}
+
+.cmp-table {
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+}
+
+.cmp-row {
+  display: flex;
+  align-items: center;
+}
+
+/* 行间分隔线：sep 由 WXML 行号计算（WXSS 禁兄弟选择器） */
+.cmp-row--sep {
+  border-top: 1rpx solid rgba(38, 51, 63, 0.6);
+}
+
+.cmp-row--head {
+  border-bottom: 1rpx solid var(--line);
+}
+
+/* 指标列固定宽度，数值列均分且不收缩（横向滚动由外层 scroll-view 负责） */
+.cmp-cell {
+  flex: 1;
+  flex-shrink: 0;
+  min-width: 140rpx;
+  padding: var(--sp-2) var(--sp-2);
+  font-size: var(--fs-aux);
+  color: var(--ink);
+  text-align: right;
+}
+
+.cmp-cell--label {
+  flex: none;
+  width: 128rpx;
+  text-align: left;
+  color: var(--ink-3);
+  font-size: var(--fs-min);
+}
+
+.cmp-row--head .cmp-cell {
+  color: var(--ink-3);
+  font-size: var(--fs-min);
+  font-weight: 500;
+}
+
+.cmp-row--head .cmp-cell--label {
+  color: var(--ink-3);
+}
+
+/* 一句话结论：次级文字，仅陈述事实 */
+.cmp-conclusion {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-aux);
+  line-height: 1.7;
+  color: var(--ink-2);
+}

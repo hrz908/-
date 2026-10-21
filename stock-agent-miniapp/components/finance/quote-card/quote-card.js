@@ -1,0 +1,64 @@
+// 行情速览卡：回答「某某现在多少钱」「今天涨了多少」
+// 字段口径见设计文档第 2 节①；props 收展示数据，组件内只做
+// 显示格式化（utils/format.js），不做业务判断。
+// 涨跌方向由 changePct 正负自动推导（执行指南第 6 节：不手写 class）。
+const { fmtPrice, fmtSign, fmtPct, fmtAmount, direction } = require('../../../utils/format');
+
+Component({
+  externalClasses: ['card-class'],
+  properties: {
+    name: { type: String, value: '' },
+    // 含交易所前缀的代码，如 SH600519
+    code: { type: String, value: '' },
+    // 交易状态：已收盘 / 交易中 / 停牌 / 涨停 / 跌停 / 复牌
+    status: { type: String, value: '' },
+    price: { type: Number, value: null },
+    change: { type: Number, value: null },
+    changePct: { type: Number, value: null },
+    open: { type: Number, value: null },
+    high: { type: Number, value: null },
+    low: { type: Number, value: null },
+    prevClose: { type: Number, value: null },
+    // 成交额（元）
+    amount: { type: Number, value: null },
+    // 换手率（% 数值，如 0.42）
+    turnoverRate: { type: Number, value: null },
+    // 总市值（元）
+    totalCap: { type: Number, value: null },
+    // 分时点位数组（画迷你走势线）
+    points: { type: Array, value: [] },
+    // 悬浮标签 [{ text, theme }]，theme: '' | 'hot' | 'gold'
+    tags: { type: Array, value: [] },
+    // 口径说明（时间 / 数据来源）
+    note: { type: String, value: '' }
+  },
+  data: {
+    priceText: '--',
+    changeText: '--',
+    pctText: '--',
+    openText: '--',
+    highText: '--',
+    lowText: '--',
+    amountText: '--',
+    turnoverText: '--',
+    capText: '--',
+    dir: 'flat'
+  },
+  observers: {
+    'price, change, changePct, open, high, low, amount, turnoverRate, totalCap'() {
+      const d = this.data;
+      this.setData({
+        priceText: fmtPrice(d.price),
+        changeText: fmtSign(d.change),
+        pctText: fmtPct(d.changePct),
+        openText: fmtPrice(d.open),
+        highText: fmtPrice(d.high),
+        lowText: fmtPrice(d.low),
+        amountText: fmtAmount(d.amount),
+        turnoverText: fmtPct(d.turnoverRate),
+        capText: fmtAmount(d.totalCap),
+        dir: direction(d.changePct)
+      });
+    }
+  }
+});

@@ -1,0 +1,90 @@
+@import "../_card.wxss";
+
+/* 主数字行：大号净流入 + 占成交额比 */
+.flow-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* 主数字 22px 级（44rpx） */
+.flow-big {
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.flow-pct {
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+/* 四档列表：顶部分隔线，逐行展开 */
+.flow-list {
+  margin-top: var(--sp-3);
+  border-top: 1rpx solid var(--line);
+}
+
+.flow-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1rpx solid rgba(38, 51, 63, 0.6);
+  font-size: var(--fs-aux);
+}
+
+/* 最后一行不带分隔线（:last-child 是结构伪类，非 WXSS 禁用项） */
+.flow-item:last-child {
+  border-bottom: none;
+}
+
+.flow-k {
+  color: var(--ink-2);
+}
+
+.flow-v {
+  color: var(--ink);
+}
+
+.flow-spark {
+  margin-top: var(--sp-3);
+  height: 64rpx;
+}
+
+/* 龙虎榜 */
+.lhb {
+  margin-top: var(--sp-3);
+}
+
+.lhb-title {
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+.lhb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+}
+
+.lhb-seat {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lhb-vals {
+  flex: none;
+  display: flex;
+  gap: var(--sp-2);
+}

@@ -1,0 +1,31 @@
+<!-- 公司事件卡：时间轴样式，圆点按重要度变色（金=需关注，蓝=常规）；
+     每条事件可附原文链接（复制）。文案只陈述事件事实与影响口径 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <view class="fcard-name">公司动态</view>
+      <view class="fcard-code num">{{range}}</view>
+    </view>
+    <view wx:if="{{hasImportant}}" class="ftag ftag--gold">需关注</view>
+  </view>
+
+  <view class="evt" wx:for="{{rows}}" wx:for-item="e" wx:key="title">
+    <view class="evt-dot {{e.important ? 'evt-dot--gold' : 'evt-dot--blue'}}"></view>
+    <view class="evt-body">
+      <view class="evt-t">
+        <text wx:if="{{e.type}}" class="evt-type">{{e.type}}</text>
+        <text class="evt-title">{{e.title}}</text>
+      </view>
+      <view wx:if="{{e.desc}}" class="evt-s">{{e.desc}}</view>
+      <view class="evt-foot">
+        <text wx:if="{{e.date}}" class="evt-date num">{{e.date}}</text>
+        <text wx:if="{{e.sourceUrl}}" class="evt-src" data-url="{{e.sourceUrl}}" bindtap="onSourceTap">原文链接</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="fnote">
+    <view>影响口径：以上为公告事实梳理，未含市场解读</view>
+    <view wx:if="{{note}}">{{note}}</view>
+  </view>
+</view>

@@ -1,0 +1,137 @@
+/* 金融卡共享外壳：8 张卡共用（各卡 wxss 用 @import 引入，
+   避免每张卡重复一遍基础样式）。
+   视觉规格对齐设计稿与 HTML 预览：--surface 卡面 / --line 描边 /
+   16px 圆角 / 14px 内边距；数字一律配 .num 等宽（styles/base.wxss）。 */
+.fcard {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--pad-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.fcard-hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-grid);
+}
+
+.fcard-name {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.fcard-code {
+  margin-top: 6rpx;
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+/* 头部右侧标签组（异动 / 需关注等），可放多个 */
+.fcard-tags {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+}
+
+/* 悬浮标签：默认中性；hot=异动（红）；gold=需关注（金） */
+.ftag {
+  padding: 3rpx 14rpx;
+  border-radius: var(--r-tag);
+  border: 1rpx solid var(--line);
+  background: var(--surface-2);
+  font-size: var(--fs-min);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.ftag--hot {
+  border-color: #5A2A2E;
+  color: var(--up);
+  background: rgba(242, 85, 90, 0.10);
+}
+
+.ftag--gold {
+  border-color: #5A4A1E;
+  color: var(--accent);
+  background: rgba(233, 185, 73, 0.10);
+}
+
+/* 数据栅格：一条顶部分隔线 + 两行三列（设计稿 3 列 × 2 行） */
+.fgrid {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--sp-card);
+  padding-top: var(--sp-3);
+  border-top: 1rpx solid var(--line);
+}
+
+/* 无顶线的变体（卡片头部下方直接跟栅格时用） */
+.fgrid--flat {
+  border-top: none;
+  padding-top: 0;
+}
+
+.fgrid-row {
+  display: flex;
+}
+
+/* 行间距用显式类名，不用兄弟选择器（WXSS 禁用） */
+.fgrid-row--gap {
+  margin-top: var(--gap-grid);
+}
+
+.fcell {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--gap-grid);
+}
+
+.fcell:last-child {
+  padding-right: 0;
+}
+
+.fcell-k {
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+.fcell-v {
+  margin-top: 6rpx;
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+
+/* 口径 / 字段说明：合规要求，估值、分位数等指标需标注计算口径与时间区间 */
+.fnote {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1rpx dashed var(--line);
+  font-size: var(--fs-min);
+  line-height: 1.75;
+  color: var(--ink-3);
+}
+
+/* 来源机构名 / 原文链接入口 */
+.fnote-src {
+  color: var(--ink-2);
+}
+
+/* 红涨绿跌（国内习惯）：组件内样式隔离，不会渗到页面 */
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+.flat {
+  color: var(--flat);
+}

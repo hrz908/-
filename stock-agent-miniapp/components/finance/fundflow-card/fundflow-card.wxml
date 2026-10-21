@@ -1,0 +1,48 @@
+<!-- 资金流向卡：主数字放大 + 占成交额比；四档拆分逐行展开，正负自动着色；
+     北向持股比例与变动（pct）；龙虎榜与融资融券余额按需展示 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <view class="fcard-name">资金流向</view>
+      <view class="fcard-code">今日 · 主力净流入</view>
+    </view>
+    <view wx:if="{{streakText}}" class="ftag">{{streakText}}</view>
+  </view>
+
+  <view class="flow-hd">
+    <text class="flow-big num {{mainNetDir}}">{{mainNetText}}</text>
+    <text wx:if="{{mainNetPctText}}" class="flow-pct num">{{mainNetPctText}}</text>
+  </view>
+
+  <!-- 四档拆分：超大单 / 大单 / 中单 / 小单 -->
+  <view class="flow-list">
+    <view class="flow-item" wx:for="{{tierRows}}" wx:for-item="t" wx:key="label">
+      <text class="flow-k">{{t.label}}</text>
+      <text class="flow-v num {{t.dir}}">{{t.value}}</text>
+    </view>
+    <view wx:if="{{northText}}" class="flow-item">
+      <text class="flow-k">北向持股比例</text>
+      <text class="flow-v num">{{northText}}</text>
+    </view>
+  </view>
+
+  <!-- 近 5 日流向趋势 -->
+  <sparkline wx:if="{{days5.length >= 2}}" class="flow-spark" points="{{days5}}" trend="{{days5Dir}}" />
+
+  <!-- 龙虎榜（有数据才出） -->
+  <view wx:if="{{lhbRows.length > 0}}" class="lhb">
+    <view class="lhb-title">龙虎榜</view>
+    <view class="lhb-row" wx:for="{{lhbRows}}" wx:for-item="r" wx:key="seat">
+      <text class="lhb-seat">{{r.seat}}</text>
+      <view class="lhb-vals">
+        <text class="num up">买 {{r.buy}}</text>
+        <text class="num down">卖 {{r.sell}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="fnote">
+    <view wx:if="{{marginText !== '--'}}">融资融券余额 {{marginText}}</view>
+    <view wx:if="{{note}}">{{note}}</view>
+  </view>
+</view>

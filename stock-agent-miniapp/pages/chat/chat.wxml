@@ -60,53 +60,43 @@
 
           <!-- ===== AI 消息：左对齐卡片气泡 ===== -->
           <view wx:else class="msg msg--assistant">
-            <view class="bubble bubble--assistant">
-              <!-- 行情卡片：结构化数据，版式用 WXML 直接绘制（markdown 表格还原不出） -->
-              <view wx:if="{{msg.card === 'quote'}}" class="qcard">
-                <view class="qcard-head">
-                  <view class="qcard-name">{{msg.quote.name}}</view>
-                  <view class="qcard-code num">{{msg.quote.code}}</view>
-                </view>
-                <view class="qcard-hero">
-                  <text class="qcard-price num {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.price}}</text>
-                  <text class="qcard-change num {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.change}} {{msg.quote.pct}}</text>
-                </view>
-                <view class="qcard-grid">
-                  <view class="qgrid-item">
-                    <view class="qgrid-label">今开</view>
-                    <view class="qgrid-value num">{{msg.quote.open}}</view>
-                  </view>
-                  <view class="qgrid-item">
-                    <view class="qgrid-label">最高</view>
-                    <view class="qgrid-value num up">{{msg.quote.high}}</view>
-                  </view>
-                  <view class="qgrid-item">
-                    <view class="qgrid-label">最低</view>
-                    <view class="qgrid-value num down">{{msg.quote.low}}</view>
-                  </view>
-                </view>
-                <view wx:if="{{msg.quote.meta}}" class="qcard-foot num">{{msg.quote.meta}}</view>
-              </view>
+            <!-- 卡片消息（quote/kline）时气泡退让成透明容器，视觉交给金融卡组件，
+                 避免出现「卡中卡」的双层底 -->
+            <view class="bubble bubble--assistant {{msg.card ? 'bubble--bare' : ''}}">
+              <!-- 行情卡片：金融卡组件（components/finance/quote-card），
+                   数据字段在 chat.js 的 quoteCard() 里映射 -->
+              <finance-quote-card
+                wx:if="{{msg.card === 'quote'}}"
+                card-class="msg-card"
+                name="{{msg.quote.name}}"
+                code="{{msg.quote.code}}"
+                status="{{msg.quote.status}}"
+                price="{{msg.quote.price}}"
+                change="{{msg.quote.change}}"
+                change-pct="{{msg.quote.changePct}}"
+                open="{{msg.quote.open}}"
+                high="{{msg.quote.high}}"
+                low="{{msg.quote.low}}"
+                amount="{{msg.quote.amount}}"
+                points="{{msg.quote.points}}"
+                tags="{{msg.quote.tags}}"
+                note="{{msg.quote.note}}"
+              />
 
-              <!-- 日 K 表格：涨跌幅按符号着色 -->
-              <view wx:elif="{{msg.card === 'kline'}}" class="kcard">
-                <view class="kcard-head">
-                  <view class="kcard-title">日 K 走势</view>
-                  <view class="kcard-sub num">{{msg.klineSub}}</view>
-                </view>
-                <view class="kline-table">
-                  <view class="kline-tr">
-                    <view class="kline-td kline-th">日期</view>
-                    <view class="kline-td kline-th">收盘</view>
-                    <view class="kline-td kline-th kline-right">涨跌幅</view>
-                  </view>
-                  <view class="kline-tr" wx:for="{{msg.kline}}" wx:for-item="k" wx:key="d">
-                    <view class="kline-td num">{{k.d}}</view>
-                    <view class="kline-td num">{{k.c}}</view>
-                    <view class="kline-td kline-right num {{k.up ? 'up' : 'down'}}">{{k.p}}</view>
-                  </view>
-                </view>
-              </view>
+              <!-- K 线卡片：金融卡组件（components/finance/kline-card） -->
+              <finance-kline-card
+                wx:elif="{{msg.card === 'kline'}}"
+                card-class="msg-card"
+                name=""
+                subtitle="{{msg.klineSub}}"
+                periods="{{msg.klinePeriods}}"
+                active-period="{{msg.klineActivePeriod}}"
+                klines="{{msg.kline}}"
+                ma="{{msg.klineMa}}"
+                period-pct="{{msg.klinePct}}"
+                amplitude="{{msg.klineAmplitude}}"
+                note="{{msg.klineNote}}"
+              />
 
               <!-- 纯文本回答：markdown 块渲染（见页面底部 md-* 模板与样式） -->
               <block wx:else>

@@ -34,14 +34,15 @@ function fmtPct(v, digits) {
   return fmtSign(v, digits) + '%';
 }
 
-// 亿/万单位换算（金额类大数）：
-// >= 1 亿 -> X.XX亿；>= 1 万 -> X.XX万；其余原样千分位
+// 亿/万单位换算（金额类大数，不带正负号——金额本身没有方向）：
+// >= 1 万亿 -> X.XX万亿；>= 1 亿 -> X.XX亿；>= 1 万 -> X.XX万；其余原样千分位
 function fmtAmount(v) {
   const n = toNum(v);
   if (n === null) return '--';
   const abs = Math.abs(n);
-  if (abs >= 1e8) return fmtSign(n / 1e8) + '亿';
-  if (abs >= 1e4) return fmtSign(n / 1e4) + '万';
+  if (abs >= 1e12) return fmtNum(n / 1e12) + '万亿';
+  if (abs >= 1e8) return fmtNum(n / 1e8) + '亿';
+  if (abs >= 1e4) return fmtNum(n / 1e4) + '万';
   return fmtNum(n);
 }
 

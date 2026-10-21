@@ -1,0 +1,51 @@
+@import "../_card.wxss";
+
+/* 周期 chips：横向不换行，激活项金色描边 + 金字（单一强调色） */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88rpx;
+  height: 56rpx;
+  padding: 0 var(--sp-2);
+  box-sizing: border-box;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+}
+
+.chip-text {
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+.chip--on {
+  background: rgba(233, 185, 73, 0.12);
+  border-color: #5A4A1E;
+}
+
+.chip--on .chip-text {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chip--hover {
+  opacity: 0.85;
+}
+
+/* K 线图：≥180rpx（设计稿②布局要点），SVG 拉伸铺满 */
+.chart {
+  margin-top: var(--sp-3);
+  width: 100%;
+  height: 200rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}

@@ -1,0 +1,73 @@
+<!-- 财报速览卡：营收/净利/现金流横向条形对比（条长按三者最大值归一），
+     底部四列比率栅格；一致预期对比只出「超预期/不及预期」事实标签 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <view class="fcard-name">{{periodLabel}} · 业绩速览</view>
+      <view class="fcard-code num">报告期 {{period}}</view>
+    </view>
+    <view wx:if="{{beat}}" class="ftag ftag--gold">{{beat}}</view>
+  </view>
+
+  <!-- 营业收入 -->
+  <view class="bar-row">
+    <text class="bar-lb">营业收入</text>
+    <view class="bar-track">
+      <view class="bar-fill bar-fill--revenue" style="width: {{revenueBar.width}};"></view>
+    </view>
+    <view class="bar-v">
+      <text class="num">{{revenueBar.value}}</text>
+      <text class="num bar-yoy {{revenueBar.yoyDir}}">{{revenueBar.yoy}}</text>
+    </view>
+  </view>
+
+  <!-- 归母净利润 -->
+  <view class="bar-row">
+    <text class="bar-lb">归母净利</text>
+    <view class="bar-track">
+      <view class="bar-fill bar-fill--profit" style="width: {{profitBar.width}};"></view>
+    </view>
+    <view class="bar-v">
+      <text class="num">{{profitBar.value}}</text>
+      <text class="num bar-yoy {{profitBar.yoyDir}}">{{profitBar.yoy}}</text>
+    </view>
+  </view>
+
+  <!-- 经营活动现金流 -->
+  <view class="bar-row">
+    <text class="bar-lb">经营现金流</text>
+    <view class="bar-track">
+      <view class="bar-fill bar-fill--cash" style="width: {{cashBar.width}};"></view>
+    </view>
+    <view class="bar-v">
+      <text class="num">{{cashBar.value}}</text>
+      <text class="num bar-yoy {{cashBar.yoyDir}}">{{cashBar.yoy}}</text>
+    </view>
+  </view>
+
+  <view class="fgrid">
+    <view class="fgrid-row">
+      <view class="fcell">
+        <view class="fcell-k">毛利率</view>
+        <view class="fcell-v num">{{grossMarginText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">净利率</view>
+        <view class="fcell-v num">{{netMarginText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">ROE</view>
+        <view class="fcell-v num">{{roeText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">EPS</view>
+        <view class="fcell-v num">{{epsText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="fnote">
+    <view>同比为报告期对同期口径；一致预期值 {{consensusText}}</view>
+    <view wx:if="{{note}}">{{note}}</view>
+  </view>
+</view>

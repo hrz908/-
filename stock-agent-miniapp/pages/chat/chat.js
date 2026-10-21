@@ -85,16 +85,10 @@ const SENDER_GAP_RPX = 5;
 // 各尺寸下观感一致（换算在 onLoad 里做，chatHeight 用的是 px）
 const KEYBOARD_GAP_RPX = 16;
 
-// 涨跌幅是 '+1.12%' / '-0.65%' 这类字符串，按符号判涨跌方向供卡片着色。
-// 只依赖首字符符号，后续接真实行情数据时无需额外字段
-function isUp(text) {
-  return String(text || '').trim().charAt(0) !== '-';
-}
-
 // 消息条目结构（自绘气泡）：
 // - 纯文本消息：content[0].data 是原文，blocks 是解析后的渲染结构
-// - 卡片消息（quote/kline/voice）：content 为空数组，卡片本体由页面 WXML 绘制
-//   （行情卡、日 K 表的版式用 markdown 表格还原不出来）
+// - 卡片消息（quote/kline/voice）：content 为空数组，卡片本体由
+//   components/finance/* 组件渲染（行情卡、K 线图的版式 markdown 还原不出来）
 function assistantMsg(data) {
   return {
     role: 'assistant',
@@ -113,48 +107,120 @@ function userMsg(data) {
   };
 }
 
-// 结构化卡片消息：卡片本体交给页面 WXML 绘制
+// 结构化卡片消息：卡片本体由 components/finance/* 组件渲染（阶段四），
+// 页面只负责把后端字段映射成组件 props（组件内不做业务计算）
+
+// 后端 decimal 字段可能是数字也可能是字符串，统一转 number；空值给 null
+function numOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+// 交易状态：后端给 trading / closed，转成用户看得懂的中文
+function statusTextOf(s) {
+  if (s === 'trading') return '交易中';
+  if (s === 'closed') return '已收盘';
+  return s || '';
+}
+
+// 简单移动平均：与 values 等长，前 n-1 项为 null（数据不足不出点，折线自然断开）
+function movingAverage(values, n) {
+  const out = [];
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    sum += v == null ? 0 : v;
+    if (i >= n) {
+      const drop = values[i - n];
+      sum -= drop == null ? 0 : drop;
+    }
+    out.push(i >= n - 1 && v != null ? sum / n : null);
+  }
+  return out;
+}
+
+// 聊天场景的 K 线周期：table 事件只带 rows，不带周期与股票信息，
+// 因此这里只展示日 K 一档（完整五周期切换属于 K 线详情页，见改造指南目录规划）
+const KLINE_PERIODS_CHAT = [{ key: 'day', label: '日K' }];
+
+// K 线卡最多渲染的根数。比旧表格的 10 行多：图表需要足够根数才能看出趋势与均线，
+// 且 SVG 背景图按 viewBox 缩放，根数多不会增加渲染成本
+const KLINE_CARD_ROWS = 30;
+
 function quoteCard(q) {
-  // 后端 QuoteDetail 的涨跌幅字段是 change_percent（如 "-0.33"），且没有 meta 字段；
-  // 没有的信息在页面上拼出来，缺了就留空
-  const pctNum = parseFloat(q.change_percent);
-  const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
-  const meta = [
-    q.time || '',
-    q.volume ? '量 ' + q.volume + '手' : '',
-    q.amount ? '额 ' + q.amount + '万' : ''
-  ].filter(Boolean).join(' · ');
+  // 后端 QuoteDetail：涨跌幅字段是 change_percent（可能为字符串）；
+  // 成交额单位是万元，卡内统一按元换算（utils/format 的亿万换算是元口径）
+  const amount = q.amount == null ? null : parseFloat(q.amount) * 10000;
   return {
     role: 'assistant',
     status: 'complete',
     card: 'quote',
     content: [],
-    quote: Object.assign({}, q, { pct: pct, meta: meta, up: isUp(pct) })
+    quote: {
+      name: q.name,
+      code: q.code,
+      status: statusTextOf(q.status),
+      price: numOrNull(q.price),
+      change: numOrNull(q.change),
+      changePct: numOrNull(q.change_percent),
+      open: numOrNull(q.open),
+      high: numOrNull(q.high),
+      low: numOrNull(q.low),
+      amount: isNaN(amount) ? null : amount,
+      note: q.time ? '行情时间 ' + q.time : ''
+    }
   };
 }
 
-// 日 K 卡片最多渲染的行数。后端一次可能给几十根 K 线，全量渲染会把对话区撑爆、
-// 流式期间每帧重排造成画面抖动；卡片只做「最近走势」概览，取最后 _KLINE_MAX_ROWS 行
-const KLINE_MAX_ROWS = 10;
-
 function klineCard(rows) {
-  // 后端 KlineRow 字段是 date / close / change_percent，
-  // 卡片模板展示「日期 / 收盘 / 涨跌幅」，在这里做映射
+  // 后端 KlineRow：date / open / high / low / close / volume / change_percent
   const all = Array.isArray(rows) ? rows : [];
-  const shown = all.slice(-KLINE_MAX_ROWS);
-  const kline = shown.map((r) => {
-    const pctNum = parseFloat(r.change_percent);
-    const pct = isNaN(pctNum) ? '--' : (pctNum > 0 ? '+' : '') + pctNum.toFixed(2) + '%';
-    return { d: r.date, c: r.close, p: pct, up: !isNaN(pctNum) && pctNum >= 0 };
-  });
+  const shown = all.slice(-KLINE_CARD_ROWS);
+  const klines = shown.map((r) => ({
+    d: r.date,
+    o: numOrNull(r.open),
+    h: numOrNull(r.high),
+    l: numOrNull(r.low),
+    c: numOrNull(r.close),
+    v: numOrNull(r.volume)
+  }));
+
+  const closes = klines.map((k) => k.c);
+  const ma = {
+    ma5: movingAverage(closes, 5),
+    ma10: movingAverage(closes, 10),
+    ma20: movingAverage(closes, 20)
+  };
+
+  // 区间涨跌幅 / 振幅：按区间首末收盘价计算（口径写进卡内注释，合规要求）
+  const first = klines[0];
+  const last = klines[klines.length - 1];
+  let periodPct = null;
+  let amplitude = null;
+  if (first && last && first.c) {
+    periodPct = ((last.c - first.c) / first.c) * 100;
+    const highs = klines.map((k) => k.h).filter((v) => v != null);
+    const lows = klines.map((k) => k.l).filter((v) => v != null);
+    if (highs.length && lows.length) {
+      amplitude = ((Math.max.apply(null, highs) - Math.min.apply(null, lows)) / first.c) * 100;
+    }
+  }
+
   return {
     role: 'assistant',
     status: 'complete',
     card: 'kline',
     content: [],
-    kline: kline,
-    // 副标题按实际渲染的行数走：行数被截断时如实标出「最近 N 个交易日」
-    klineSub: '最近 ' + kline.length + ' 个交易日 · 前复权' + (all.length > kline.length ? '（共 ' + all.length + ' 根）' : '')
+    kline: klines,
+    klineMa: ma,
+    klinePeriods: KLINE_PERIODS_CHAT,
+    klineActivePeriod: 'day',
+    klinePct: periodPct,
+    klineAmplitude: amplitude,
+    // 副标题按实际渲染的根数走：被截断时如实标出
+    klineSub: '最近 ' + klines.length + ' 个交易日 · 前复权' + (all.length > klines.length ? '（共 ' + all.length + ' 根）' : ''),
+    klineNote: '均线为简单移动平均；区间涨跌幅与振幅按区间首末收盘价计算'
   };
 }
 

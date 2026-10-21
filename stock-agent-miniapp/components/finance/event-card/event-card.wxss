@@ -1,0 +1,76 @@
+@import "../_card.wxss";
+
+/* 时间轴行：圆点 + 内容 */
+.evt {
+  display: flex;
+  gap: var(--gap-grid);
+  margin-top: var(--sp-3);
+}
+
+/* 圆点：金色=需关注，蓝色=常规（视觉稿规格） */
+.evt-dot {
+  flex: none;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  margin-top: 10rpx;
+}
+
+.evt-dot--gold {
+  background: var(--accent);
+  box-shadow: 0 0 0 6rpx rgba(233, 185, 73, 0.12);
+}
+
+.evt-dot--blue {
+  background: #5B9BEF;
+}
+
+.evt-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.evt-t {
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* 事件类型小标签（财报 / 解禁 / 回购…） */
+.evt-type {
+  display: inline-block;
+  margin-right: var(--sp-1);
+  padding: 1rpx 10rpx;
+  border-radius: var(--r-tag);
+  border: 1rpx solid var(--line);
+  background: var(--surface-2);
+  font-size: var(--fs-min);
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+
+.evt-s {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.evt-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
+}
+
+.evt-date {
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+/* 原文链接：复制 */
+.evt-src {
+  font-size: var(--fs-min);
+  color: #5B9BEF;
+  text-decoration: underline;
+}

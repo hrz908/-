@@ -3,7 +3,9 @@
     "base-navbar": "/components/base/navbar/navbar",
     "base-icon": "/components/base/icon/icon",
     "base-popup": "/components/base/popup/popup",
-    "base-toast": "/components/base/toast/toast"
+    "base-toast": "/components/base/toast/toast",
+    "finance-quote-card": "/components/finance/quote-card/quote-card",
+    "finance-kline-card": "/components/finance/kline-card/kline-card"
   },
   "backgroundColor": "#0B1219",
   "backgroundColorTop": "#0B1219",

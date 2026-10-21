@@ -1,0 +1,13 @@
+/* 迷你走势线：高度由使用方通过外部类或行内样式覆盖 */
+.spark {
+  width: 100%;
+  height: 88rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+/* 数据不足（<2 个点）时 src 为空，不画任何东西也不占视觉噪音 */
+.spark:empty {
+  display: none;
+}

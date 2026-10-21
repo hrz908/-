@@ -3,7 +3,8 @@
 // SVG 内联进 data URI 零文件依赖；小程序 JSVM 的 btoa 可用性不稳，
 // 故用 encodeURIComponent 编码（等效内联，不依赖任何运行时能力）。
 // 注意：背景图里的颜色在编码时已固化，因此 color 只接受具体色值；
-// 为保持页面写法顺手，这里把常用 var(--xx) 名称映射到具体色值。
+// 为保持页面写法顺手，var(--xx) 名称由 utils/color.js 统一翻译成 hex
+const { resolveColor } = require('../../../utils/color');
 const ICONS_STROKE = {
   'arrow-left': "<path d='M19 12H5'/><path d='M12 19l-7-7 7-7'/>",
   'arrow-up': "<path d='M12 19V5'/><path d='M5 12l7-7 7 7'/>",
@@ -37,27 +38,6 @@ const ICONS_FILL = {
   play: "<path d='M8 5.2v13.6L19.5 12z'/>",
   pause: "<path d='M7 5h3.2v14H7z'/><path d='M13.8 5H17v14h-3.2z'/>"
 };
-
-// 常用色名 -> 具体色值（新深色 token + 过渡期浅色 token）
-const COLOR_VARS = {
-  'var(--ink)': '#E8EDF2',
-  'var(--ink-2)': '#9AA9B8',
-  'var(--ink-3)': '#6B7A8A',
-  'var(--up)': '#F2555A',
-  'var(--down)': '#1FB87A',
-  'var(--flat)': '#8A97A5',
-  'var(--accent)': '#E9B949',
-  'var(--line)': '#26333F',
-  'var(--c-ink)': '#181A1C',
-  'var(--c-gray)': '#8A8F99',
-  'var(--c-gray-light)': '#B0B4BC',
-  'var(--c-blue)': '#2559EB'
-};
-
-function resolveColor(color) {
-  const raw = color || 'var(--ink-2)';
-  return COLOR_VARS[raw] || raw;
-}
 
 function buildSrc(name, color) {
   const c = resolveColor(color);

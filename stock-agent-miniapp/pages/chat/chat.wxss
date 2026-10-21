@@ -255,128 +255,18 @@
   text-decoration: underline;
 }
 
-/* ===== 行情卡片（内联版，阶段四将迁入 components/finance/quote-card） ===== */
-.qcard {
+/* ===== 气泡内的金融卡（components/finance/*） ===== */
+/* 卡片消息：气泡退让成透明容器，卡片自带 surface 底 / 描边 / 内边距，
+   避免「卡中卡」的双层底；宽度拉满一行 */
+.bubble--bare {
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.msg-card {
   width: 100%;
-}
-
-.qcard-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-
-.qcard-name {
-  font-size: var(--fs-title);
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.qcard-code {
-  font-size: var(--fs-aux);
-  color: var(--ink-3);
-}
-
-.qcard-hero {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-}
-
-/* 价格大号 + 涨跌幅紧随（设计稿：价格 32px 级） */
-.qcard-price {
-  font-size: var(--fs-price);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.5rpx;
-}
-
-.qcard-change {
-  font-size: var(--fs-aux);
-  font-weight: 600;
-}
-
-.qcard-grid {
-  display: flex;
-  margin-top: var(--sp-3);
-  padding-top: var(--sp-3);
-  border-top: 1rpx solid var(--line);
-}
-
-.qgrid-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.qgrid-label {
-  font-size: var(--fs-min);
-  color: var(--ink-3);
-}
-
-.qgrid-value {
-  font-size: var(--fs-body);
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.qcard-foot {
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: 1rpx solid var(--line);
-  font-size: var(--fs-min);
-  color: var(--ink-3);
-}
-
-/* ===== 日 K 表格（内联版，阶段四将迁入 components/finance/kline-card） ===== */
-.kcard {
-  width: 100%;
-}
-
-.kcard-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-
-.kcard-title {
-  font-size: var(--fs-title);
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.kcard-sub {
-  font-size: var(--fs-aux);
-  color: var(--ink-3);
-}
-
-.kline-table {
-  margin-top: var(--sp-2);
-}
-
-.kline-tr {
-  display: flex;
-  align-items: center;
-  min-height: 52rpx;
-  border-top: 1rpx solid var(--line);
-}
-
-.kline-td {
-  flex: 1;
-  font-size: var(--fs-aux);
-  color: var(--ink);
-}
-
-/* 涨跌幅靠右对齐，数值等宽对齐更好读 */
-.kline-right {
-  text-align: right;
-}
-
-.kline-th {
-  font-size: var(--fs-min);
-  color: var(--ink-3);
 }
 
 /* 红涨绿跌（国内习惯） */

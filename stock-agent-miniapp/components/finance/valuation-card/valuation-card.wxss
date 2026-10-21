@@ -1,0 +1,50 @@
+@import "../_card.wxss";
+
+/* PE 分位进度条：标签 + 槽 + 值，槽底用次级面 */
+.pct-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-grid);
+  margin-top: var(--sp-3);
+}
+
+.pct-label {
+  flex: none;
+  width: 96rpx;
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+.pct-track {
+  flex: 1;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.pct-fill {
+  height: 100%;
+  border-radius: 6rpx;
+}
+
+/* 档位配色：偏低=绿 / 偏高=红 / 中位=灰（与涨跌语义一致，不引入新色） */
+.pct-fill--down {
+  background: var(--down);
+}
+
+.pct-fill--up {
+  background: var(--up);
+}
+
+.pct-fill--flat {
+  background: var(--flat);
+}
+
+.pct-value {
+  flex: none;
+  width: 160rpx;
+  text-align: right;
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}

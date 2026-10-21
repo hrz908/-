@@ -1,0 +1,57 @@
+<!-- 走势与 K 线卡：周期切换 chips 常驻，K 线区高度 ≥180rpx，
+     下方四列指标栅格；支撑/压力位与口径说明收在底部注释 -->
+<view class="fcard card-class">
+  <view class="fcard-hd">
+    <view class="fcard-title-col">
+      <!-- 无股票名时（如聊天场景只收到 rows）退化为「K 线走势」 -->
+      <view class="fcard-name">{{name ? name + ' 走势' : 'K 线走势'}}</view>
+      <view class="fcard-code num">{{code || subtitle}}</view>
+    </view>
+    <view class="ftag">{{activeLabel}} · MA5/10/20</view>
+  </view>
+
+  <!-- 周期 chips（受控：点击只上报，由父级换数据） -->
+  <view class="chips">
+    <view
+      class="chip {{i === periodIndex ? 'chip--on' : ''}}"
+      wx:for="{{periodList}}"
+      wx:for-item="p"
+      wx:for-index="i"
+      wx:key="key"
+      hover-class="chip--hover"
+      data-index="{{i}}"
+      bindtap="onChipTap"
+    >
+      <text class="chip-text">{{p.label}}</text>
+    </view>
+  </view>
+
+  <!-- K 线图：SVG data-URI 背景（蜡烛 + MA + 成交量） -->
+  <view class="chart" style="background-image: url({{chartSrc}});"></view>
+
+  <view class="fgrid">
+    <view class="fgrid-row">
+      <view class="fcell">
+        <view class="fcell-k">区间涨幅</view>
+        <view class="fcell-v num {{pctDir}}">{{pctText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">振幅</view>
+        <view class="fcell-v num">{{amplitudeText}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">MA5</view>
+        <view class="fcell-v num">{{ma5Text}}</view>
+      </view>
+      <view class="fcell">
+        <view class="fcell-k">量比</view>
+        <view class="fcell-v num">{{volumeRatioText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="fnote">
+    <view>支撑 {{supportText}} · 压力 {{resistanceText}}</view>
+    <view wx:if="{{note}}">{{note}}</view>
+  </view>
+</view>
