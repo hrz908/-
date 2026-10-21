@@ -1,81 +1,19 @@
-/* 深色专业终端的设计变量与全局基线（本次改造新增） */
+/* 深色专业终端的设计变量与全局基线（styles/token.wxss + styles/base.wxss） */
 @import "styles/token.wxss";
 @import "styles/base.wxss";
 
-/* ===== 过渡期遗留变量（阶段二页面迁移完成、阶段五统一清理）=====
-   页面仍在引用 --c-* / --td-*，先保留定义避免样式断裂；
-   page 的基线属性（height/background/color/font-family/font-size）
-   已由 styles/base.wxss 接管，本块只留变量，不再写基线样式 */
+/* ===== 间距规格（项目自有 8pt 栅格，与设计系统无关，全局保留） =====
+   375pt 基准下 2rpx = 1px。全项目间距只取这六档，不再出现随手写的数字；
+   单位一律 rpx。唯一保留 px 的地方：安全区 env() 与系统胶囊对齐的固定值 */
 page {
-  /* 原浅色主题 token，见 stock-agent-miniapp 改造前版本 */
-  --c-bg: #F5F6F8;           /* 页面背景 */
-  --c-blue: #2559EB;         /* 主色：品牌蓝 */
-  --c-ink: #181A1C;          /* 主文字 */
-  --c-gray: #8A8F99;         /* 次要文字 */
-  --c-gray-light: #B0B4BC;   /* 弱文字/占位 */
-  --c-red: #E64545;          /* 涨（红） */
-  --c-green: #16A34A;        /* 跌（绿） */
-  --c-border: #E5E7EB;       /* 分割线/描边 */
-  --c-card: #FFFFFF;         /* 卡片、气泡等浅色面 */
-  --c-blue-bubble: #4E7CF3;  /* 用户气泡：比主蓝浅一档 */
-  --c-hover: #FAFAFB;        /* 可点块的按下态 */
-  --c-fill: #F3F3F3;         /* 浅灰填充：头像底、输入框底 */
-  --c-tint: #EDF1FE;         /* 开关激活时的淡蓝底 */
-  --c-danger: #D54941;       /* 危险操作（退出登录） */
-  /* watchlist 下拉用的两个名字，统一到上面的 token，避免各页自己起一套 */
-  --c-divider: var(--c-border);
-  --c-text: var(--c-ink);
-
-  /* ===== 间距规格 =====
-     8pt 栅格的 rpx 版本（375pt 基准下 2rpx = 1px）。
-     全项目间距只能取这五档，不再出现随手写的数字；
-     单位一律 rpx，与 TDesign 组件内部保持一致（原来 settings 用 rpx、
-     watchlist/alerts 用 px、chat 两者混用，同一种间距出现两套数值）。
-
-     唯一保留 px 的地方：安全区 env() 与系统胶囊对齐相关的固定值
-     （navbar 的 10px、悬浮按钮让位的 88px），它们本来就是设备像素语义 */
   --sp-1: 8rpx;   /* 4px  图标与文字、紧密元素之间 */
   --sp-2: 16rpx;  /* 8px  卡片内相邻行 */
   --sp-3: 24rpx;  /* 12px 卡片内区块 */
   --sp-4: 32rpx;  /* 16px 区块标准间距：卡片与卡片、卡片与容器边缘 */
   --sp-5: 48rpx;  /* 24px 大区块之间（如列表与底部操作区） */
-  --sp-6: 96rpx;  /* 48px 仅用于整屏居中的首屏标识区（首屏 Logo 区），
-                     普通区块不要用它 —— 留这一档是为了不让首屏去凑小档位 */
+  --sp-6: 96rpx;  /* 48px 仅用于整屏居中的首屏标识区，普通区块不要用它 */
 
-  /* 语义别名：改规格时只改上面五档，这里的含义不动 */
-  --gap-block: var(--sp-4);  /* 区块与区块之间 */
-  --gap-title: var(--sp-3);  /* 分组标题与它自己的卡片：
-                                刻意比 --gap-block 小一档，
-                                标题才「属于」下面的卡片，而不是飘在中间 */
+  /* 语义别名：改规格时只改上面六档，这里的含义不动 */
   --pad-card: var(--sp-4);   /* 卡片内边距 */
-  --pad-page: var(--sp-4);   /* 页面左右留白，与 TDesign card 主题的 32rpx 一致 */
-
-  /* 子页面 navbar 返回箭头字号：TDesign 默认 24px，调大到 34px 更好点按。
-     这是 TDesign 官方预留的变量，改这里比用选择器硬改内部样式稳 */
-  --td-navbar-left-arrow-size: 34px;
-
-  /* 所有页面 navbar 标题字号：TDesign 默认 36rpx，统一调大到 40rpx */
-  --td-navbar-title-font: 600 40rpx / 56rpx "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  --pad-page: var(--sp-4);   /* 页面左右留白 */
 }
-
-/* 子页面 navbar 返回箭头：固定左边距，控制其离屏幕左边缘的距离。
-   （之前为与右上角系统胶囊对称取 10px，现按需要整体往右挪一点到 18px）
-   用 !important 是为了覆盖组件内部样式，且不被别的规则影响 */
-.t-navbar__left {
-  margin-left: 18px !important;
-}
-
-/* 标题在整个页面居中：把标题层铺满整行（left:0/right:0/width:100%）
-   再让点击穿透（pointer-events:none），这样既保证标题水平居中于屏幕，
-   又不会盖住左侧菜单/返回按钮导致其点不了 */
-.t-navbar__center {
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  justify-content: center !important;
-  text-align: center !important;
-  pointer-events: none !important;
-}
-
-/* 不再全局重置 button：TDesign 的 t-button 依赖自身的组件样式，
-   页面级 button 选择器会穿透影响它的默认外观 */

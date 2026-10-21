@@ -33,12 +33,16 @@ globs:
 它一聚焦就弹微信昵称面板，所以只允许存在于「点了使用微信昵称」→「取到值」之间，用完立刻切回 `text`。
 残留下来会让用户每次手动点输入框都被面板打断。
 
-## 4. 构建链三步，少一步白屏
+## 4. 构建链两步，少一步白屏
 
 1. `npm install`
-2. 微信开发者工具 → 工具 → 构建 npm
-3. `npm run fix:npm`（用根级 marked@4 覆盖 TDesign 内嵌副本；PC 端微信不支持 ES2020+ 语法，漏了报
-   `SyntaxError` → `module 'app.js' is not defined` → 白屏）
+2. 微信开发者工具 → 工具 → 构建 npm（marked 仍在小程序端使用：`utils/markdown.js`
+   走 `miniprogram_npm/marked`；marked@4 是 ES2017 语法，PC 端微信可直跑）
+
+历史包袱已清除：改造前第 3 步 `npm run fix:npm`（用根级 marked@4 覆盖 TDesign 内嵌的
+ES2020+ 副本）随 TDesign 移除一并删除，`scripts/fix-marked.js` 已不存在。
+PC 端微信仍不支持 ES2020+ 语法，报 `module 'app.js' is not defined` 白屏时，
+先查是不是又引入了带现代语法的新依赖。
 
 `miniprogram_npm/` 是构建产物、不入库，换机器必须重走。
 

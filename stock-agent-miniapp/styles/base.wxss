@@ -7,9 +7,9 @@
    - 不用 @media / rem / vh / vw，统一 rpx（750rpx = 屏宽）
    ============================================================= */
 
-/* reset：只列项目实际用到的原生标签，刻意不含 button ——
-   原生 button 的平台默认样式暂不清（t-button 仍在用），
-   待阶段五移除 TDesign 后随清理一并补上 */
+/* reset：只列项目实际用到的原生标签，不上 * 。
+   button 也一并重置：TDesign 移除后不再有「页面 button 选择器穿透
+   影响 t-button 默认外观」的顾虑（改造前 app.wxss 刻意绕开的正是这条） */
 page,
 view,
 text,
@@ -19,10 +19,26 @@ swiper,
 swiper-item,
 input,
 textarea,
-navigator {
+navigator,
+button {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* 原生 button 的平台默认样式（各端差异大）显式清掉，
+   含 ::after 那条默认边框——WXSS 禁写双冒号，用单冒号 */
+button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+  line-height: inherit;
+}
+
+button:after {
+  border: none;
 }
 
 /* 页面基线：深色底 + 浅色字 + 系统中文字体栈。
