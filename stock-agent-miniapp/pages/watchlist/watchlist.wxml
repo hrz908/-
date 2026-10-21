@@ -37,12 +37,16 @@
             wx:for-index="index"
             wx:key="code"
           >
-            <!-- 主行：绝对定位于操作区之上，位移由 swipeIndex / swipeOpen 决定 -->
+            <!-- 主行：绝对定位于操作区之上，位移由 swipeIndex / swipeOpen 决定。
+                 点击进 K 线详情页（分包 pages/kline），code 允许带空格，
+                 后端 NormalizeCode 会统一格式 -->
             <view
               class="stock-row-main {{item.sep ? 'stock-row-main--sep' : ''}}"
               style="transform: translateX({{index === swipeIndex ? swipeDx : (index === swipeOpen ? -128 : 0)}}px);"
               hover-class="stock-row-main--hover"
               data-index="{{index}}"
+              data-code="{{item.code}}"
+              data-name="{{item.name}}"
               bindtap="onRowMainTap"
               bindtouchstart="onRowTouchStart"
               bindtouchmove="onRowTouchMove"

@@ -292,11 +292,20 @@ Page({
     this.setData({ swipeIndex: -1, swipeDx: 0, swipeOpen: open ? s.index : -1 });
   },
 
-  // 点主行：只负责把打开状态的行收回去（行本身没有跳转）
-  onRowMainTap() {
+  // 点主行：先把打开状态的行收回去；没收起的动作（纯点击）则进 K 线详情页。
+  // 横向滑动判定在 onRowTouchMove 里做，滑动锁定时触摸已交还列表、tap 不触发，
+  // 因此滑完抬手不会误跳
+  onRowMainTap(e) {
     if (this.data.swipeOpen >= 0) {
       this.setData({ swipeOpen: -1 });
+      return;
     }
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    if (!ds.code) return;
+    wx.navigateTo({
+      url: '/pages/kline/index?code=' + encodeURIComponent(ds.code) +
+        (ds.name ? '&name=' + encodeURIComponent(ds.name) : '')
+    });
   },
 
   // 轻提示：自研 base-toast（替代 TDesign toast）

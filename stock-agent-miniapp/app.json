@@ -5,6 +5,13 @@
     "pages/alerts/alerts",
     "pages/settings/settings"
   ],
+  "subPackages": [
+    {
+      "root": "pages/kline",
+      "name": "kline",
+      "pages": ["index"]
+    }
+  ],
   "window": {
     "navigationStyle": "custom",
     "backgroundColor": "#0B1219",

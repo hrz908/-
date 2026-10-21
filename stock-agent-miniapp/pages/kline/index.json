@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "default",
+  "navigationBarBackgroundColor": "#0B1219",
+  "navigationBarTextStyle": "white",
+  "navigationBarTitleText": "K线",
+  "disableScroll": true,
+  "usingComponents": {}
+}

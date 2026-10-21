@@ -1060,6 +1060,18 @@ Page({
     this.loadMarkets(); // 每次打开抽屉刷新一次（后端 30s 缓存，开销可控）
   },
 
+  // 点行情卡 -> K 线详情页（分包 pages/kline）。
+  // 卡片内没有可点的子元素，bindtap 绑在组件根上即可整卡响应；
+  // 没有 code（理论上不会出现）时不跳
+  onQuoteCardTap(e) {
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    if (!ds.code) return;
+    wx.navigateTo({
+      url: '/pages/kline/index?code=' + encodeURIComponent(ds.code) +
+        (ds.name ? '&name=' + encodeURIComponent(ds.name) : '')
+    });
+  },
+
   // 点遮罩关闭抽屉（base-popup 的 mask 事件）。
   // 左滑关闭不走这里（onSwipeMove 直接置 false），两者最终都汇到 drawerOpen
   onDrawerMask() {

@@ -1,0 +1,58 @@
+<!-- K 线详情页：原生导航栏 + 周期 chips + uCharts 画布 + 区间统计。
+     画布触摸绑定 scroll/showToolTip（uCharts 实例方法），页面级 disableScroll
+     开启，画布上再加 disable-scroll 双保险 -->
+<view class="page">
+  <view class="chips">
+    <view
+      class="chip {{p.key === activePeriod ? 'chip--on' : ''}}"
+      wx:for="{{periods}}"
+      wx:for-item="p"
+      wx:for-index="i"
+      wx:key="key"
+      hover-class="chip--hover"
+      data-index="{{i}}"
+      bindtap="onPeriodTap"
+    >
+      <text class="chip-text">{{p.label}}</text>
+    </view>
+  </view>
+
+  <view class="chart-card">
+    <canvas
+      type="2d"
+      id="kline-canvas"
+      class="canvas"
+      disable-scroll="{{true}}"
+      bindtouchstart="onTouchStart"
+      bindtouchmove="onTouchMove"
+      bindtouchend="onTouchEnd"
+    ></canvas>
+    <view wx:if="{{loading}}" class="mask">加载中…</view>
+    <view wx:elif="{{empty}}" class="mask">暂无 K 线数据</view>
+    <view wx:elif="{{errorMsg}}" class="mask">{{errorMsg}}</view>
+  </view>
+
+  <view class="stats">
+    <view class="stat">
+      <view class="stat-k">区间涨跌幅</view>
+      <view class="stat-v num {{stats.pctDir}}">{{stats.pctText}}</view>
+    </view>
+    <view class="stat">
+      <view class="stat-k">区间振幅</view>
+      <view class="stat-v num">{{stats.ampText}}</view>
+    </view>
+    <view class="stat">
+      <view class="stat-k">区间最高</view>
+      <view class="stat-v num up">{{stats.highText}}</view>
+    </view>
+    <view class="stat">
+      <view class="stat-k">区间最低</view>
+      <view class="stat-v num down">{{stats.lowText}}</view>
+    </view>
+  </view>
+
+  <view class="note">
+    <view>口径：前复权；均线为简单移动平均；区间涨跌幅与振幅按区间首末收盘价计算。</view>
+    <view>行情数据存在延迟，仅供参考，不构成投资建议。</view>
+  </view>
+</view>
