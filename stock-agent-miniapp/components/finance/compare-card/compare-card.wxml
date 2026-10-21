@@ -18,7 +18,7 @@
       </view>
       <view class="cmp-row {{ri > 0 ? 'cmp-row--sep' : ''}}" wx:for="{{rows}}" wx:for-item="row" wx:for-index="ri" wx:key="label">
         <view class="cmp-cell cmp-cell--label">{{row.label}}</view>
-        <view class="cmp-cell num {{c.tone}}" wx:for="{{row.cells}}" wx:for-item="c" wx:key="*this">{{c.text}}</view>
+        <view class="cmp-cell num {{c.tone}}" wx:for="{{row.cells}}" wx:for-item="c" wx:key="index">{{c.text}}</view>
       </view>
     </view>
   </scroll-view>

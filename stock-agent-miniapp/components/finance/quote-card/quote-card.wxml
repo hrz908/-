@@ -11,7 +11,7 @@
         class="ftag {{t.theme ? 'ftag--' + t.theme : ''}}"
         wx:for="{{tags}}"
         wx:for-item="t"
-        wx:key="*this"
+        wx:key="index"
       >{{t.text}}</view>
     </view>
   </view>

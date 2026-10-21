@@ -26,8 +26,8 @@
     </view>
   </view>
 
-  <!-- K 线图：SVG data-URI 背景（蜡烛 + MA + 成交量） -->
-  <view class="chart" style="background-image: url({{chartSrc}});"></view>
+  <!-- K 线图：SVG data-URI 背景（蜡烛 + MA + 成交量）；数据不足时不占位 -->
+  <view wx:if="{{chartSrc}}" class="chart" style="background-image: url({{chartSrc}});"></view>
 
   <view class="fgrid">
     <view class="fgrid-row">
