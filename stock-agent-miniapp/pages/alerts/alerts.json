@@ -4,9 +4,7 @@
     "base-icon": "/components/base/icon/icon",
     "base-popup": "/components/base/popup/popup",
     "base-toast": "/components/base/toast/toast",
-    "base-empty": "/components/base/empty/empty",
-    "t-picker": "tdesign-miniprogram/picker/picker",
-    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
+    "base-empty": "/components/base/empty/empty"
   },
   "backgroundColor": "#0B1219",
   "backgroundColorTop": "#0B1219",

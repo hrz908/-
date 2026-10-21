@@ -315,6 +315,17 @@
   border-color: #3A4A5A;
 }
 
+/* 原生 picker 触发区：hover-class 加在 picker 根节点上，
+   需要透传一层改内部行的边框色（WXSS 没有 :has，只能这样写） */
+.option-picker {
+  display: block;
+  width: 100%;
+}
+
+.option-picker.option-row--hover .option-row {
+  border-color: #3A4A5A;
+}
+
 .option-label {
   font-size: var(--fs-body);
   color: var(--ink);

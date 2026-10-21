@@ -1,6 +1,6 @@
 <!-- 页面结构：自研 navbar + 自绘概览宫格 + 自绘提醒卡 + base-popup 表单。
-      选择器（t-picker）按改造计划留在阶段三迁移，本阶段先替换其余全部 TDesign 件；
-      picker 仍放在 dialog 外面：fixed 定位的弹层不能被带 transform 的容器包着 -->
+     选择器用微信原生 picker（mode="selector"）：客户端原生渲染的半屏滚轮，
+     触发区是自绘行，视觉完全可控（执行指南 4.3） -->
 <view class="page">
   <base-navbar title="提醒" left-arrow="{{true}}" bind:back="goBack" />
 
@@ -136,15 +136,29 @@
         <base-icon name="close" size="32rpx" color="var(--ink-3)" />
       </view>
 
-      <!-- ===== 区域 2：触发条件（带标题的选择器） ===== -->
+      <!-- ===== 区域 2：触发条件 =====
+           原生 picker（mode="selector"）：触发区就是这行自绘内容，
+           点击后由客户端弹出半屏滚轮，视觉完全可控。
+           注意 bindchange 传回的 detail.value 是「数组索引」不是业务值，
+           映射逻辑见 alerts.js 的 onConditionChange（执行指南 4.3 坑 1） -->
       <view class="form-section">
-        <view class="option-row" hover-class="option-row--hover" bindtap="onConditionPickerOpen">
-          <text class="option-label">触发条件</text>
-          <view class="option-value">
-            <text class="option-value-text num">{{conditionText}}</text>
-            <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+        <picker
+          class="option-picker"
+          mode="selector"
+          range="{{conditionOptions}}"
+          range-key="label"
+          value="{{conditionIndex}}"
+          hover-class="option-row--hover"
+          bindchange="onConditionChange"
+        >
+          <view class="option-row">
+            <text class="option-label">触发条件</text>
+            <view class="option-value">
+              <text class="option-value-text">{{conditionText}}</text>
+              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+            </view>
           </view>
-        </view>
+        </picker>
       </view>
 
       <!-- ===== 区域 3：阈值（单位跟在输入框尾部） ===== -->
@@ -164,75 +178,50 @@
         </view>
       </view>
 
-      <!-- 成交量类额外显示基准选择：与触发条件同一套带标题的选择器 -->
+      <!-- 成交量类额外显示基准选择：同样用原生 picker。
+           range 是静态数组、不随其它列联动，因此不存在「更新 range 后
+           重置后续列索引」的问题（执行指南 4.3 坑 2）；本页也没有
+           选项级置灰需求（坑 3） -->
       <view wx:if="{{conditionType === 'volume'}}" class="form-section">
-        <view class="option-row" hover-class="option-row--hover" bindtap="onVolumeBasePickerOpen">
-          <text class="option-label">基准周期</text>
-          <view class="option-value">
-            <text class="option-value-text num">{{volumeBaseText}}</text>
-            <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+        <picker
+          class="option-picker"
+          mode="selector"
+          range="{{volumeBaseOptions}}"
+          range-key="label"
+          value="{{volumeBaseIndex}}"
+          hover-class="option-row--hover"
+          bindchange="onVolumeBaseChange"
+        >
+          <view class="option-row">
+            <text class="option-label">基准周期</text>
+            <view class="option-value">
+              <text class="option-value-text">{{volumeBaseText}}</text>
+              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+            </view>
           </view>
-        </view>
+        </picker>
       </view>
 
       <!-- 检查频率 -->
       <view class="form-section">
-        <view class="option-row" hover-class="option-row--hover" bindtap="onFrequencyPickerOpen">
-          <text class="option-label">检查频率</text>
-          <view class="option-value">
-            <text class="option-value-text num">{{frequencyText}}</text>
-            <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+        <picker
+          class="option-picker"
+          mode="selector"
+          range="{{frequencyOptions}}"
+          range-key="label"
+          value="{{frequencyIndex}}"
+          hover-class="option-row--hover"
+          bindchange="onFrequencyChange"
+        >
+          <view class="option-row">
+            <text class="option-label">检查频率</text>
+            <view class="option-value">
+              <text class="option-value-text">{{frequencyText}}</text>
+              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+            </view>
           </view>
-        </view>
+        </picker>
       </view>
     </view>
   </base-popup>
-
-  <!-- ========== 带标题的选择器（t-picker，阶段三迁移到原生 picker） ==========
-       放在 base-popup 外面：picker 内部是 fixed 定位的弹层，
-       被带 transform 的容器包住时会以面板为参照而错位 -->
-  <t-picker
-    class="condition-picker"
-    visible="{{conditionVisible}}"
-    value="{{conditionPickerValue}}"
-    title="选择触发条件"
-    confirm-btn="确定"
-    cancel-btn="取消"
-    usingCustomNavbar
-    popup-props="{{pickerPopupProps}}"
-    bind:change="onConditionPickerChange"
-    bind:close="onConditionPickerClose"
-  >
-    <t-picker-item options="{{conditionOptions}}" />
-  </t-picker>
-
-  <t-picker
-    class="condition-picker"
-    visible="{{volumeBaseVisible}}"
-    value="{{volumeBasePickerValue}}"
-    title="选择基准周期"
-    confirm-btn="确定"
-    cancel-btn="取消"
-    usingCustomNavbar
-    popup-props="{{pickerPopupProps}}"
-    bind:change="onVolumeBasePickerChange"
-    bind:close="onVolumeBasePickerClose"
-  >
-    <t-picker-item options="{{volumeBaseOptions}}" />
-  </t-picker>
-
-  <t-picker
-    class="condition-picker"
-    visible="{{frequencyVisible}}"
-    value="{{frequencyPickerValue}}"
-    title="选择检查频率"
-    confirm-btn="确定"
-    cancel-btn="取消"
-    usingCustomNavbar
-    popup-props="{{pickerPopupProps}}"
-    bind:change="onFrequencyPickerChange"
-    bind:close="onFrequencyPickerClose"
-  >
-    <t-picker-item options="{{frequencyOptions}}" />
-  </t-picker>
 </view>

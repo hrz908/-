@@ -168,25 +168,20 @@ Page({
     conditionType: 'priceUp',   // priceUp | priceDown | pctUp | pctDown | volume
     conditionOptions: CONDITION_OPTIONS,
     conditionText: CONDITION_OPTIONS[0].label, // 选择器右侧显示的当前项
-    conditionPickerValue: [CONDITION_OPTIONS[0].value], // picker 的 value 是数组
-    conditionVisible: false,    // 触发条件选择器是否弹出
-    // 选择器弹出时不再叠一层遮罩：dialog 已经有一层，叠加后背景会明显变黑。
-    // overlay 节点保留（只是透明），点空白仍可关闭；
-    // 走 overlayProps.backgroundColor 会写成行内样式，比 CSS 变量更可靠
-    pickerPopupProps: { overlayProps: { backgroundColor: 'transparent' } },
+    // 原生 picker 的 value 是「数组索引」不是业务值（执行指南 4.3 坑 1），
+    // 回显时由业务值反查下标，见 _closePopup
+    conditionIndex: 0,
     threshold: '',              // 阈值（字符串，提交前转 number）
     thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
     thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,
     volumeBase: 20,             // 成交量基准（5 / 10 / 20 日均量）
     volumeBaseOptions: VOLUME_BASE_OPTIONS,
     volumeBaseText: '20日均量',  // 选择器右侧显示的当前项
-    volumeBasePickerValue: [20],
-    volumeBaseVisible: false,   // 基准周期选择器是否弹出
+    volumeBaseIndex: 2,         // VOLUME_BASE_OPTIONS 里 20 的下标
     checkFrequency: 'realtime', // realtime(盘中即时) | close(日线收盘确认)
     frequencyOptions: FREQUENCY_OPTIONS,
     frequencyText: FREQUENCY_OPTIONS[0].label,
-    frequencyPickerValue: [FREQUENCY_OPTIONS[0].value],
-    frequencyVisible: false    // 检查频率选择器是否弹出
+    frequencyIndex: 0
   },
 
 
@@ -294,19 +289,17 @@ Page({
       selectedStock: null,
       conditionType: 'priceUp',
       conditionText: CONDITION_OPTIONS[0].label,
-      conditionPickerValue: [CONDITION_OPTIONS[0].value],
-      conditionVisible: false,
+      // 回显反查下标：原生 picker 只认索引，不给就永远显示第一项（坑 1 的回显侧）
+      conditionIndex: CONDITION_OPTIONS.findIndex((o) => o.value === 'priceUp'),
       threshold: '',
       thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
       thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,
       volumeBase: 20,
       volumeBaseText: '20日均量',
-      volumeBasePickerValue: [20],
-      volumeBaseVisible: false,
+      volumeBaseIndex: VOLUME_BASE_OPTIONS.findIndex((o) => o.value === 20),
       checkFrequency: 'realtime',
       frequencyText: FREQUENCY_OPTIONS[0].label,
-      frequencyPickerValue: [FREQUENCY_OPTIONS[0].value],
-      frequencyVisible: false
+      frequencyIndex: FREQUENCY_OPTIONS.findIndex((o) => o.value === 'realtime')
     });
   },
 
@@ -362,32 +355,19 @@ Page({
     this.setData({ selectedStock: null });
   },
 
-  // ----- 触发条件：带标题的选择器（t-cell 触发 + t-picker 选择） -----
-  onConditionPickerOpen() {
-    this.setData({ conditionVisible: true });
-  },
+  // ----- 触发条件（原生 picker） -----
+  // detail.value 是选中项的「数组索引」（Number），不是业务值（执行指南 4.3 坑 1）；
+  // 先映射回业务对象再更新表单。切换条件时清空旧阈值，占位提示（含单位）跟着换
+  onConditionChange(e) {
+    const index = Number((e && e.detail && e.detail.value) || 0);
+    const opt = CONDITION_OPTIONS[index];
+    if (!opt || opt.value === this.data.conditionType) return;
 
-  // 关闭（取消 / 点遮罩 / 确认都会走到这里）：
-  // picker 内部会自己 setData visible=false，不同步这里的话下次点 cell 就打不开了
-  onConditionPickerClose() {
-    this.setData({ conditionVisible: false });
-  },
-
-  onConditionPickerChange(e) {
-    const detail = (e && e.detail) || {};
-    this.setData({ conditionVisible: false });
-
-    // 单列 picker：value 是数组，取第一个
-    const val = (detail.value || [])[0];
-    if (!val || val === this.data.conditionType) return;
-
-    const cfg = THRESHOLD_CONFIG[val];
-    const opt = CONDITION_OPTIONS.filter(o => o.value === val)[0];
-    // 切换条件时清空旧阈值，占位提示（含单位）跟着换
+    const cfg = THRESHOLD_CONFIG[opt.value];
     this.setData({
-      conditionType: val,
-      conditionText: opt ? opt.label : '',
-      conditionPickerValue: [val],
+      conditionType: opt.value,
+      conditionText: opt.label,
+      conditionIndex: index,
       threshold: '',
       thresholdPlaceholder: cfg.placeholder,
       thresholdUnit: cfg.unit
@@ -406,54 +386,20 @@ Page({
     this.setData({ threshold: val });
   },
 
-  // ----- 基准周期：与触发条件同一套「带标题的选择器」 -----
-  onVolumeBasePickerOpen() {
-    this.setData({ volumeBaseVisible: true });
+  // ----- 基准周期（原生 picker） -----
+  onVolumeBaseChange(e) {
+    const index = Number((e && e.detail && e.detail.value) || 0);
+    const opt = VOLUME_BASE_OPTIONS[index];
+    if (!opt || index === this.data.volumeBaseIndex) return;
+    this.setData({ volumeBase: opt.value, volumeBaseText: opt.label, volumeBaseIndex: index });
   },
 
-  onVolumeBasePickerClose() {
-    this.setData({ volumeBaseVisible: false });
-  },
-
-  onVolumeBasePickerChange(e) {
-    const detail = (e && e.detail) || {};
-    this.setData({ volumeBaseVisible: false });
-
-    const val = (detail.value || [])[0];
-    if (val === undefined || val === null) return;
-    const numVal = Number(val);
-    if (numVal === this.data.volumeBase) return;
-
-    const opt = VOLUME_BASE_OPTIONS.filter(o => o.value === numVal)[0];
-    this.setData({
-      volumeBase: numVal,
-      volumeBaseText: opt ? opt.label : '',
-      volumeBasePickerValue: [numVal]
-    });
-  },
-
-  // ----- 检查频率：同样用带标题的选择器 -----
-  onFrequencyPickerOpen() {
-    this.setData({ frequencyVisible: true });
-  },
-
-  onFrequencyPickerClose() {
-    this.setData({ frequencyVisible: false });
-  },
-
-  onFrequencyPickerChange(e) {
-    const detail = (e && e.detail) || {};
-    this.setData({ frequencyVisible: false });
-
-    const val = (detail.value || [])[0];
-    if (!val || val === this.data.checkFrequency) return;
-
-    const opt = FREQUENCY_OPTIONS.filter(o => o.value === val)[0];
-    this.setData({
-      checkFrequency: val,
-      frequencyText: opt ? opt.label : '',
-      frequencyPickerValue: [val]
-    });
+  // ----- 检查频率（原生 picker） -----
+  onFrequencyChange(e) {
+    const index = Number((e && e.detail && e.detail.value) || 0);
+    const opt = FREQUENCY_OPTIONS[index];
+    if (!opt || opt.value === this.data.checkFrequency) return;
+    this.setData({ checkFrequency: opt.value, frequencyText: opt.label, frequencyIndex: index });
   },
 
   // ----- 表单校验 -----
