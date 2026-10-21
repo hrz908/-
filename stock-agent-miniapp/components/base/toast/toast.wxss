@@ -1,4 +1,6 @@
-/* 轻提示：屏幕居中偏上的深色小药丸，z-index 高于弹层（校验失败要能在弹窗上看到） */
+/* 轻提示：屏幕居中偏上的深色小药丸，z-index 高于弹层（校验失败要能在弹窗上看到）。
+   浅色主题下仍用深色药丸：白底上深色提示对比更强、更像平台原生提示；
+   代价是文字必须显式反白——不能再用 var(--ink)（浅色主题下它是近黑） */
 .toast {
   position: fixed;
   left: 50%;
@@ -7,17 +9,16 @@
   z-index: 1100;
   max-width: 70%;
   padding: var(--sp-2) var(--sp-4);
-  background: rgba(20, 30, 41, 0.96);
-  border: 1px solid var(--line);
+  background: rgba(23, 27, 33, 0.94);
   border-radius: var(--r-tag);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-pop);
   animation: toast-in 180ms ease both;
 }
 
 .toast-text {
   font-size: var(--fs-aux);
   line-height: 1.6;
-  color: var(--ink);
+  color: #FFFFFF;
   text-align: center;
   word-break: break-all;
 }

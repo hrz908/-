@@ -172,10 +172,11 @@
   color: var(--ink-2);
 }
 
-/* 已触发：未触发=中性；触发后跟随涨跌语义（跌=绿、涨=红） */
+/* 已触发：未触发=中性；触发后跟随涨跌语义（跌=绿、涨=红）。
+   浅底上用淡色底 + 同色系淡描边，深底那套深描边在白卡上会发脏 */
 .a-tag--danger {
-  border-color: #5A2A2E;
-  background: rgba(242, 85, 90, 0.10);
+  border-color: var(--up-border);
+  background: var(--up-tint);
 }
 
 .a-tag--danger .a-tag-text {
@@ -183,8 +184,8 @@
 }
 
 .a-tag--success {
-  border-color: #1E4A3A;
-  background: rgba(31, 184, 122, 0.10);
+  border-color: var(--down-border);
+  background: var(--down-tint);
 }
 
 .a-tag--success .a-tag-text {
@@ -206,13 +207,14 @@
   height: 96rpx;
   border-radius: var(--r-card);
   background: var(--accent);
-  box-shadow: 0 8rpx 24rpx rgba(233, 185, 73, 0.18);
+  box-shadow: 0 8rpx 24rpx rgba(37, 89, 235, 0.24);
 }
 
 .add-btn-text {
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #20180A;
+  /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
+  color: #FFFFFF;
 }
 
 .add-btn--hover {
@@ -357,7 +359,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-tag);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
   z-index: 10;
 }

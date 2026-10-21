@@ -9,6 +9,8 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
+  /* 浅色主题：细描边 + 轻投影表达层次（参考图白卡片落在浅灰底上） */
+  box-shadow: var(--shadow-card);
 }
 
 .fcard-hd {
@@ -51,16 +53,18 @@
   white-space: nowrap;
 }
 
+/* 浅底上的标签统一淡色底 + 同色系淡描边；
+   金色强调在白底上对比度不足，--accent 已随主题切蓝，这里跟着走 token */
 .ftag--hot {
-  border-color: #5A2A2E;
+  border-color: var(--up-border);
   color: var(--up);
-  background: rgba(242, 85, 90, 0.10);
+  background: var(--up-tint);
 }
 
 .ftag--gold {
-  border-color: #5A4A1E;
+  border-color: var(--accent-border);
   color: var(--accent);
-  background: rgba(233, 185, 73, 0.10);
+  background: var(--accent-tint);
 }
 
 /* 数据栅格：一条顶部分隔线 + 两行三列（设计稿 3 列 × 2 行） */

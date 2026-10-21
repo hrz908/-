@@ -231,7 +231,7 @@
           value="{{input}}"
           focus="{{inputFocus}}"
           placeholder="问点什么…"
-          placeholder-style="color: #6B7A8A; font-size: 30rpx;"
+          placeholder-style="color: #9AA1AC; font-size: 30rpx;"
           auto-height="{{true}}"
           adjust-position="{{false}}"
           cursor-spacing="24"
@@ -265,7 +265,7 @@
         bindtap="onSend"
       >
         <view wx:if="{{sending}}" class="bar-send-stop"></view>
-        <base-icon wx:else name="send" size="44rpx" color="{{input ? '#20180A' : 'var(--ink-3)'}}" />
+        <base-icon wx:else name="send" size="44rpx" color="{{input ? '#FFFFFF' : 'var(--ink-3)'}}" />
       </view>
     </view>
   </view>

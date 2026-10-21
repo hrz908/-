@@ -100,10 +100,10 @@
   border: 1px solid var(--line);
 }
 
-/* 开关打开时图标托底色跟进，只此一处用金色（行动点） */
+/* 开关打开时图标托底跟进主行动色（浅色主题下为蓝） */
 .pref-icon-wrap--on {
-  border-color: #5A4A1E;
-  background: rgba(233, 185, 73, 0.10);
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
 }
 
 .pref-text {
@@ -150,12 +150,12 @@
 /* 危险操作：红色描边 + 红字，不用实底（退出登录不是主流程动作） */
 .footer-btn--danger {
   color: var(--up);
-  border: 1px solid rgba(242, 85, 90, 0.45);
-  background: rgba(242, 85, 90, 0.08);
+  border: 1px solid var(--up-border);
+  background: var(--up-tint);
 }
 
 .footer-btn--danger-hover {
-  background: rgba(242, 85, 90, 0.16);
+  background: rgba(240, 74, 74, 0.16);
 }
 
 .footer-hint {
@@ -242,5 +242,5 @@
 }
 
 .nickname-link--hover {
-  background: rgba(233, 185, 73, 0.10);
+  background: var(--accent-tint);
 }

@@ -16,17 +16,17 @@ const PERIODS = [
 const PAGE_SIZE = 60; // 一次拉 60 根：一屏 40 根，多出来的供左右拖动回看
 const ITEM_COUNT = 40; // 一屏最多 40 根，超出靠 enableScroll 拖动
 
-// 深色主题图表色：canvas 不吃 CSS 变量，这里与 styles/token.wxss 保持同值
+// 浅色主题图表色：canvas 不吃 CSS 变量，这里与 styles/token.wxss 保持同值
 const C = {
-  bg: '#141E29',
-  grid: '#26333F',
-  axis: '#6B7A8A',
-  up: '#F2555A',
-  down: '#1FB87A',
-  vol: '#4E5B68',
-  ma5: '#E9B949',
-  ma10: '#5B9BEF',
-  ma20: '#9AA9B8'
+  bg: '#FFFFFF',
+  grid: '#E8EBF0',
+  axis: '#9AA1AC',
+  up: '#F04A4A',
+  down: '#1AA97C',
+  vol: '#C0C9D4',
+  ma5: '#2559EB',
+  ma10: '#F5A623',
+  ma20: '#8B5CF6'
 };
 
 function num(v) {

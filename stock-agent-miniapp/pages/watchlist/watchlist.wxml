@@ -80,7 +80,7 @@
   <!-- 底部主操作：金色行动点（唯一强调色的合法用途） -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
     <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
-      <base-icon name="add" size="36rpx" color="#20180A" />
+      <base-icon name="add" size="36rpx" color="#FFFFFF" />
       <text class="add-btn-text">添加股票</text>
     </view>
   </view>

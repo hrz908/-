@@ -19,7 +19,7 @@
 
 /* 行间分隔线：sep 由 WXML 行号计算（WXSS 禁兄弟选择器） */
 .cmp-row--sep {
-  border-top: 1rpx solid rgba(38, 51, 63, 0.6);
+  border-top: 1rpx solid var(--line);
 }
 
 .cmp-row--head {

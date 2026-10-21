@@ -53,16 +53,17 @@
   white-space: nowrap;
 }
 
+/* 浅底上的淡色标签：淡色底 + 同色系淡描边（深色主题那套深描边在浅底发脏） */
 .mini-tag--up {
-  border-color: #5A2A2E;
+  border-color: var(--up-border);
   color: var(--up);
-  background: rgba(242, 85, 90, 0.10);
+  background: var(--up-tint);
 }
 
 .mini-tag--down {
-  border-color: #1E4A3A;
+  border-color: var(--down-border);
   color: var(--down);
-  background: rgba(31, 184, 122, 0.10);
+  background: var(--down-tint);
 }
 
 /* 总浮动金额：价格级字号 + 等宽 */
@@ -260,13 +261,14 @@
   height: 96rpx;
   border-radius: var(--r-card);
   background: var(--accent);
-  box-shadow: 0 8rpx 24rpx rgba(233, 185, 73, 0.18);
+  box-shadow: 0 8rpx 24rpx rgba(37, 89, 235, 0.24);
 }
 
 .add-btn-text {
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #20180A;
+  /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
+  color: #FFFFFF;
 }
 
 .add-btn--hover {
@@ -325,7 +327,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-tag);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
   z-index: 10;
 }

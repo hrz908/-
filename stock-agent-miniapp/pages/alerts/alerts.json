@@ -6,7 +6,7 @@
     "base-toast": "/components/base/toast/toast",
     "base-empty": "/components/base/empty/empty"
   },
-  "backgroundColor": "#0B1219",
-  "backgroundColorTop": "#0B1219",
-  "backgroundColorBottom": "#0B1219"
+  "backgroundColor": "#F5F6F8",
+  "backgroundColorTop": "#F5F6F8",
+  "backgroundColorBottom": "#F5F6F8"
 }

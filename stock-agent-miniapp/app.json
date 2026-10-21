@@ -14,10 +14,10 @@
   ],
   "window": {
     "navigationStyle": "custom",
-    "backgroundColor": "#0B1219",
-    "backgroundColorTop": "#0B1219",
-    "backgroundColorBottom": "#0B1219",
-    "navigationBarTextStyle": "white"
+    "backgroundColor": "#F5F6F8",
+    "backgroundColorTop": "#F5F6F8",
+    "backgroundColorBottom": "#F5F6F8",
+    "navigationBarTextStyle": "dark"
   },
   "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json"

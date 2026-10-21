@@ -16,11 +16,12 @@ const PRICE_BOTTOM = 138;
 const VOL_TOP = 150;
 const VOL_BOTTOM = 192;
 
-// 国内习惯：涨红跌绿；均线三色（金 / 蓝 / 灰）
-const COLOR_UP = '#F2555A';
-const COLOR_DOWN = '#1FB87A';
-const MA_COLORS = { ma5: '#E9B949', ma10: '#5B9BEF', ma20: '#9AA9B8' };
-const GRID_COLOR = '#26333F';
+// 国内习惯：涨红跌绿；均线三色（蓝 / 琥珀 / 紫）——
+// 浅色主题下金色与深灰在白底上对比度不足，换成蓝/琥珀/紫这一组常规均线配色
+const COLOR_UP = '#F04A4A';
+const COLOR_DOWN = '#1AA97C';
+const MA_COLORS = { ma5: '#2559EB', ma10: '#F5A623', ma20: '#8B5CF6' };
+const GRID_COLOR = '#E8EBF0';
 
 // 默认周期枚举（设计文档②）
 const DEFAULT_PERIODS = [

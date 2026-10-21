@@ -61,7 +61,7 @@
   <!-- 底部操作区 -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
     <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
-      <base-icon name="add" size="36rpx" color="#20180A" />
+      <base-icon name="add" size="36rpx" color="#FFFFFF" />
       <text class="add-btn-text">新增提醒</text>
     </view>
   </view>

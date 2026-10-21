@@ -16,9 +16,11 @@
   margin-top: 10rpx;
 }
 
+/* 需关注：琥珀色（金色在白底上对比度不足，降一档到琥珀仍保留「提醒」语义）；
+   常规：浅蓝。两者都不与涨跌红绿冲突 */
 .evt-dot--gold {
-  background: var(--accent);
-  box-shadow: 0 0 0 6rpx rgba(233, 185, 73, 0.12);
+  background: #F5A623;
+  box-shadow: 0 0 0 6rpx rgba(245, 166, 35, 0.18);
 }
 
 .evt-dot--blue {

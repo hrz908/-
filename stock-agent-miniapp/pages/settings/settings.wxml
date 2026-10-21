@@ -35,7 +35,7 @@
           </view>
           <switch
             class="pref-switch"
-            color="#E9B949"
+            color="#1AA97C"
             checked="{{pushEnabled}}"
             bindchange="onTogglePush"
           />

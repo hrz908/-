@@ -32,8 +32,8 @@
 }
 
 .chip--on {
-  background: rgba(233, 185, 73, 0.12);
-  border-color: #5A4A1E;
+  background: var(--accent-tint);
+  border-color: var(--accent-border);
 }
 
 .chip--on .chip-text {
