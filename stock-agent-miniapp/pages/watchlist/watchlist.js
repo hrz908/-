@@ -1,4 +1,3 @@
-import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 import * as api from '../../services/watchlist';
 import * as stockApi from '../../services/stock';
 
@@ -59,8 +58,12 @@ function nowHM() {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// TDesign swipe-cell 右侧操作项
-const SWIPE_ACTIONS = [{ text: '删除', className: 'delete-action' }];
+// ===== 左滑删除（自绘，替代 t-swipe-cell） =====
+// 操作区宽度（px）：与 .stock-row-action 的 width 保持一致。
+// 触摸坐标是 px，这里必须用 px 而不是 rpx
+const SWIPE_ACTION_W = 128;
+// 松手时位移超过一半操作区宽度即视为「打开」
+const SWIPE_OPEN_RATIO = 0.5;
 
 Page({
   data: {
@@ -79,11 +82,17 @@ Page({
     loading: false,
     refreshing: false,
     errorMsg: '',
-    swipeActions: SWIPE_ACTIONS,
     // 列表是否可滚动：默认关，测量后只有内容真超出容器才打开
     scrollable: false,
 
-    // 删除确认弹窗（TDesign dialog）
+    // 左滑删除状态：swipeOpen = 处于打开态的行号（-1 无）；
+    // swipeIndex / swipeDx = 正在拖动的行与实时位移；swipeDragging = 拖动中（关过渡）
+    swipeOpen: -1,
+    swipeIndex: -1,
+    swipeDx: 0,
+    swipeDragging: false,
+
+    // 删除确认弹窗（base-popup center，危险色确认）
     confirmVisible: false,
     pendingIndex: -1,
     pendingName: '',
@@ -155,9 +164,10 @@ Page({
     // （e.g. -5.23% 排在 -1.02% 前面）
     if (key === 'up' || key === 'down') {
       const asc = key === 'down';
-      return list.sort((a, b) => (asc ? a.pctValue - b.pctValue : b.pctValue - a.pctValue));
+      list.sort((a, b) => (asc ? a.pctValue - b.pctValue : b.pctValue - a.pctValue));
     }
-    return list;
+    // sep：行间分隔线类名由 JS 按行号计算（WXSS 禁兄弟选择器，见 watchlist.wxss）
+    return list.map((s, i) => Object.assign({}, s, { sep: i > 0 }));
   },
 
   /* ================= 滚动控制 ================= */
@@ -217,10 +227,82 @@ Page({
     api
       .remove(item.stockCode)
       .then(() => this.loadList())
-      .then(() => Toast({ context: this, message: '已移出自选', theme: 'success' }))
+      .then(() => this.toast('已移出自选'))
       .catch((err) => {
         this.setData({ loading: false, errorMsg: (err && err.message) || '删除失败' });
       });
+  },
+
+  /* ================= 左滑删除（自绘，替代 t-swipe-cell） ================= */
+
+  // 起点：记录行号、起始坐标、该行当前是否已打开。
+  // locked 三态：null 未判定 / true 横向滑动（本行接管）/ false 纵向滚动（交还列表）
+  // 用 bind 而不是 catch：catch 会让行内所有子元素点击失效
+  onRowTouchStart(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const touch = e.touches[0];
+    const baseOpen = this.data.swipeOpen === index;
+    const baseTx = baseOpen ? -SWIPE_ACTION_W : 0;
+    this._swipe = {
+      index: index,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      baseOpen: baseOpen,
+      locked: null,
+      tx: baseTx,
+      lastTx: baseTx
+    };
+    this.setData({ swipeDragging: true });
+  },
+
+  onRowTouchMove(e) {
+    const s = this._swipe;
+    if (!s) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - s.startX;
+    const dy = touch.clientY - s.startY;
+    if (s.locked === null) {
+      // 超过判定阈值才定向：避免把点击抖动当成滑动
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      s.locked = Math.abs(dx) > Math.abs(dy);
+      if (!s.locked) {
+        // 纵向滚动：交还手势给 scroll-view，本行状态复位
+        this._swipe = null;
+        this.setData({ swipeDragging: false, swipeIndex: -1, swipeDx: 0 });
+        return;
+      }
+    }
+    // 只允许左滑（负位移）；已打开的行可以右滑关闭
+    let tx = s.baseOpen ? -SWIPE_ACTION_W + dx : Math.min(0, dx);
+    tx = Math.max(-SWIPE_ACTION_W, Math.min(0, tx));
+    s.tx = tx;
+    // 1px 内的抖动不回写视图，省掉无意义 setData
+    if (Math.abs(tx - s.lastTx) < 1) return;
+    s.lastTx = tx;
+    this.setData({ swipeIndex: s.index, swipeDx: tx });
+  },
+
+  onRowTouchEnd() {
+    const s = this._swipe;
+    this._swipe = null;
+    if (!s) return;
+    // 松手：恢复过渡动画，按最终位移决定打开还是关闭
+    this.setData({ swipeDragging: false });
+    const open = s.tx <= -SWIPE_ACTION_W * SWIPE_OPEN_RATIO;
+    this.setData({ swipeIndex: -1, swipeDx: 0, swipeOpen: open ? s.index : -1 });
+  },
+
+  // 点主行：只负责把打开状态的行收回去（行本身没有跳转）
+  onRowMainTap() {
+    if (this.data.swipeOpen >= 0) {
+      this.setData({ swipeOpen: -1 });
+    }
+  },
+
+  // 轻提示：自研 base-toast（替代 TDesign toast）
+  toast(message) {
+    const toast = this.selectComponent('#base-toast');
+    if (toast) toast.show(message);
   },
 
   /* ================= 数据同步 ================= */
@@ -235,7 +317,7 @@ Page({
       .then((data) => {
         this.setData({ refreshing: false });
         this.applyData(data);
-        Toast({ context: this, message: '行情已刷新', theme: 'success' });
+        this.toast('行情已刷新');
       })
       .catch((err) => {
         this.setData({ refreshing: false, errorMsg: (err && err.message) || '刷新失败' });
@@ -381,7 +463,7 @@ Page({
     api
       .add(payload)
       .then(() => this.loadList())
-      .then(() => Toast({ context: this, message: `已添加 ${market} ${code}`, theme: 'success' }))
+      .then(() => this.toast(`已添加 ${market} ${code}`))
       .catch((err) => {
         this.setData({ loading: false, errorMsg: (err && err.message) || '添加失败' });
       });

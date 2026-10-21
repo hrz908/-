@@ -1,0 +1,58 @@
+/* 导航栏：深色底与页面一致（--bg），底部不加分隔线，靠内容区留白区分 */
+.navbar {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  flex: none;
+}
+
+.navbar-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+/* 左侧按钮：88rpx(=44px) 触摸目标，圆角与 --r-nav-btn 对齐 */
+.nav-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -12px;
+  border-radius: 16rpx;
+}
+
+/* hover-class 提供按压态（WXSS 禁写 :active） */
+.nav-btn--hover {
+  background: var(--surface-2);
+}
+
+.nav-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 铺满只是为了居中：不能吃掉左侧按钮与右上角胶囊的点击 */
+  pointer-events: none;
+}
+
+/* 标题文本：超长时省略号截断，绝不被胶囊遮挡（max-width 由 JS 按胶囊位置算） */
+.nav-title-text {
+  max-width: 100%;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.5rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

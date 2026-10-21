@@ -1,0 +1,197 @@
+// markdown -> WXML 渲染结构（AI 回答的纯文本部分）
+// 背景：后端把结构化数据（行情卡 / K 线表）走独立 WS 事件，token 流里只有散文，
+// 因此这里只覆盖回答文本的实用子集：标题 / 段落 / 列表 / 引用 / 代码块 /
+// 分割线 / 表格 / 行内样式（粗体、斜体、行内代码、链接、删除线）。
+// 与 TDesign chat-markdown 同一思路：marked 的 Lexer 只负责切 token，
+// 渲染结构自绘（WXML 侧按 tag 分发，见 chat.wxml 的 md-* 类名）。
+import { Lexer } from 'marked';
+
+// 与 TDesign chat-markdown 默认选项保持一致：breaks: true 让单换行也换行。
+// 注意：Lexer 实例带状态（tokens 会累积到实例上，复用会让第二次解析
+// 返回第一次的结果），因此每次解析都要新建，不能提成模块级单例
+const LEXER_OPTIONS = { gfm: true, pedantic: false, breaks: true };
+
+// 行内 token 摊平成「带样式标记的文本段」。
+// 嵌套格式（em 套 strong 等）通过合并标记保留视觉效果，WXML 侧按标记组合加 class。
+// 换行（br）合并进下一个文本段的开头，配合容器 white-space: pre-wrap 渲染
+function flattenInline(tokens, style) {
+  const base = style || {};
+  const out = [];
+  (tokens || []).forEach((tk) => {
+    const st = {
+      strong: !!base.strong,
+      em: !!base.em,
+      code: !!base.code,
+      del: !!base.del
+    };
+    switch (tk.type) {
+      case 'text':
+        if (tk.tokens && tk.tokens.length) {
+          out.push.apply(out, flattenInline(tk.tokens, st));
+        } else {
+          out.push({ t: 'text', text: tk.text || '', strong: st.strong, em: st.em, code: st.code, del: st.del });
+        }
+        break;
+      case 'strong':
+        out.push.apply(out, flattenInline(tk.tokens || [{ type: 'text', text: tk.text }], merge(st, { strong: true })));
+        break;
+      case 'em':
+        out.push.apply(out, flattenInline(tk.tokens || [{ type: 'text', text: tk.text }], merge(st, { em: true })));
+        break;
+      case 'del':
+        out.push.apply(out, flattenInline(tk.tokens || [{ type: 'text', text: tk.text }], merge(st, { del: true })));
+        break;
+      case 'codespan':
+        out.push({ t: 'text', text: tk.text || '', strong: st.strong, em: st.em, del: st.del, code: true });
+        break;
+      case 'link': {
+        const inner = flattenInline(tk.tokens, st);
+        inner.forEach((n) => {
+          n.href = tk.href;
+        });
+        out.push.apply(out, inner);
+        break;
+      }
+      case 'br':
+        out.push({ t: 'br' });
+        break;
+      case 'escape':
+        out.push({ t: 'text', text: tk.text || '', strong: st.strong, em: st.em, code: st.code, del: st.del });
+        break;
+      case 'image':
+        // 回答文本不渲染图片：保留 alt 文案，不引入 image 加载失败态
+        out.push({ t: 'text', text: tk.text || '[图片]', strong: st.strong, em: st.em, code: st.code, del: st.del });
+        break;
+      default:
+        if (tk.text) out.push({ t: 'text', text: tk.text, strong: st.strong, em: st.em, code: st.code, del: st.del });
+        break;
+    }
+  });
+  return out;
+}
+
+function merge(a, b) {
+  return Object.assign({}, a, b);
+}
+
+// br 合并进下一段文本的开头（没有下一段就丢掉），容器 pre-wrap 负责换行
+function mergeBreaks(inlines) {
+  const out = [];
+  (inlines || []).forEach((n) => {
+    if (n.t === 'br') {
+      if (out.length) {
+        out[out.length - 1].text += '\n';
+      }
+      return;
+    }
+    out.push(n);
+  });
+  return out;
+}
+
+function inlineOf(token) {
+  return mergeBreaks(flattenInline(token.tokens || [{ type: 'text', text: token.text || '' }]));
+}
+
+// 列表：嵌套列表摊平成带 depth 的条目（视觉缩进由 depth 决定），
+// 条目内多段用换行连接。AI 回答的列表嵌套一般不超过一层
+function listBlock(tk) {
+  const items = [];
+  let pending = null;
+
+  const pushText = (b) => {
+    if (!pending) pending = { depth: 0, inlines: [] };
+    if (pending.inlines.length) pending.inlines.push({ t: 'text', text: '\n' });
+    pending.inlines.push.apply(pending.inlines, mergeBreaks(flattenInline(b.tokens || [{ type: 'text', text: b.text || '' }])));
+  };
+
+  (tk.items || []).forEach((it) => {
+    pending = null;
+    (it.tokens || []).forEach((b) => {
+      if (b.type === 'list') {
+        if (pending) {
+          items.push(pending);
+          pending = null;
+        }
+        listBlock(b).items.forEach((nested) => {
+          items.push({ depth: nested.depth + 1, inlines: nested.inlines });
+        });
+        return;
+      }
+      if (b.type === 'text' || b.type === 'paragraph') pushText(b);
+    });
+    if (pending) items.push(pending);
+  });
+
+  return { tag: tk.ordered ? 'ol' : 'ul', start: tk.start || 1, items: items };
+}
+
+function tableBlock(tk) {
+  const head = (tk.header || []).map((c) =>
+    mergeBreaks(flattenInline(c.tokens || [{ type: 'text', text: c.text || '' }]))
+  );
+  const rows = (tk.rows || []).map((r) =>
+    r.map((c) => mergeBreaks(flattenInline(c.tokens || [{ type: 'text', text: c.text || '' }])))
+  );
+  return { tag: 'table', head: head, rows: rows, align: tk.align || [] };
+}
+
+// 入口：markdown 源码 -> blocks 数组。
+// 解析失败（极端不完整语法）降级为单段纯文本，绝不让气泡空着
+function parseMarkdown(md) {
+  const src = String(md || '');
+  if (!src.trim()) return [];
+  let tokens;
+  try {
+    tokens = new Lexer(LEXER_OPTIONS).lex(src);
+  } catch (e) {
+    return [{ tag: 'p', inlines: [{ t: 'text', text: src }] }];
+  }
+
+  const blocks = [];
+  (tokens || []).forEach((tk) => {
+    switch (tk.type) {
+      case 'heading':
+        blocks.push({ tag: 'h', depth: tk.depth || 2, inlines: inlineOf(tk) });
+        break;
+      case 'paragraph':
+      case 'text':
+        blocks.push({ tag: 'p', inlines: inlineOf(tk) });
+        break;
+      case 'list':
+        blocks.push(listBlock(tk));
+        break;
+      case 'blockquote': {
+        // 引用块摊平为一段（内部多段用换行连接），左竖线样式见 .md-quote
+        const inlines = [];
+        (tk.tokens || []).forEach((b) => {
+          if (b.type !== 'paragraph' && b.type !== 'text') return;
+          if (inlines.length) inlines.push({ t: 'text', text: '\n' });
+          inlines.push.apply(inlines, mergeBreaks(flattenInline(b.tokens || [{ type: 'text', text: b.text || '' }])));
+        });
+        if (inlines.length) blocks.push({ tag: 'quote', inlines: inlines });
+        break;
+      }
+      case 'code':
+        blocks.push({ tag: 'code', text: tk.text || '', lang: tk.lang || '' });
+        break;
+      case 'hr':
+        blocks.push({ tag: 'hr' });
+        break;
+      case 'table':
+        blocks.push(tableBlock(tk));
+        break;
+      case 'space':
+      case 'html':
+        // 空格跳过；原始 HTML 不渲染（安全 + 富文本能力之外）
+        break;
+      default:
+        break;
+    }
+  });
+  return blocks;
+}
+
+module.exports = {
+  parseMarkdown: parseMarkdown
+};

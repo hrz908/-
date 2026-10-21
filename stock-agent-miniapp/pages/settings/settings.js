@@ -1,4 +1,3 @@
-import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 import { clearSession, ensureLogin } from '../../utils/request';
 import { getProfile, updateProfile, uploadAvatar, absoluteUrl } from '../../services/user';
 
@@ -26,7 +25,7 @@ Page({
     profileVisible: false,
     editNickname: '',
     editAvatar: '',
-    // 超长时的输入框提示文案。空串表示没超——t-input 的 tips 为空就不渲染这一行
+    // 超长时的输入框提示文案。空串表示没超——WXML 里 wx:if 为空不渲染提示行
     nicknameTip: '',
     // 昵称输入框是否处于「取微信昵称」模式：只决定 type（nickname/text）。
     // 只有点下方「使用微信昵称」才为 true，平时为 false，避免一聚焦就弹候选栏。
@@ -78,6 +77,12 @@ Page({
     wx.navigateBack();
   },
 
+  // 轻提示：自研 base-toast（替代 TDesign toast / wx.showToast 默认样式）
+  toast(message) {
+    const toast = this.selectComponent('#base-toast');
+    if (toast) toast.show(message);
+  },
+
   /* ===== 个人信息卡 ===== */
 
   // 个人信息卡：点击打开编辑资料弹窗，头像昵称的完善由用户主动触发
@@ -105,10 +110,7 @@ Page({
     const pushEnabled = e.detail.value;
     this.setData({ pushEnabled });
     wx.setStorageSync('sa_push_enabled', pushEnabled);
-    Toast({
-      context: this,
-      message: pushEnabled ? '消息推送已开启' : '消息推送已关闭'
-    });
+    this.toast(pushEnabled ? '消息推送已开启' : '消息推送已关闭');
   },
 
   /* ===== 编辑资料弹窗 ===== */
@@ -246,13 +248,13 @@ Page({
   saveProfile() {
     const nickname = String(this.data.editNickname || '').trim();
     if (!nickname) {
-      Toast({ context: this, message: '昵称不能为空' });
+      this.toast('昵称不能为空');
       return;
     }
     // 输入框不再硬截断，所以保存前必须自己兜一次，别把超长昵称写进库
     const tip = this.tipFor(nickname);
     if (tip) {
-      Toast({ context: this, message: tip });
+      this.toast(tip);
       return;
     }
 
@@ -283,12 +285,11 @@ Page({
           nicknameFocus: false,
           nicknameArmed: false
         });
-        Toast({ context: this, message: '资料已保存' });
+        this.toast('资料已保存');
       })
       .catch((err) => {
-        Toast({ context: this, message: (err && err.message) || '保存失败' });
-      });
-  },
+        this.toast((err && err.message) || '保存失败');
+      });  },
 
   /* ===== 退出登录 ===== */
 
@@ -309,6 +310,6 @@ Page({
       nickname: DEFAULT_NICKNAME,
       avatar: ''
     });
-    Toast({ context: this, message: '已退出登录' });
+    this.toast('已退出登录');
   }
 });

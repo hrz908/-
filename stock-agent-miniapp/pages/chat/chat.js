@@ -1,17 +1,19 @@
 // 对话页：消息收发走 Agent WebSocket（services/agent.js 单例），流式 token 逐字追加；
-// 纯文本走 TDesign chat-message 的 text 内容，行情/K 线这类结构化数据走自绘卡片消息
+// 纯文本走自绘气泡 + markdown 渲染（utils/markdown.js），行情/K 线这类结构化数据走自绘卡片消息
 
 import agentSocket from '../../services/agent';
 import { quote } from '../../services/stock';
 import { transcribe } from '../../services/asr';
+import { parseMarkdown } from '../../utils/markdown';
 
-// 侧边抽屉导航项（TDesign cell-group / cell）
-// 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去
+// 侧边抽屉导航项（自绘列表）
+// 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去。
+// sep：行间分隔线类名由 JS 按行号算（WXSS 禁兄弟选择器）
 const MENUS = [
   { key: 'watchlist', label: '自选股', icon: 'star' },
   { key: 'alerts', label: '提醒', icon: 'notification' },
   { key: 'settings', label: '我的', icon: 'user' }
-];
+].map((m, i) => Object.assign({}, m, { sep: i > 0 }));
 
 // 抽屉导航项 → 子页面路由，key 与 MENUS 一一对应
 const ROUTES = {
@@ -30,7 +32,13 @@ const MARKET_INDICES = [
 ];
 
 // 首屏占位：实时数据到位前先显示名称 + 占位符，避免抽屉里一片空白
-const MARKETS_PLACEHOLDER = MARKET_INDICES.map((m) => ({ name: m.name, value: '--', pct: '--', up: true }));
+const MARKETS_PLACEHOLDER = MARKET_INDICES.map((m, i) => ({
+  name: m.name,
+  value: '--',
+  pct: '--',
+  up: true,
+  sep: i > 0
+}));
 
 // 指数点位加千分位：3718.44 -> 3,718.44（不用 toLocaleString，小程序端支持不稳）
 function formatIndex(v) {
@@ -83,18 +91,17 @@ function isUp(text) {
   return String(text || '').trim().charAt(0) !== '-';
 }
 
-// TDesign chat-message 的条目结构（TdChatItemMeta）
-// 不传 datetime：chat-message 会用 <text wx:if="{{datetime}}"> 渲染出时间戳，
-// 而产品的需求是不显示对话时间，因此这里整条消息不带时间字段。
-// 同理不传 avatar / name：chat-message 的头像容器与名称行在内容为空时会自行折叠
-// （__avatar:empty、__base:empty 两条规则），无需额外样式干预
+// 消息条目结构（自绘气泡）：
+// - 纯文本消息：content[0].data 是原文，blocks 是解析后的渲染结构
+// - 卡片消息（quote/kline/voice）：content 为空数组，卡片本体由页面 WXML 绘制
+//   （行情卡、日 K 表的版式用 markdown 表格还原不出来）
 function assistantMsg(data) {
   return {
     role: 'assistant',
     status: 'complete',
-    // type 用 markdown：chat-content 只对 markdown 走 t-chat-markdown（marked 解析），
-    // text 会被当纯文本转义输出，**加粗**、- 列表、表格都会原样露出来
-    content: [{ type: 'markdown', data }]
+    content: [{ type: 'markdown', data }],
+    // markdown 渲染结构：Lexer 切 token 后自绘（见 utils/markdown.js 与 chat.wxml 的 md-* 模板）
+    blocks: parseMarkdown(data)
   };
 }
 
@@ -106,8 +113,7 @@ function userMsg(data) {
   };
 }
 
-// 结构化卡片消息：content 必须是空数组，chat-message 才会渲染它的 content 插槽，
-// 卡片本体交给页面 WXML 绘制（行情卡、日 K 表的版式用 markdown 表格还原不出来）
+// 结构化卡片消息：卡片本体交给页面 WXML 绘制
 function quoteCard(q) {
   // 后端 QuoteDetail 的涨跌幅字段是 change_percent（如 "-0.33"），且没有 meta 字段；
   // 没有的信息在页面上拼出来，缺了就留空
@@ -237,7 +243,7 @@ Page({
       // 保持默认值
     }
 
-    // 导航栏高度 = 状态栏 + 44（TDesign navbar 内容区默认 44px）
+    // 导航栏高度 = 状态栏 + 44px 内容区（自研 navbar 高度确定，无需实测）
     const navH = statusBarHeight + 44;
     const padBottom = Math.max(0, safeBottom);
     // rpx → px：chatHeight 是按 px 算的，设计稿的 rpx 要先换算
@@ -356,11 +362,7 @@ Page({
       this._finishStreaming();
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '' });
-      wx.showToast({
-        icon: 'none',
-        title: (data && data.msg) || '服务异常',
-        duration: 2000
-      });
+      this.toast((data && data.msg) || '服务异常');
     });
 
     // 本轮回答结束：流式消息转 complete，解锁发送按钮
@@ -400,9 +402,9 @@ Page({
             {
               role: 'assistant',
               status: 'streaming',
-              // 与 assistantMsg 一致用 markdown：流式期间 chat-markdown 每次合批刷新
-              // 都会整段重新解析，能正确渲染未完成段落到收敛的整个过程
-              content: [{ type: 'markdown', data: '' }]
+              content: [{ type: 'markdown', data: '' }],
+              // 流式消息同样带 blocks：每批合批刷新时重解析，版式随文本收敛
+              blocks: []
             }
           ]),
           statusText: ''
@@ -456,6 +458,8 @@ Page({
     this._streamFlushed = text;
     const patch = {};
     patch['messages[' + this._streamIndex + '].content[0].data'] = text;
+    // 同步重解析 markdown：与文本同一个 setData 落库，避免出现「文本新、版式旧」的一帧
+    patch['messages[' + this._streamIndex + '].blocks'] = parseMarkdown(text);
     if (afterRender) {
       // 渲染完成后再跟随滚动：回调里量到的高度是新的，滚动一次到位
       this.setData(patch, () => this.scrollToBottom());
@@ -478,9 +482,8 @@ Page({
   },
 
   onReady() {
-    // 导航栏高度与输入栏高度都按胶囊位置 / 组件样式反算，机型间有出入，
-    // 首屏渲染后实测一次修正估算值，避免最后一条消息被输入栏压住
-    this.measureNavbar();
+    // 输入栏高度按实测修正（多行输入会长高，首帧估的是两行高度）；
+    // 导航栏高度确定（状态栏 + 44），无需测量
     this.measureSender();
   },
 
@@ -506,20 +509,6 @@ Page({
     agentSocket.off('error');
     agentSocket.off('done');
     agentSocket.off('disconnected');
-  },
-
-  // placeholder 撑出的高度就是导航栏实际占用的高度（含状态栏）
-  measureNavbar() {
-    if (!wx.createSelectorQuery) return;
-    wx.createSelectorQuery()
-      .in(this)
-      .select('.t-navbar__placeholder')
-      .boundingClientRect((rect) => {
-        if (!rect || !rect.height) return;
-        this._navH = rect.height;
-        this.applyKeyboard();
-      })
-      .exec();
   },
 
   // sender-wrap 是绝对定位容器（自成 BFC，子元素外边距不会合并出去），
@@ -625,7 +614,7 @@ Page({
       this._sendWatchdog = 0;
       if (!this.data.sending) return;
       this.setData({ sending: false, statusText: '' });
-      wx.showToast({ icon: 'none', title: '服务暂时没有响应，请重试', duration: 2000 });
+      this.toast('服务暂时没有响应，请重试');
     }, SEND_TIMEOUT_MS);
   },
 
@@ -689,7 +678,7 @@ Page({
 
       if (canceled || !path) return;
       if (ms < REC_MIN_MS) {
-        wx.showToast({ icon: 'none', title: '说话时间太短', duration: 1200 });
+        this.toast('说话时间太短', 1200);
         return;
       }
       this.sendVoice(path, Math.max(1, Math.round(ms / 1000)));
@@ -698,7 +687,7 @@ Page({
     this._recorder.onError(() => {
       this._recording = false;
       this.setData({ recording: false, recordCanceling: false, recordTip: '按住说话' });
-      wx.showToast({ icon: 'none', title: '录音失败，请重试' });
+      this.toast('录音失败，请重试');
     });
 
     // 播完或播不动都要把 playing 标记撤掉，按钮变回播放态
@@ -783,11 +772,7 @@ Page({
       .catch((err) => {
         this.setData({ sending: false, statusText: '' });
         // 识别失败不静默：语音气泡已经留在列表里，用户至少能重听自己说了什么
-        wx.showToast({
-          icon: 'none',
-          title: (err && err.message) || '没听清，请再说一次',
-          duration: 1500
-        });
+        this.toast((err && err.message) || '没听清，请再说一次');
       });
   },
 
@@ -872,7 +857,7 @@ Page({
     Promise.all(MARKET_INDICES.map((m) => quote(m.code).catch(() => null))).then((list) => {
       const markets = MARKET_INDICES.map((m, i) => {
         const d = list[i];
-        if (!d) return { name: m.name, value: '--', pct: '--', up: true };
+        if (!d) return { name: m.name, value: '--', pct: '--', up: true, sep: i > 0 };
         const pctNum = parseFloat(d.change_percent);
         const num = isNaN(pctNum) ? 0 : pctNum;
         const up = num >= 0; // >=0 红（涨），<0 绿（跌）
@@ -880,7 +865,9 @@ Page({
           name: m.name,
           value: formatIndex(d.price),
           pct: (up ? '+' : '') + num.toFixed(2) + '%',
-          up
+          up,
+          // sep：行间分隔线类名由 JS 按行号算（WXSS 禁兄弟选择器）
+          sep: i > 0
         };
       });
       this.setData({ markets });
@@ -893,10 +880,10 @@ Page({
     this.loadMarkets(); // 每次打开抽屉刷新一次（后端 30s 缓存，开销可控）
   },
 
-  // popup 的 visible-change：detail.visible 为目标状态（点遮罩关闭时也会触发）
-  onDrawerVisibleChange(e) {
-    const visible = !!(e && e.detail && e.detail.visible);
-    if (visible !== this.data.drawerOpen) this.setData({ drawerOpen: visible });
+  // 点遮罩关闭抽屉（base-popup 的 mask 事件）。
+  // 左滑关闭不走这里（onSwipeMove 直接置 false），两者最终都汇到 drawerOpen
+  onDrawerMask() {
+    if (this.data.drawerOpen) this.setData({ drawerOpen: false });
   },
 
   // 抽屉只在主页面存在，子页面没有，因此不保留「当前页」状态，
@@ -924,6 +911,23 @@ Page({
     this._pendingMenu = '';
     const url = menu && ROUTES[menu];
     if (url) wx.navigateTo({ url });
+  },
+
+  // 轻提示：自研 base-toast（替代 wx.showToast 默认样式）
+  toast(message, duration) {
+    const toast = this.selectComponent('#base-toast');
+    if (toast) toast.show(message, duration);
+  },
+
+  // markdown 链接点击：小程序不能直接打开外部 web 页面，
+  // 统一复制链接 + 轻提示（研报 / 事件卡的原文链接合规要求同理）
+  onMdLinkTap(e) {
+    const href = e.currentTarget.dataset && e.currentTarget.dataset.href;
+    if (!href) return;
+    wx.setClipboardData({
+      data: href,
+      success: () => this.toast('链接已复制')
+    });
   },
 
   // ===== 手势开关抽屉：右滑打开，左滑关闭 =====

@@ -1,0 +1,21 @@
+<view class="navbar navbar-class" style="padding-top: {{statusBarHeight}}px; height: {{barHeight + statusBarHeight}}px;">
+  <view class="navbar-inner">
+    <!-- 左侧：返回箭头（leftArrow）或菜单插槽（slot left），二选一 -->
+    <view
+      wx:if="{{leftArrow}}"
+      class="nav-btn"
+      hover-class="nav-btn--hover"
+      hover-stay-time="{{60}}"
+      aria-label="{{leftAriaLabel}}"
+      bindtap="onLeftTap"
+    >
+      <base-icon name="arrow-left" size="44rpx" color="var(--ink)" />
+    </view>
+    <slot wx:else name="left" />
+
+    <!-- 标题：铺满整行居中，max-width 避开胶囊，pointer-events 不挡手势 -->
+    <view class="nav-title" style="max-width: {{titleMaxWidth}}px;">
+      <text class="nav-title-text">{{title}}</text>
+    </view>
+  </view>
+</view>

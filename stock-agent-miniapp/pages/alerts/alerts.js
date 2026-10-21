@@ -1,4 +1,3 @@
-import Toast from '../../miniprogram_npm/tdesign-miniprogram/toast/index';
 import * as stockApi from '../../services/stock';
 import * as alertApi from '../../services/alert';
 
@@ -77,13 +76,13 @@ function parseDate(iso) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// 概览宫格（TDesign grid）数据：只保留「全部提醒」和「今日触发」两格，
+// 概览宫格数据：只保留「全部提醒」和「今日触发」两格，
 // 今日触发按 last_triggered_at 是否今天来数
 function makeStats(alerts) {
   const todayCount = alerts.filter((a) => isToday(a.lastTriggeredAt)).length;
   return [
-    { key: 'total', num: alerts.length, label: '全部提醒', cls: 'ink' },
-    { key: 'today', num: todayCount, label: '今日触发', cls: 'ink' }
+    { key: 'total', num: alerts.length, label: '全部提醒' },
+    { key: 'today', num: todayCount, label: '今日触发' }
   ];
 }
 
@@ -106,10 +105,11 @@ function trendIconOf(a) {
   return 'chart-bar';
 }
 
-// 趋势颜色跟随涨跌：突破 / 涨幅用红，跌破 / 跌幅用绿，成交量保持红
+// 趋势颜色跟随涨跌：突破 / 涨幅用红，跌破 / 跌幅用绿，成交量保持红。
+// 颜色名走新 token（--up/--down），由 base-icon 的 COLOR_VARS 映射成具体色值
 function trendColorOf(a) {
-  if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'var(--c-green)';
-  return 'var(--c-red)';
+  if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'var(--down)';
+  return 'var(--up)';
 }
 
 // 状态标签配色：已触发时跟随涨跌（跌 = 绿、涨 = 红），未触发用中性灰
@@ -155,6 +155,11 @@ Page({
     alerts: [],          // 由 GET /api/v1/alerts 填充
     stats: makeStats([]),
 
+    // 删除确认弹窗（base-popup，替代 wx.showModal）。
+    // 待删 id 记在 this._pendingDeleteId，不进 data（不参与视图 diff）
+    deleteVisible: false,
+    deleteDesc: '',
+
     // ===== 新增提醒弹窗状态 =====
     popupVisible: false,
     searchKeyword: '',
@@ -169,8 +174,6 @@ Page({
     // overlay 节点保留（只是透明），点空白仍可关闭；
     // 走 overlayProps.backgroundColor 会写成行内样式，比 CSS 变量更可靠
     pickerPopupProps: { overlayProps: { backgroundColor: 'transparent' } },
-    // 清除图标用极简的纯 x（close），size 24 比 TDesign 默认小一档
-    clearIconCfg: { name: 'close', size: 24 },
     threshold: '',              // 阈值（字符串，提交前转 number）
     thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
     thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,
@@ -233,35 +236,48 @@ Page({
   },
 
   // 卡片右上「删除」：二次确认后直接删除该提醒（不再进编辑弹窗）。
-  // 删除不可逆，故用原生 wx.showModal 确认；确定按钮用 danger 红
+  // 删除不可逆，故用 base-popup 确认；确认按钮走危险色
   onDelete(e) {
     const id = Number((e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || 0);
     if (!id) return;
     const target = this.data.alerts.filter((a) => a.id === id)[0];
     const label = target ? `${target.name}（${target.code}）` : '该提醒';
-    wx.showModal({
-      title: '删除提醒',
-      content: `确定删除 ${label} 的提醒吗？此操作不可恢复。`,
-      confirmText: '删除',
-      confirmColor: '#E34D59',
-      cancelText: '取消',
-      success: (res) => {
-        if (!res.confirm || this._submitting) return;
-        this._submitting = true;
-        alertApi
-          .remove(id)
-          .then(() => {
-            Toast({ context: this, message: '提醒已删除' });
-            this.loadList();
-          })
-          .catch((err) => {
-            Toast({ context: this, message: (err && err.message) || '删除提醒失败' });
-          })
-          .then(() => {
-            this._submitting = false;
-          });
-      }
+    this._pendingDeleteId = id;
+    this.setData({
+      deleteVisible: true,
+      deleteDesc: `确定删除 ${label} 的提醒吗？此操作不可恢复。`
     });
+  },
+
+  cancelDelete() {
+    this._pendingDeleteId = 0;
+    this.setData({ deleteVisible: false, deleteDesc: '' });
+  },
+
+  confirmDelete() {
+    const id = this._pendingDeleteId;
+    if (!id || this._submitting) return;
+    this._submitting = true;
+    this.setData({ deleteVisible: false, deleteDesc: '' });
+    alertApi
+      .remove(id)
+      .then(() => {
+        this.toast('提醒已删除');
+        this.loadList();
+      })
+      .catch((err) => {
+        this.toast((err && err.message) || '删除提醒失败');
+      })
+      .then(() => {
+        this._submitting = false;
+        this._pendingDeleteId = 0;
+      });
+  },
+
+  // 轻提示：自研 base-toast（替代 TDesign toast）
+  toast(message) {
+    const toast = this.selectComponent('#base-toast');
+    if (toast) toast.show(message);
   },
 
   // 取消按钮：关闭弹窗不保存
@@ -469,7 +485,7 @@ Page({
     // 校验
     const errMsg = this._validateForm();
     if (errMsg) {
-      Toast({ context: this, message: errMsg });
+      this.toast(errMsg);
       return;
     }
 
@@ -482,13 +498,13 @@ Page({
     alertApi
       .create(payload)
       .then(() => {
-        Toast({ context: this, message: '提醒添加成功' });
+        this.toast('提醒添加成功');
         this._closePopup();
         this.loadList();
       })
       .catch((err) => {
         // 409「该股票的该条件提醒已存在」这类文案后端已写好，直接用它的
-        Toast({ context: this, message: (err && err.message) || '添加提醒失败' });
+        this.toast((err && err.message) || '添加提醒失败');
       })
       .then(() => {
         this._submitting = false;

@@ -1,4 +1,4 @@
-/* ===== 页面骨架（与 watchlist / alerts 两页一致） ===== */
+/* ===== 页面骨架 ===== */
 .page {
   display: flex;
   flex-direction: column;
@@ -6,182 +6,228 @@
   overflow: hidden;
   background: var(--bg);
   position: relative;
-  will-change: transform;
 }
 
-/* content 本身不加内边距：卡片自带左右 32rpx 外边距（t-cell-group--card 的
-   默认 margin），再给 content 加 padding 就会变成两层缩进、整体看着是歪的。
-   这与其它子页面一致 */
 .content {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* 给底部固定的退出登录按钮预留空间，避免卡片滑到按钮下方 */
-  padding-bottom: 240rpx;
+  padding: var(--sp-3) var(--sp-4);
 }
 
 /* ===== 个人信息卡 ===== */
-/* 外边距与圆角对齐 t-cell-group--card（32rpx / 18rpx），
-   这样个人信息卡和下面的偏好设置卡左右是对齐的 */
 .profile-card {
   display: flex;
   align-items: center;
-  margin: var(--gap-block);
-  padding: var(--pad-card);
-  background: var(--c-card);
-  border-radius: 18rpx;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--pad-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
 }
 
-/* 分组标题与它自己的卡片之间的距离。
-   组件的分组标题只有 90rpx 行高、没有下边距，标题条和卡片原本是贴死的。
-   用 --gap-title（24rpx，比区块间距 --gap-block 32rpx 小一档）而不是区块间距：
-   标题要「属于」下面那张卡片，所以比卡片与卡片之间更近一点；
-   它上方的距离由上一张卡片自己的外边距提供，同样是 32rpx */
-.pref-title {
-  margin-bottom: var(--gap-title);
+.profile-card--hover {
+  background: var(--surface-2);
 }
 
-/* 可点块的按下态底色一致 */
-.profile-card--hover,
-.footer-btn--danger-hover {
-  background: var(--c-hover);
-}
-
-/* 头像：不给图标，没设置时就是一块灰底。
-   display:block 让 image 分支和 view 分支表现完全一致（image 默认是 inline） */
 .profile-avatar {
-  display: block;
-  width: 144rpx;
-  height: 144rpx;
-  border-radius: 72rpx;
-  background: var(--c-fill);
   flex: none;
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.profile-avatar--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
 }
 
 .profile-info {
   flex: 1;
   min-width: 0;
-  margin-left: var(--sp-4);
 }
 
 .profile-nickname {
-  font-size: 32rpx;
-  font-weight: 400;
-  color: var(--c-ink);
-  line-height: 1.4;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ===== 行左侧图标 ===== */
-/* 32px 圆角方块。底色跟随开关状态：开着用项目蓝的淡底（#2559EB 8% 混白），
-   关着用灰。不用 TDesign 主色 #0052D9 的淡底，免得同一页出现两种蓝 */
-.icon-wrap {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 16rpx;
-  background: var(--c-fill);
+/* ===== 偏好设置分组 ===== */
+.pref-group {
+  margin-top: var(--sp-4);
+}
+
+/* 分组标题与卡片的间距刻意比区块间距小一档：标题才「属于」下面的卡片 */
+.group-title {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+  letter-spacing: 1rpx;
+}
+
+.pref-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.pref-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--pad-card);
+}
+
+.pref-icon-wrap {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--r-tag);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+/* 开关打开时图标托底色跟进，只此一处用金色（行动点） */
+.pref-icon-wrap--on {
+  border-color: #5A4A1E;
+  background: rgba(233, 185, 73, 0.10);
+}
+
+.pref-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pref-title {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.pref-desc {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+/* 原生 switch：平台仅支持改 color，其余用组件默认 */
+.pref-switch {
   flex: none;
+  transform: scale(0.9);
+  transform-origin: right center;
 }
 
-.icon-wrap--on {
-  background: var(--c-tint);
-}
-
-/* ===== 底部退出登录按键（与其它子页面 .bottom-btn 一致：固定在页面底部） ===== */
+/* ===== 底部操作区 ===== */
 .bottom-btn {
   position: absolute;
-  left: var(--pad-page);
-  right: var(--pad-page);
-  /* bottom 由 JS 写入的 bottomGap 控制，这里只作占位 */
-  bottom: 20px;
+  left: var(--sp-4);
+  right: var(--sp-4);
 }
 
 .footer-btn {
-  height: 104rpx;
-  width: 100%;
-  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32rpx;
-  font-weight: 500;
+  height: 96rpx;
+  border-radius: var(--r-card);
+  font-size: var(--fs-body);
+  font-weight: 600;
 }
 
-/* 白底红字，危险操作。
-   不复用 --c-red：那个语义是「涨」，混用会互相干扰 */
+/* 危险操作：红色描边 + 红字，不用实底（退出登录不是主流程动作） */
 .footer-btn--danger {
-  background: var(--c-card);
-  color: var(--c-danger);
+  color: var(--up);
+  border: 1px solid rgba(242, 85, 90, 0.45);
+  background: rgba(242, 85, 90, 0.08);
+}
+
+.footer-btn--danger-hover {
+  background: rgba(242, 85, 90, 0.16);
 }
 
 .footer-hint {
   margin-top: var(--sp-2);
   text-align: center;
-  font-size: 24rpx;
-  color: var(--c-gray);
+  font-size: var(--fs-min);
+  color: var(--ink-3);
 }
 
 /* ===== 编辑资料弹窗 ===== */
-/* padding-bottom 与「添加自选股」的 .add-form 取同一个值（8rpx）。
-   padding-top 是额外加的：标题「编辑资料」到头像之间需要一点呼吸空间。
-   组件给的内容区上留白是 48rpx（.t-dialog__content），加上这里是 72rpx——
-   比「添加自选股」多 24rpx，因为那个弹窗第一行贴的是输入框，
-   这个弹窗第一行是圆形头像，视觉上吃得下更多留白 */
 .edit-form {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: var(--sp-3);
-  padding-bottom: var(--sp-1);
 }
 
-/* 头像包在 open-type="chooseAvatar" 的原生 button 里，
-   这里把原生 button 的灰底、圆角、边框、内边距全部清掉，只留透明点击区。
-   ::after 是微信给 button 画的默认边框。
-   注意别给 margin-top：弹窗标题到内容的距离由组件统一控制
-   （.t-dialog__content 的 padding-top = 48rpx），加了就跟「添加自选股」
-   对不齐了，那个弹窗的内容区是从默认位置直接开始的 */
+/* 原生 button 清掉默认样式：无边框无底色，尺寸自负。
+   button 的默认样式各端差异大，必须显式清（含 ::after 边框） */
 .avatar-picker {
-  padding: 0 !important;
-  margin: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  line-height: 1 !important;
-  width: auto !important;
+  margin: 0;
+  padding: 0;
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: transparent;
+  line-height: 1;
 }
 
-.avatar-picker::after {
-  border: 0 !important;
+/* 原生 button 自带的 ::after 边框：WXSS 禁写双冒号，用单冒号 */
+.avatar-picker:after {
+  border: none;
 }
 
-/* 弹窗里的头像同样是灰底、不给图标，display:block 同上 */
 .edit-avatar {
-  display: block;
-  width: 168rpx;
-  height: 168rpx;
-  border-radius: 84rpx;
-  background: var(--c-fill);
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
 }
 
-/* 头像到输入框的距离：48 → 32 → 24rpx 逐次收紧。
-   上面标题到头像已有 72rpx 留白，这里再大就会显得上下脱节 */
 .edit-field {
   width: 100%;
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
-/* 「昵称」标题已去掉——placeholder 已经说明了这个框的用途，
-   再挂一行标题反而啰嗦，这里只剩输入框本身 */
 .edit-input {
-  background: var(--c-fill);
-  border-radius: 16rpx;
+  width: 100%;
+  height: 88rpx;
   padding: 0 var(--sp-3);
+  box-sizing: border-box;
+  text-align: center;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
 }
 
-/* 「微信昵称」按键：放在输入框下方、整体居中 */
+.edit-input-placeholder {
+  color: var(--ink-3);
+  font-size: var(--fs-body);
+}
+
+/* 超长提示行：红色（涨跌语义里的「警告」位），仅超长时出现 */
+.edit-tip {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+  color: var(--up);
+  text-align: center;
+}
+
 .nickname-action {
   display: flex;
   justify-content: center;
@@ -189,17 +235,12 @@
 }
 
 .nickname-link {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: var(--c-blue);
   padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-aux);
+  color: var(--accent);
+  border-radius: var(--r-tag);
 }
 
 .nickname-link--hover {
-  opacity: 0.6;
-}
-
-/* 退出登录确认弹窗：确认按钮标红，和「退出登录」按钮同色 */
-.dialog-confirm--danger {
-  color: var(--c-danger) !important;
+  background: rgba(233, 185, 73, 0.10);
 }

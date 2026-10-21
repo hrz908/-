@@ -1,0 +1,48 @@
+<view wx:if="{{innerVisible}}" class="popup popup-class {{leaving ? 'popup--leaving' : ''}}">
+  <!-- 遮罩：catchtap 吃掉点击，不穿透到背后内容 -->
+  <view class="popup-mask" catchtap="onMask" />
+
+  <view class="popup-panel popup-panel--{{mode}}">
+    <!-- 对话框头部：标题 + 可选说明 -->
+    <view wx:if="{{title}}" class="popup-header">
+      <view class="popup-title">{{title}}</view>
+      <view wx:if="{{desc}}" class="popup-desc">{{desc}}</view>
+    </view>
+
+    <!-- center：主体走 content 插槽，超长时内部滚动 -->
+    <scroll-view
+      wx:if="{{mode === 'center'}}"
+      class="popup-body"
+      scroll-y="{{true}}"
+      enhanced="{{true}}"
+      show-scrollbar="{{false}}"
+    >
+      <view class="popup-body-inner">
+        <slot name="content" />
+      </view>
+    </scroll-view>
+
+    <!-- left / bottom：整块自定义内容走默认插槽 -->
+    <view wx:else class="popup-body popup-body--full">
+      <slot />
+    </view>
+
+    <!-- 底部按钮：任一侧文案为空则不渲染该按钮 -->
+    <view wx:if="{{hasFooter}}" class="popup-footer">
+      <view
+        wx:if="{{cancelText}}"
+        class="popup-btn popup-btn--cancel"
+        hover-class="popup-btn--hover"
+        hover-stay-time="{{60}}"
+        bindtap="onCancel"
+      >{{cancelText}}</view>
+      <view
+        wx:if="{{confirmText}}"
+        class="popup-btn popup-btn--confirm {{confirmDanger ? 'popup-btn--danger' : ''}}"
+        hover-class="popup-btn--hover"
+        hover-stay-time="{{60}}"
+        bindtap="onConfirm"
+      >{{confirmText}}</view>
+    </view>
+  </view>
+</view>

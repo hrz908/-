@@ -5,20 +5,15 @@
   bindtouchend="onSwipeEnd"
   bindtouchcancel="onSwipeEnd"
 >
-  <!-- 顶部导航栏：TDesign navbar，左侧菜单按钮走 left 插槽。
-       navbar 的 fixed 默认是 true、而 placeholder 默认 false，
-       意味着内容区 position: fixed 且不占位，对话区会顶到最上面被它遮住，
-       因此这里显式打开 placeholder 让它在文档流里预留出自身高度 -->
-  <t-navbar title="溜来" placeholder="{{true}}">
+  <!-- 顶部导航栏：自研 navbar（含胶囊安全区），左侧菜单按钮走 left 插槽。
+       高度 = 状态栏 + 44px 内容区，完全确定，页面直接算无需实测 -->
+  <base-navbar title="溜来">
     <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
-      <t-icon name="view-list" size="52rpx" />
+      <base-icon name="menu" size="44rpx" color="var(--ink)" />
     </view>
-  </t-navbar>
+  </base-navbar>
 
-  <!-- 对话区：页面自绘 scroll-view + TDesign chat-message。
-       t-chat-list 在内部 wx:for 里创建 chat-message，页面无法逐条注入 content 插槽，
-       而行情卡/日 K 表是结构化内容，markdown 表格只有通用版式、做不出设计稿的版式，
-       因此这里自己在页面层循环，卡片本体用 WXML 直接绘制 -->
+  <!-- 对话区：高度由 JS 精算并固定为像素值，不随视口变化抖动 -->
   <view class="chat-wrap" style="height: {{chatHeight}}px;">
     <scroll-view
       class="chat-scroll"
@@ -31,79 +26,25 @@
     >
       <view class="chat-inner">
         <block wx:for="{{messages}}" wx:for-item="msg" wx:key="index">
-          <!-- 对话单元：TDesign AI Chat 的 chat-message，variant="base" 即基础类型；
-               不传 avatar / name，头像容器与名称行会因内容为空自动折叠（组件内的 :empty 规则） -->
-          <t-chat-message
-            variant="base"
-            role="{{msg.role}}"
-            placement="{{msg.role === 'user' ? 'right' : 'left'}}"
-            content="{{msg.content}}"
-            status="{{msg.status || ''}}"
-          >
-            <!-- 行情卡片：content 为空数组时 chat-message 才会渲染 content 插槽 -->
-            <view wx:if="{{msg.card === 'quote'}}" slot="content" class="card">
-              <view class="card-head">
-                <view class="card-title">{{msg.quote.name}}</view>
-                <view class="card-sub">{{msg.quote.code}}</view>
-              </view>
-              <view class="card-hero">
-                <view class="hero-price {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.price}}</view>
-                <view class="hero-change {{msg.quote.up ? 'up' : 'down'}}">
-                  {{msg.quote.change}} {{msg.quote.pct}}
-                </view>
-              </view>
-              <view class="card-grid">
-                <view class="grid-item">
-                  <view class="grid-label">今开</view>
-                  <view class="grid-value">{{msg.quote.open}}</view>
-                </view>
-                <view class="grid-item">
-                  <view class="grid-label">最高</view>
-                  <view class="grid-value up">{{msg.quote.high}}</view>
-                </view>
-                <view class="grid-item">
-                  <view class="grid-label">最低</view>
-                  <view class="grid-value down">{{msg.quote.low}}</view>
-                </view>
-              </view>
-              <view class="card-foot">{{msg.quote.meta}}</view>
+          <!-- ===== 用户消息：右对齐蓝灰气泡 ===== -->
+          <view wx:if="{{msg.role === 'user' && !msg.card}}" class="msg msg--user">
+            <view class="bubble bubble--user">
+              <text class="bubble-text" selectable="{{true}}">{{msg.content[0].data}}</text>
             </view>
+          </view>
 
-            <!-- 日 K 走势表格：涨跌幅按符号着色 -->
-            <view wx:elif="{{msg.card === 'kline'}}" slot="content" class="card">
-              <view class="card-head">
-                <view class="card-title">日 K 走势</view>
-                <view class="card-sub">{{msg.klineSub}}</view>
-              </view>
-              <view class="kline-table">
-                <view class="kline-tr">
-                  <view class="kline-td kline-th">日期</view>
-                  <view class="kline-td kline-th">收盘</view>
-                  <view class="kline-td kline-th kline-right">涨跌幅</view>
-                </view>
-                <view
-                  class="kline-tr"
-                  wx:for="{{msg.kline}}"
-                  wx:for-item="k"
-                  wx:key="d"
-                >
-                  <view class="kline-td">{{k.d}}</view>
-                  <view class="kline-td">{{k.c}}</view>
-                  <view class="kline-td kline-right {{k.up ? 'up' : 'down'}}">{{k.p}}</view>
-                </view>
-              </view>
-            </view>
-            <!-- 语音消息：与卡片消息同一个套路——content 留空数组，
-                 组件才会渲染 content 插槽，气泡本体在页面上画。
-                 播放状态记在 msg.voice.playing 上（见 playVoice） -->
+          <!-- ===== 语音消息：user 角色的卡片消息，播放入口 ===== -->
+          <view wx:elif="{{msg.role === 'user' && msg.card === 'voice'}}" class="msg msg--user">
             <view
-              wx:elif="{{msg.card === 'voice'}}"
-              slot="content"
-              class="voice-bubble {{msg.voice.playing ? 'voice-bubble--playing' : ''}}"
+              class="bubble bubble--user bubble--voice {{msg.voice.playing ? 'bubble--voice-playing' : ''}}"
               data-index="{{index}}"
               bindtap="playVoice"
             >
-              <t-icon name="{{msg.voice.playing ? 'pause-circle' : 'play-circle'}}" size="40rpx" />
+              <base-icon
+                name="{{msg.voice.playing ? 'pause' : 'play'}}"
+                size="40rpx"
+                color="var(--ink)"
+              />
               <view class="voice-wave">
                 <view
                   class="voice-bar"
@@ -113,38 +54,124 @@
                   style="height: {{b}}rpx;"
                 ></view>
               </view>
-              <view class="voice-duration">{{msg.voice.duration}}"</view>
+              <text class="voice-duration num">{{msg.voice.duration}}"</text>
             </view>
-          </t-chat-message>
+          </view>
+
+          <!-- ===== AI 消息：左对齐卡片气泡 ===== -->
+          <view wx:else class="msg msg--assistant">
+            <view class="bubble bubble--assistant">
+              <!-- 行情卡片：结构化数据，版式用 WXML 直接绘制（markdown 表格还原不出） -->
+              <view wx:if="{{msg.card === 'quote'}}" class="qcard">
+                <view class="qcard-head">
+                  <view class="qcard-name">{{msg.quote.name}}</view>
+                  <view class="qcard-code num">{{msg.quote.code}}</view>
+                </view>
+                <view class="qcard-hero">
+                  <text class="qcard-price num {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.price}}</text>
+                  <text class="qcard-change num {{msg.quote.up ? 'up' : 'down'}}">{{msg.quote.change}} {{msg.quote.pct}}</text>
+                </view>
+                <view class="qcard-grid">
+                  <view class="qgrid-item">
+                    <view class="qgrid-label">今开</view>
+                    <view class="qgrid-value num">{{msg.quote.open}}</view>
+                  </view>
+                  <view class="qgrid-item">
+                    <view class="qgrid-label">最高</view>
+                    <view class="qgrid-value num up">{{msg.quote.high}}</view>
+                  </view>
+                  <view class="qgrid-item">
+                    <view class="qgrid-label">最低</view>
+                    <view class="qgrid-value num down">{{msg.quote.low}}</view>
+                  </view>
+                </view>
+                <view wx:if="{{msg.quote.meta}}" class="qcard-foot num">{{msg.quote.meta}}</view>
+              </view>
+
+              <!-- 日 K 表格：涨跌幅按符号着色 -->
+              <view wx:elif="{{msg.card === 'kline'}}" class="kcard">
+                <view class="kcard-head">
+                  <view class="kcard-title">日 K 走势</view>
+                  <view class="kcard-sub num">{{msg.klineSub}}</view>
+                </view>
+                <view class="kline-table">
+                  <view class="kline-tr">
+                    <view class="kline-td kline-th">日期</view>
+                    <view class="kline-td kline-th">收盘</view>
+                    <view class="kline-td kline-th kline-right">涨跌幅</view>
+                  </view>
+                  <view class="kline-tr" wx:for="{{msg.kline}}" wx:for-item="k" wx:key="d">
+                    <view class="kline-td num">{{k.d}}</view>
+                    <view class="kline-td num">{{k.c}}</view>
+                    <view class="kline-td kline-right num {{k.up ? 'up' : 'down'}}">{{k.p}}</view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 纯文本回答：markdown 块渲染（见页面底部 md-* 模板与样式） -->
+              <block wx:else>
+                <block wx:for="{{msg.blocks}}" wx:for-item="b" wx:key="index">
+                  <view wx:if="{{b.tag === 'h'}}" class="md-h {{b.depth <= 2 ? 'md-h--lg' : 'md-h--sm'}}">
+                    <template is="mdInline" data="{{inlines: b.inlines}}" />
+                  </view>
+                  <view wx:if="{{b.tag === 'p'}}" class="md-p">
+                    <template is="mdInline" data="{{inlines: b.inlines}}" />
+                  </view>
+                  <view wx:if="{{b.tag === 'quote'}}" class="md-quote">
+                    <template is="mdInline" data="{{inlines: b.inlines}}" />
+                  </view>
+                  <view wx:if="{{b.tag === 'code'}}" class="md-code">
+                    <text class="md-code-text" selectable="{{true}}">{{b.text}}</text>
+                  </view>
+                  <view wx:if="{{b.tag === 'hr'}}" class="md-hr" />
+                  <view wx:if="{{b.tag === 'ul' || b.tag === 'ol'}}" class="md-list">
+                    <view class="md-li {{item.depth ? 'md-li--sub' : ''}}" wx:for="{{b.items}}" wx:for-item="item" wx:key="index">
+                      <text class="md-li-marker num">{{b.tag === 'ol' ? index + 1 + '.' : (item.depth ? '◦' : '•')}}</text>
+                      <view class="md-li-body">
+                        <template is="mdInline" data="{{inlines: item.inlines}}" />
+                      </view>
+                    </view>
+                  </view>
+                  <view wx:if="{{b.tag === 'table'}}" class="md-table">
+                    <view class="md-tr md-tr--head">
+                      <view class="md-th" wx:for="{{b.head}}" wx:for-item="c" wx:key="index">
+                        <template is="mdInline" data="{{inlines: c}}" />
+                      </view>
+                    </view>
+                    <view class="md-tr {{ri > 0 ? 'md-tr--sep' : ''}}" wx:for="{{b.rows}}" wx:for-item="r" wx:for-index="ri" wx:key="index">
+                      <view class="md-td" wx:for="{{r}}" wx:for-item="c" wx:key="index">
+                        <template is="mdInline" data="{{inlines: c}}" />
+                      </view>
+                    </view>
+                  </view>
+                </block>
+              </block>
+            </view>
+          </view>
         </block>
-      </view>
-      <!-- 状态提示：发送后等待回答期间显示（正在思考 / 工具查询 / 重连），
-           放在滚动内容里、底部锚点之前，跟随列表一起滚到底 -->
-      <view wx:if="{{statusText}}" class="status-tip">
-        <view class="status-dots">
-          <view class="status-dot"></view>
-          <view class="status-dot"></view>
-          <view class="status-dot"></view>
+
+        <!-- 状态提示：发送后等待回答期间显示（正在思考 / 工具查询 / 重连） -->
+        <view wx:if="{{statusText}}" class="status-tip">
+          <view class="status-dots">
+            <view class="status-dot"></view>
+            <view class="status-dot"></view>
+            <view class="status-dot"></view>
+          </view>
+          <text class="status-tip-text">{{statusText}}</text>
         </view>
-        <text>{{statusText}}</text>
+
+        <!-- 合规兜底：所有回答底部固定挂载免责声明（金融产品红线） -->
+        <view class="disclaimer">以上内容由 AI 基于公开数据整理，仅供信息参考，不构成任何投资建议。市场有风险，决策需谨慎。</view>
+
+        <!-- 底部锚点：0 高度，仅作为列表内容的稳定结尾 -->
+        <view id="chat-bottom" class="chat-anchor"></view>
       </view>
-      <!-- 底部锚点：0 高度。滚动已改为 scroll-top 数值控制，
-           它不再承担定位职责，仅作为列表内容的稳定结尾 -->
-      <view id="chat-bottom" class="chat-anchor"></view>
     </scroll-view>
   </view>
 
-  <!-- 输入栏：页面自绘的一条胶囊（不再用 t-chat-sender）
-       原组件是「大卡片 + 左下角切换键 + 右下角发送键」的两段式布局，
-       改不出「胶囊整体包住语音键与发送键」的结构，且卡片左上角自带工具栏入口，
-       所以这里自绘一层，换来完全可控：
-       - 一条胶囊：左端是模式键（语音 / 键盘），右端是发送键
-       - 键盘态：文字从模式键右侧开始；语音态：中间换成「按住说话」，模式键同时换成键盘图标
-       - 语音态直接不渲染 textarea，键盘随之收起，再点模式键切回键盘
-       手势起点标记用 bind 而不是 catch：catch 会让子元素的点击全部失效
-       （输入框点不动、模式键和发送键也不响应），只能用在没有可点子元素的节点上。
-       这里改成「起点在输入栏」的信号，由 onSwipeStart 判断后锁掉抽屉手势，
-       既不阻断点击，也能让光标移动 / 按住说话优先于开关抽屉 -->
+  <!-- 输入栏：页面自绘的一条胶囊，左端模式键（语音 / 键盘），右端是发送键。
+       手势起点标记用 bind 而不是 catch：catch 会让子元素的点击全部失效，
+       这里改成「起点在输入栏」的信号，由 onSwipeStart 判断后锁掉抽屉手势 -->
   <view
     class="sender-wrap"
     style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
@@ -158,19 +185,17 @@
         aria-label="{{voiceMode ? '切换到键盘输入' : '切换到语音输入'}}"
         bindtap="onToggleInputMode"
       >
-        <t-icon name="{{voiceMode ? 'keyboard-1' : 'voice-wave'}}" size="46rpx" />
+        <base-icon name="{{voiceMode ? 'keyboard' : 'voice'}}" size="44rpx" color="var(--ink-2)" />
       </view>
 
-      <!-- 键盘态：输入区紧贴模式键右侧。
-           整块可点（bindtap 主动聚焦）：textarea 是原生组件，点它的空白边角
-           未必落在原生节点上，给整块输入区一个聚焦入口更稳 -->
+      <!-- 键盘态：输入区紧贴模式键右侧，整块可点（主动聚焦） -->
       <view wx:if="{{!voiceMode}}" class="bar-field" bindtap="onTapInputField">
         <textarea
           class="bar-input"
           value="{{input}}"
           focus="{{inputFocus}}"
           placeholder="问点什么…"
-          placeholder-style="color: #B0B4BC; font-size: 30rpx;"
+          placeholder-style="color: #6B7A8A; font-size: 30rpx;"
           auto-height="{{true}}"
           adjust-position="{{false}}"
           cursor-spacing="24"
@@ -186,8 +211,7 @@
       </view>
 
       <!-- 语音态：胶囊中央的「按住说话」，上滑可取消。
-           这里可以用 catch：本节点没有需要点击的子元素，catch 不会误伤点击；
-           它拦住的是「按住说话时右滑把抽屉拉出来」——触摸事件不再冒泡到页面根节点 -->
+           这里可以用 catch：本节点没有需要点击的子元素 -->
       <view
         wx:else
         class="bar-hold {{recording ? 'bar-hold--active' : ''}}"
@@ -197,7 +221,7 @@
         catchtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
 
-      <!-- 发送键：与模式键同规格，一起被胶囊包住 -->
+      <!-- 发送键：无内容时是次级面，有内容才点亮成金色行动点 -->
       <view
         class="bar-send {{input ? 'bar-send--active' : ''}}"
         hover-class="bar-send--hover"
@@ -205,71 +229,78 @@
         bindtap="onSend"
       >
         <view wx:if="{{sending}}" class="bar-send-stop"></view>
-        <t-icon wx:else name="send-filled" size="44rpx" color="#FFFFFF" />
+        <base-icon wx:else name="send" size="44rpx" color="{{input ? '#20180A' : 'var(--ink-3)'}}" />
       </view>
     </view>
   </view>
 
-  <!-- 侧边抽屉：TDesign popup 左侧滑出（drawer 的默认插槽在 70vh 菜单区之下的
-       footer 里，不适合承载整块自定义内容，故直接用 popup 自绘面板）
-       prevent-scroll-through 置为 false：遮罩层默认用 catchtouchmove 拦截滑动，
-       会导致抽屉打开后左滑手势无法冒泡到页面根节点，关闭手势失效
-       duration / durations 两个属性名字很像但不是一回事，改抽屉快慢要一起改：
-       - duration：写进 --td-popup-transition，控制面板和遮罩的 CSS 过渡时长（默认 240/300ms）
-       - durations：transition mixin 用 setTimeout 兜底收尾的时长，决定 leaved 事件何时抛出
-       只改 duration 的话，动画早就播完了 leaved 还要多等 100+ms，跳转才慢 -->
-  <t-popup
+  <!-- 侧边抽屉：自研 base-popup left 模式。
+       点遮罩 / 左滑都能关；收起动画结束（leaved）后才跳转，避免动画被新页面掐断 -->
+  <base-popup
     visible="{{drawerOpen}}"
-    placement="left"
-    show-overlay="{{true}}"
-    prevent-scroll-through="{{false}}"
-    duration="{{200}}"
-    durations="{{200}}"
-    bind:visible-change="onDrawerVisibleChange"
+    mode="left"
+    bind:mask="onDrawerMask"
     bind:leaved="onDrawerLeaved"
   >
     <view class="drawer-body" style="padding-top: {{drawerTop}}px;">
       <!-- 品牌头部 -->
       <view class="drawer-head">
-        <t-image src="/assets/logo-bull.jpg" class="drawer-logo" mode="aspectFill" />
+        <image class="drawer-logo" src="/assets/logo-bull.jpg" mode="aspectFill" />
         <view class="drawer-title-col">
           <view class="drawer-title">溜来</view>
           <view class="drawer-sub">AI 溜来</view>
         </view>
       </view>
 
-      <!-- 导航菜单：TDesign cell-group + cell -->
-      <t-cell-group theme="card" bordered="{{true}}" title="导航">
-        <t-cell
-          wx:for="{{menus}}"
-          wx:for-item="m"
-          wx:key="key"
-          t-class-center="drawer-nav-center"
-          hover="{{true}}"
-          data-menu="{{m.key}}"
-          bind:click="onMenuSelect"
-        >
-          <!-- 图标 + 文字同一行、彼此垂直居中，整组水平居中。
-               用内联样式锁定横向 flex，避免被组件默认样式影响 -->
+      <!-- 导航菜单 -->
+      <view class="drawer-section">
+        <view class="drawer-section-title">导航</view>
+        <view class="drawer-menu">
           <view
-            slot="title"
-            style="width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 16rpx;"
+            class="drawer-item {{m.sep ? 'drawer-item--sep' : ''}}"
+            wx:for="{{menus}}"
+            wx:for-item="m"
+            wx:key="key"
+            hover-class="drawer-item--hover"
+            data-menu="{{m.key}}"
+            bindtap="onMenuSelect"
           >
-            <t-icon name="{{m.icon}}" size="40rpx" color="#5A5F66" />
-            <text>{{m.label}}</text>
+            <base-icon name="{{m.icon}}" size="40rpx" color="var(--ink-2)" />
+            <text class="drawer-item-text">{{m.label}}</text>
+            <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
           </view>
-        </t-cell>
-      </t-cell-group>
+        </view>
+      </view>
 
-      <!-- 今日大盘：指数值 + 涨跌幅分列，涨红跌绿（.up/.down 着色） -->
-      <t-cell-group theme="card" bordered="{{true}}" title="今日大盘">
-        <t-cell wx:for="{{markets}}" wx:for-item="k" wx:key="name" title="{{k.name}}">
-          <view slot="note" class="market-note {{k.up ? 'up' : 'down'}}">
-            <text class="market-val">{{k.value}}</text>
-            <text class="market-pct">{{k.pct}}</text>
+      <!-- 今日大盘：指数值 + 涨跌幅分列，涨红跌绿 -->
+      <view class="drawer-section">
+        <view class="drawer-section-title">今日大盘</view>
+        <view class="drawer-markets">
+          <view class="market-row {{k.sep ? 'market-row--sep' : ''}}" wx:for="{{markets}}" wx:for-item="k" wx:key="name">
+            <text class="market-name">{{k.name}}</text>
+            <view class="market-note {{k.up ? 'up' : 'down'}}">
+              <text class="market-val num">{{k.value}}</text>
+              <text class="market-pct num">{{k.pct}}</text>
+            </view>
           </view>
-        </t-cell>
-      </t-cell-group>
+        </view>
+      </view>
     </view>
-  </t-popup>
+  </base-popup>
+
+  <base-toast id="base-toast" />
 </view>
+
+<!-- ===== markdown 行内片段模板 =====
+     结构由 utils/markdown.js 生成：带样式标记的扁平文本段。
+     链接点击统一走 onMdLinkTap（复制链接，不用 webview 直接打开外部站点） -->
+<template name="mdInline">
+  <block wx:for="{{inlines}}" wx:for-item="i" wx:key="index">
+    <text
+      wx:if="{{i.t !== 'br'}}"
+      class="md-i {{i.strong ? 'md-strong' : ''}} {{i.em ? 'md-em' : ''}} {{i.code ? 'md-code' : ''}} {{i.del ? 'md-del' : ''}} {{i.href ? 'md-link' : ''}}"
+      data-href="{{i.href}}"
+      bindtap="onMdLinkTap"
+    >{{i.text}}</text>
+  </block>
+</template>

@@ -1,0 +1,11 @@
+/* 图标：背景图渲染 SVG，尺寸与颜色由 JS 侧编码进 data-URI */
+.icon {
+  display: inline-block;
+  width: 44rpx;
+  height: 44rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* 默认不拦截手势：图标多数放在可点父节点上，由父节点的 hover-class 提供按压反馈 */
+  pointer-events: none;
+}

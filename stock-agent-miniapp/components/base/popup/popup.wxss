@@ -1,0 +1,202 @@
+/* 弹层：fixed 全屏（WebView 渲染，fixed/sticky 正常可用，无 Skyline 顾虑） */
+.popup {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  animation: popup-fade-in 240ms ease both;
+}
+
+.popup--leaving {
+  animation: popup-fade-out 240ms ease both;
+}
+
+.popup-mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(4, 8, 12, 0.66);
+}
+
+/* ===== 居中对话框 ===== */
+.popup-panel--center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 84%;
+  max-height: 86%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+/* ===== 左侧抽屉 ===== */
+.popup-panel--left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 520rpx;
+  max-width: 78%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  animation: popup-left-in 240ms cubic-bezier(0.25, 0.8, 0.35, 1) both;
+}
+
+.popup--leaving .popup-panel--left {
+  animation: popup-left-out 240ms ease both;
+}
+
+/* ===== 底部面板 ===== */
+.popup-panel--bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: popup-bottom-in 240ms cubic-bezier(0.25, 0.8, 0.35, 1) both;
+}
+
+.popup--leaving .popup-panel--bottom {
+  animation: popup-bottom-out 240ms ease both;
+}
+
+/* ===== 头部 / 主体 / 底部 ===== */
+.popup-header {
+  flex: none;
+  padding: var(--pad-card) var(--pad-card) var(--sp-2);
+}
+
+.popup-title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+}
+
+.popup-desc {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.popup-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.popup-body-inner {
+  padding: var(--sp-2) var(--pad-card) var(--pad-card);
+}
+
+.popup-body--full {
+  height: 100%;
+  overflow: hidden;
+}
+
+.popup-footer {
+  flex: none;
+  display: flex;
+  border-top: 1px solid var(--line);
+}
+
+.popup-btn {
+  flex: 1;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  /* 数字与中文混排时按钮文案不抖 */
+  font-variant-numeric: tabular-nums;
+}
+
+.popup-btn--cancel {
+  color: var(--ink-2);
+  border-right: 1px solid var(--line);
+}
+
+/* 强调色只给「确认」这一行动作点 */
+.popup-btn--confirm {
+  color: var(--accent);
+}
+
+.popup-btn--danger {
+  color: var(--up);
+}
+
+.popup-btn--hover {
+  background: var(--surface-2);
+}
+
+/* ===== 动画（WXSS 禁写 rem/vh，位移用 translate 百分比） ===== */
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popup-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes popup-left-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes popup-left-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes popup-bottom-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes popup-bottom-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}

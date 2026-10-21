@@ -1,17 +1,10 @@
 {
   "usingComponents": {
-    "t-navbar": "tdesign-miniprogram/navbar/navbar",
-    "t-tabs": "tdesign-miniprogram/tabs/tabs",
-    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
-    "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-swipe-cell": "tdesign-miniprogram/swipe-cell/swipe-cell",
-    "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
-    "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-input": "tdesign-miniprogram/input/input",
-    "t-toast": "tdesign-miniprogram/toast/toast"
+    "base-navbar": "/components/base/navbar/navbar",
+    "base-icon": "/components/base/icon/icon",
+    "base-tabs": "/components/base/tabs/tabs",
+    "base-popup": "/components/base/popup/popup",
+    "base-toast": "/components/base/toast/toast",
+    "base-empty": "/components/base/empty/empty"
   }
 }

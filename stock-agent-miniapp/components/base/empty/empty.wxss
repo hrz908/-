@@ -1,0 +1,30 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-4);
+}
+
+.empty-img {
+  width: 160rpx;
+  height: 160rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.9;
+}
+
+.empty-text {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+.empty-sub {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+  line-height: 1.6;
+  text-align: center;
+}

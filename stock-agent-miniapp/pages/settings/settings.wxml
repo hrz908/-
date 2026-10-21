@@ -1,42 +1,50 @@
-<!-- 页面骨架与其它子页面（watchlist / alerts）保持一致：
-     navbar + scroll-view(content) + TDesign cell-group(theme=card)。
-     content 本身不加内边距，卡片的外边距与圆角对齐 t-cell-group--card
-     （左右 32rpx、圆角 18rpx），个人信息卡与退出登录是自绘块，同一套边距 -->
+<!-- 页面骨架：自研 navbar + 自绘卡片（替代 TDesign cell-group 体系）。
+     深色专业终端视觉：--surface 卡片 / --line 描边 / --ink 文字层级。 -->
 <view class="page">
-  <t-navbar title="我的" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
+  <base-navbar title="我的" left-arrow="{{true}}" bind:back="goBack" />
 
   <view class="content">
-    <!-- 个人信息：整块可点，打开编辑资料弹窗 -->
+    <!-- 个人信息：整块可点，打开编辑资料弹窗。
+         不用头像组件：没图时就是一块次级面底色 + user 图标，比组件内置小圆干净 -->
     <view class="profile-card" hover-class="profile-card--hover" bindtap="onProfileTap">
-      <!-- 头像不给图标，没图时就是一块灰底。
-           不用 t-avatar：组件内部自带一个默认底色的小圆，外露出来就是
-           「大灰圈里叠个小圈」，普通 view/image 画圆反而干净 -->
       <image wx:if="{{avatar}}" class="profile-avatar" src="{{avatar}}" mode="aspectFill" />
-      <view wx:else class="profile-avatar"></view>
+      <view wx:else class="profile-avatar profile-avatar--empty">
+        <base-icon name="user" size="56rpx" color="var(--ink-3)" />
+      </view>
       <view class="profile-info">
         <view class="profile-nickname">{{nickname}}</view>
       </view>
-      <!-- 颜色用 CSS 变量而不是写死：t-icon 会把 color 原样拼进 style，
-           var() 在这里能正常解析 -->
-      <t-icon name="chevron-right" size="36rpx" color="var(--c-gray-light)" />
+      <base-icon name="chevron-right" size="36rpx" color="var(--ink-3)" />
     </view>
 
-    <!-- 偏好设置 -->
-    <t-cell-group theme="card" bordered="{{true}}" title="偏好设置" t-class-title="pref-title">
-      <t-cell title="消息推送" description="接收订单状态与活动提醒">
-        <view slot="left-icon" class="icon-wrap {{pushEnabled ? 'icon-wrap--on' : ''}}">
-          <!-- 图标名必须是图标库里真实存在的：之前写 bell 是空白，
-               notification 才是这个版本里有的（聊天页「提醒」用的也是它） -->
-          <t-icon name="notification" size="40rpx" color="{{pushEnabled ? 'var(--c-blue)' : 'var(--c-gray)'}}" />
+    <!-- 偏好设置：自绘分组卡片 + 原生 switch（仅可改 color） -->
+    <view class="pref-group">
+      <view class="group-title">偏好设置</view>
+      <view class="pref-card">
+        <view class="pref-row">
+          <view class="pref-icon-wrap {{pushEnabled ? 'pref-icon-wrap--on' : ''}}">
+            <base-icon
+              name="notification"
+              size="40rpx"
+              color="{{pushEnabled ? 'var(--accent)' : 'var(--ink-3)'}}"
+            />
+          </view>
+          <view class="pref-text">
+            <view class="pref-title">消息推送</view>
+            <view class="pref-desc">接收订单状态与活动提醒</view>
+          </view>
+          <switch
+            class="pref-switch"
+            color="#E9B949"
+            checked="{{pushEnabled}}"
+            bindchange="onTogglePush"
+          />
         </view>
-        <t-switch slot="note" value="{{pushEnabled}}" bind:change="onTogglePush" />
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 底部：只保留退出登录（结构见页面底部的 .bottom-btn，与其它子页面一致） -->
+      </view>
+    </view>
   </view>
 
-  <!-- 底部操作区（与自选股 / 提醒页一致：固定在页面底部） -->
+  <!-- 底部操作区：absolute 定位随页面转场移动，bottom 由安全区算出 -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
     <view
       class="footer-btn footer-btn--danger"
@@ -46,61 +54,52 @@
     <view class="footer-hint">退出后下次打开小程序会自动登录</view>
   </view>
 
-  <!-- 编辑资料：确认/取消直接用 t-dialog 自带的底部按钮，
-       与「添加自选股」弹窗一致（组件不会自动关闭，由事件里显式关） -->
-  <t-dialog
+  <!-- 编辑资料弹窗：base-popup center 模式，纯淡入（内含原生 input） -->
+  <base-popup
     visible="{{profileVisible}}"
+    mode="center"
     title="编辑资料"
-    confirm-btn="保存"
-    cancel-btn="取消"
+    confirm-text="保存"
+    cancel-text="取消"
     bind:confirm="saveProfile"
     bind:cancel="cancelEdit"
-    custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
   >
     <view slot="content" class="edit-form">
-      <!-- 换头像的入口就是头像本身。必须用原生 button 的 open-type="chooseAvatar"
-           （面板里才有「使用微信头像」）——t-button 是自定义组件，chooseavatar
-           这个原生事件不一定能透出来。原生 button 的默认样式由 .avatar-picker 清掉 -->
+      <!-- 换头像入口：必须用原生 button 的 open-type="chooseAvatar"（面板里才有
+           「使用微信头像」）；自定义组件不一定能透出 chooseavatar 事件。
+           原生 button 的默认样式由 .avatar-picker 清掉 -->
       <button
         class="avatar-picker"
         open-type="chooseAvatar"
         bind:chooseavatar="onChooseWechatAvatar"
       >
-        <!-- 同主页面：普通 view/image，不用 t-avatar，避免组件内置小圆外露 -->
         <image wx:if="{{editAvatar}}" class="edit-avatar" src="{{editAvatar}}" mode="aspectFill" />
-        <view wx:else class="edit-avatar"></view>
+        <view wx:else class="edit-avatar edit-avatar--empty"></view>
       </button>
 
       <view class="edit-field">
-        <!-- align="center" 让输入文字与 placeholder 都居中。
-             type 平时是 text，只有点了下方「使用微信昵称」才切成 nickname——
-             否则每次聚焦输入框都会弹出微信的昵称候选栏，属于打扰。
-             focus 用 nicknameFocus 受控，但它必须镜像「真实焦点」（focus 事件置 true、
-             blur 事件置 false）：把已聚焦输入框的 focus 下发成 false 会让微信立刻收键盘，
-             删除字符时键盘反复掉就是这个原因；要主动收键盘走 wx.hideKeyboard()。
-             hold-keyboard=true：点输入框以外的地方（如「使用微信昵称」）不收键盘，
-             避免键盘状态被误触发的失焦打断。
-             不用 maxlength 硬截断——截断了就永远超不过、没法提示，
-             改为放开输入、由 JS 判长度，超了用 status=error + tips 在框下方提示 -->
-        <t-input
-          t-class="edit-input"
+        <!-- type 平时是 text，只有点了下方「使用微信昵称」才切成 nickname——
+             否则每次聚焦输入框都会弹出微信昵称候选栏，属于打扰。
+             focus 必须镜像「真实焦点」（focus 事件置 true、blur 置 false）：
+             把已聚焦输入框的 focus 下发成 false 会让微信立刻收键盘，
+             症状是「删除一个字符键盘就收起」；要主动收键盘用 wx.hideKeyboard()。 -->
+        <input
+          class="edit-input"
           type="{{nicknamePicking ? 'nickname' : 'text'}}"
-          align="center"
-          focus="{{nicknameFocus}}"
           value="{{editNickname}}"
           placeholder="请输入昵称"
+          placeholder-class="edit-input-placeholder"
+          focus="{{nicknameFocus}}"
           hold-keyboard="{{true}}"
-          status="{{nicknameTip ? 'error' : 'default'}}"
-          tips="{{nicknameTip}}"
-          bind:change="onEditNickname"
-          bind:blur="onNicknameBlur"
-          bind:focus="onNicknameFocus"
-          bind:nicknamereview="onNicknameReview"
+          bindinput="onEditNickname"
+          bindblur="onNicknameBlur"
+          bindfocus="onNicknameFocus"
+          bindnicknamereview="onNicknameReview"
         />
 
-        <!-- 「使用微信昵称」按键：平台没有读取昵称的 API，做不到点了直接填。
-             点它才把输入框切成 nickname 类型并聚焦，微信此时会带出昵称候选，
-             由用户本人点选填入；失焦后输入框恢复成普通 text -->
+        <!-- 超长提示行：空串不渲染（原 t-input tips 的位置，改为自绘） -->
+        <view wx:if="{{nicknameTip}}" class="edit-tip">{{nicknameTip}}</view>
+
         <view class="nickname-action">
           <view class="nickname-link" hover-class="nickname-link--hover" bindtap="fillWechatNickname">
             使用微信昵称
@@ -108,21 +107,21 @@
         </view>
       </view>
     </view>
-  </t-dialog>
+  </base-popup>
 
-  <!-- 退出登录二次确认 -->
-  <t-dialog
+  <!-- 退出登录二次确认：危险色确认按钮 -->
+  <base-popup
     visible="{{logoutVisible}}"
+    mode="center"
     title="退出登录"
-    content="确定退出当前账号？本地缓存将保留"
-    confirm-btn="退出登录"
-    cancel-btn="取消"
-    t-class-confirm="dialog-confirm--danger"
+    desc="确定退出当前账号？本地缓存将保留"
+    confirm-text="退出登录"
+    cancel-text="取消"
+    confirm-danger="{{true}}"
     bind:confirm="onLogoutConfirm"
     bind:cancel="onLogoutCancel"
-    custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
+    bind:mask="onLogoutCancel"
   />
 
-  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
-  <t-toast id="t-toast" />
+  <base-toast id="base-toast" />
 </view>

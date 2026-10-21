@@ -1,17 +1,14 @@
 {
   "usingComponents": {
-    "t-navbar": "tdesign-miniprogram/navbar/navbar",
-    "t-grid": "tdesign-miniprogram/grid/grid",
-    "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
-    "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-toast": "tdesign-miniprogram/toast/toast",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
-    "t-input": "tdesign-miniprogram/input/input",
+    "base-navbar": "/components/base/navbar/navbar",
+    "base-icon": "/components/base/icon/icon",
+    "base-popup": "/components/base/popup/popup",
+    "base-toast": "/components/base/toast/toast",
+    "base-empty": "/components/base/empty/empty",
     "t-picker": "tdesign-miniprogram/picker/picker",
     "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
-  }
+  },
+  "backgroundColor": "#0B1219",
+  "backgroundColorTop": "#0B1219",
+  "backgroundColorBottom": "#0B1219"
 }

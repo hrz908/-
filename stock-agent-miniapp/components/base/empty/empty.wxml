@@ -1,0 +1,5 @@
+<view class="empty empty-class">
+  <view class="empty-img" style="background-image: url({{src}});"></view>
+  <view class="empty-text">{{text}}</view>
+  <view wx:if="{{sub}}" class="empty-sub">{{sub}}</view>
+</view>

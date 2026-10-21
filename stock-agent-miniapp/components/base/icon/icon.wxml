@@ -1,0 +1,1 @@
+<view class="icon icon-class" style="width: {{size}}; height: {{size}}; background-image: url({{src}});"></view>

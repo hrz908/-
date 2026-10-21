@@ -33,45 +33,436 @@
 }
 
 /* 水平留白放在滚动内容上，避免贴到屏幕边缘；
-   底部再补 24rpx 内边距，滚到底时最新气泡不至于贴着容器边。
+   底部再补一档内边距，滚到底时免责声明不至于贴着容器边。
    overflow: hidden 让容器自成 BFC，子元素的 margin 不会溢出到容器外面 */
 .chat-inner {
   padding: 0 var(--sp-3) var(--sp-3);
   overflow: hidden;
 }
 
-/* 组件给每条消息加了 margin-bottom: 32rpx，这个尾巴会一直挂在最后一条下面，
-   导致「下方留白」永远比上方多一截（靠 :last-child 取消不可靠：
-   页面上 :last-child 能不能命中组件根节点，取决于 styleIsolation 的实际表现）。
-   干脆把间距改成 margin-top：
-   - 消息之间仍是 32rpx（只由相邻两条的上边距决定，观感不变）；
-   - 第一条上方是本容器的 32rpx 上边距，这就是它到导航栏的距离；
-   - 最后一条下方彻底为 0（不再是 32rpx），剩下的只有到输入栏的那点布局间距 */
-.chat-inner .t-chat-message {
-  margin-bottom: 0;
-  margin-top: var(--gap-block);
+/* ===== 消息间距 =====
+   消息之间统一用上边距（不由组件的 margin-bottom 决定）：
+   第一条上方是本容器的上边距，最后一条下方彻底为 0 */
+.msg {
+  margin-top: var(--sp-4);
 }
 
-/* scroll-into-view 锚点：0 高度，仅用于把列表滚到底 */
-.chat-anchor {
+/* ===== 用户气泡：右对齐，低透明度蓝（取自视觉稿图表蓝 #5B9BEF 的低饱和档） ===== */
+.msg--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble--user {
+  max-width: 80%;
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(91, 155, 239, 0.16);
+  border-radius: var(--r-tag) var(--r-tag) 0 var(--r-tag);
+}
+
+.bubble-text {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ===== AI 气泡：左对齐卡片面 ===== */
+.msg--assistant {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.bubble--assistant {
+  max-width: 92%;
+  padding: var(--sp-3) var(--pad-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag) var(--r-tag) var(--r-tag) 0;
+}
+
+/* ===== markdown 版式 =====
+   容器开 pre-wrap：换行由 utils/markdown.js 合并进行内文本段 */
+.md-h {
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.md-h--lg {
+  font-size: var(--fs-title);
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
+.md-h--sm {
+  font-size: var(--fs-body);
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
+.md-p {
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 引用：左竖线 + 次级文字（视觉稿 .quote 规格） */
+.md-quote {
+  margin: var(--sp-2) 0;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
+  border-left: 4rpx solid var(--line);
+  font-size: var(--fs-aux);
+  line-height: 1.7;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.md-hr {
   height: 0;
+  margin: var(--sp-3) 0;
+  border-top: 1rpx solid var(--line);
 }
 
-/* ===== 状态提示（正在思考 / 工具查询 / 重连） ===== */
-/* 与 AI 气泡同一套视觉语言：白底卡片、左上直角，挂在列表底部；
-   不放进 chat-message 是因为它不是消息，done/error 后整块直接消失 */
+/* 代码块：等宽 + 次级面 */
+.md-code {
+  margin: var(--sp-2) 0;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  overflow: hidden;
+}
+
+.md-code-text {
+  font-family: Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-aux);
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre;
+}
+
+/* 列表：标记 + 内容两段，嵌套层缩进 */
+.md-list {
+  margin: var(--sp-2) 0;
+}
+
+.md-li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.md-li--sub {
+  margin-left: var(--sp-3);
+}
+
+.md-li-marker {
+  flex: none;
+  min-width: var(--sp-3);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--ink-3);
+}
+
+.md-li-body {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 表格：div 行模拟（WXSS 无 table 版式需求，flex 更可控） */
+.md-table {
+  margin: var(--sp-2) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  overflow: hidden;
+}
+
+.md-tr {
+  display: flex;
+}
+
+/* 行间分隔线：sep 由 utils/markdown.js 按行号算好（WXSS 禁兄弟选择器） */
+.md-tr--sep {
+  border-top: 1px solid var(--line);
+}
+
+.md-tr--head {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.md-th,
+.md-td {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-aux);
+  line-height: 1.5;
+}
+
+.md-th {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.md-td {
+  color: var(--ink-2);
+  word-break: break-word;
+}
+
+/* 行内样式 */
+.md-i {
+  white-space: pre-wrap;
+}
+
+.md-strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.md-em {
+  font-style: italic;
+}
+
+.md-del {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+
+/* 行内代码：等宽 + 次级面小底 */
+.md-code.md-i {
+  padding: 0 var(--sp-1);
+  border-radius: 6rpx;
+  background: var(--surface-2);
+  font-family: Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+  color: var(--accent);
+  white-space: pre-wrap;
+}
+
+/* 链接：图表蓝 + 下划线；点击复制（见 onMdLinkTap） */
+.md-link {
+  color: #5B9BEF;
+  text-decoration: underline;
+}
+
+/* ===== 行情卡片（内联版，阶段四将迁入 components/finance/quote-card） ===== */
+.qcard {
+  width: 100%;
+}
+
+.qcard-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.qcard-name {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.qcard-code {
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+.qcard-hero {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* 价格大号 + 涨跌幅紧随（设计稿：价格 32px 级） */
+.qcard-price {
+  font-size: var(--fs-price);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5rpx;
+}
+
+.qcard-change {
+  font-size: var(--fs-aux);
+  font-weight: 600;
+}
+
+.qcard-grid {
+  display: flex;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1rpx solid var(--line);
+}
+
+.qgrid-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.qgrid-label {
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+.qgrid-value {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.qcard-foot {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1rpx solid var(--line);
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+/* ===== 日 K 表格（内联版，阶段四将迁入 components/finance/kline-card） ===== */
+.kcard {
+  width: 100%;
+}
+
+.kcard-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.kcard-title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.kcard-sub {
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
+}
+
+.kline-table {
+  margin-top: var(--sp-2);
+}
+
+.kline-tr {
+  display: flex;
+  align-items: center;
+  min-height: 52rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.kline-td {
+  flex: 1;
+  font-size: var(--fs-aux);
+  color: var(--ink);
+}
+
+/* 涨跌幅靠右对齐，数值等宽对齐更好读 */
+.kline-right {
+  text-align: right;
+}
+
+.kline-th {
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+/* 红涨绿跌（国内习惯） */
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+/* ===== 语音消息气泡 =====
+   颜色跟着 user 气泡走：一律 inherit / currentColor */
+.bubble--voice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 240rpx;
+}
+
+.voice-wave {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 36rpx;
+  opacity: 0.6;
+}
+
+.voice-bar {
+  width: 4rpx;
+  border-radius: 4rpx;
+  background: currentColor;
+}
+
+/* 播放中整条点亮并轻微跳动 */
+.bubble--voice-playing .voice-wave {
+  opacity: 1;
+}
+
+.bubble--voice-playing .voice-bar {
+  animation: voice-bar-pulse 1s ease-in-out infinite;
+}
+
+/* 错开一点相位，看起来像在连续跳动而不是整排一起闪 */
+.bubble--voice-playing .voice-bar:nth-child(3n) {
+  animation-delay: 0.15s;
+}
+
+.bubble--voice-playing .voice-bar:nth-child(3n + 1) {
+  animation-delay: 0.3s;
+}
+
+@keyframes voice-bar-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.6);
+  }
+  50% {
+    transform: scaleY(1.3);
+  }
+}
+
+.voice-duration {
+  font-size: var(--fs-aux);
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* ===== 状态提示（正在思考 / 工具查询 / 重连） =====
+   与 AI 气泡同一套视觉语言：卡片面、左上直角，挂在列表底部 */
 .status-tip {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: var(--sp-1);
   width: fit-content;
   max-width: 80%;
-  margin-top: var(--gap-block);
+  margin-top: var(--sp-4);
   padding: var(--sp-2) var(--sp-3);
-  background-color: var(--c-card);
-  border-radius: 0 var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx);
-  font-size: 26rpx;
-  color: var(--c-gray);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0 var(--r-tag) var(--r-tag) var(--r-tag);
+}
+
+.status-tip-text {
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
 }
 
 /* 三个跳动小点：代替 loading 图标，错相延迟形成波浪感 */
@@ -86,7 +477,7 @@
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background-color: var(--c-gray-light);
+  background-color: var(--ink-3);
   animation: status-blink 1.2s infinite ease-in-out;
 }
 
@@ -109,227 +500,21 @@
   }
 }
 
-/* ===== 用户气泡：浅蓝底 + 白字，且不占满整行 ===== */
-/* 组件默认是 .t-chat-message--base .t-chat-content 统一灰底、
-   再用 --base.assistant 覆盖成透明，用户侧沿用灰底；
-   这里只针对 user 侧覆写。多一层 .chat-inner 是为了压过组件内部那条
-   .t-chat-message--base.user .t-chat-content 的优先级
-   （chat-message.json 是 styleIsolation: shared，页面样式可作用于其内部节点） */
-.chat-inner .t-chat-message--base.user .t-chat-content {
-  background-color: var(--c-blue-bubble);
-  /* 只在右对齐（__content align-items: flex-end）下有效：
-     气泡宽度原本按内容一路撑到整行，给个上限后多出来的空间自动落在左侧。
-     想留更多/更少改这个百分比即可 */
-  max-width: 80%;
-  /* 只写 color 不够：真正渲染文字的是内部的 .t-chat-content__user，
-     它用 --td-chat-content-user-text-color 写死了主文本色，继承不到这里的 color。
-     改组件自己的 token 是最稳的做法，变量会继承给内部节点 */
-  --td-chat-content-user-text-color: #fff;
-  color: #fff;
+/* ===== 免责声明（合规兜底条，所有回答底部固定挂载） ===== */
+.disclaimer {
+  margin-top: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: var(--fs-min);
+  line-height: 1.7;
+  color: var(--ink-3);
 }
 
-/* 兜底：万一变量没透传下去，直接按内部节点类名再压一次 */
-.chat-inner .t-chat-content__user {
-  color: #fff;
-}
-
-/* ===== AI 气泡：套上 TDesign 的对话消息体 ===== */
-/* 组件对 base 变体的 assistant 侧写死了透明底 + 0 内边距（那是配合左侧头像的裸文本样式），
-   页面已去掉头像，AI 文字就直接糊在背景上了。
-   这里按它给 user 侧的同一套气泡规格补齐：24/32 内边距 + 左上角直角，
-   底色用 --c-card 与结构化卡片一致。
-   多一层 .chat-inner 同样是为了压过组件内部那条 assistant 规则的优先级 */
-.chat-inner .t-chat-message--base.assistant .t-chat-content {
-  /* 与结构化卡片同底：--c-card 就是 .card 的背景色，两者永远一致 */
-  background-color: var(--c-card);
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: 0 var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx) var(--td-radius-extraLarge, 24rpx);
-}
-
-/* AI 正文保留换行：组件只给 user/system 侧的 ._pre 开了 pre-wrap，
-   assistant 侧没开，流式回复里的 \n 会被当成普通空白合并成一坨。
-   chat-content 是 apply-shared，页面样式能作用到它内部的 ._pre 节点 */
-.chat-inner .t-chat-content__assistant ._pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ===== 结构化卡片：行情卡 / 日 K 表 ===== */
-/* 宽度占满一行：卡在 base 变体里是直接挂在 __detail 下的 slot，
-   外层 __content 是 flex:1（头像已去掉，即整行宽），这里铺满即可 */
-.card {
-  width: 100%;
-  box-sizing: border-box;
-  padding: var(--sp-3);
-  /* 与 AI 气泡共用同一个值 */
-  background: var(--c-card);
-  border-radius: 24rpx;
-  box-shadow: 0 6rpx 24rpx rgba(24, 26, 28, 0.06);
-}
-
-.card-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-
-.card-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: var(--c-ink);
-}
-
-.card-sub {
-  font-size: 22rpx;
-  color: var(--c-gray);
-}
-
-.card-hero {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-}
-
-.hero-price {
-  font-size: 48rpx;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.hero-change {
-  font-size: 24rpx;
-  font-weight: 500;
-}
-
-.card-grid {
-  display: flex;
-  margin-top: var(--sp-3);
-  padding-top: var(--sp-3);
-  border-top: 1rpx solid var(--c-border);
-}
-
-.grid-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.grid-label {
-  font-size: 22rpx;
-  color: var(--c-gray);
-}
-
-.grid-value {
-  font-size: 26rpx;
-  font-weight: 500;
-  color: var(--c-ink);
-}
-
-.card-foot {
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: 1rpx solid var(--c-border);
-  font-size: 22rpx;
-  color: var(--c-gray);
-}
-
-/* ===== 日 K 表格 ===== */
-.kline-table {
-  margin-top: var(--sp-2);
-}
-
-.kline-tr {
-  display: flex;
-  align-items: center;
-  height: 52rpx;
-  border-top: 1rpx solid var(--c-border);
-}
-
-.kline-td {
-  flex: 1;
-  font-size: 24rpx;
-  color: var(--c-ink);
-}
-
-/* 涨跌幅靠右对齐，数值等宽对齐更好读 */
-.kline-right {
-  text-align: right;
-}
-
-.kline-th {
-  font-size: 22rpx;
-  color: var(--c-gray);
-}
-
-.up {
-  color: var(--c-red);
-}
-
-.down {
-  color: var(--c-green);
-}
-
-/* ===== 语音消息气泡 =====
-   内容塞在 user 气泡的 content 插槽里，颜色跟着父级气泡走：
-   组件已经把用户气泡的文字色改成白色（见上面的 .t-chat-content 覆写），
-   所以这里一律用 inherit / currentColor，不再单独指定 */
-.voice-bubble {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 240rpx;
-  padding: var(--sp-1) 0;
-}
-
-/* 波形：竖条 + 时长。播放中整条点亮并轻微跳动 */
-.voice-wave {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  height: 36rpx;
-  opacity: 0.6;
-}
-
-.voice-bar {
-  width: 4rpx;
-  border-radius: 4rpx;
-  background: currentColor;
-}
-
-.voice-bubble--playing .voice-wave {
-  opacity: 1;
-}
-
-.voice-bubble--playing .voice-bar {
-  animation: voice-bar-pulse 1s ease-in-out infinite;
-}
-
-/* 错开一点相位，看起来像在连续跳动而不是整排一起闪 */
-.voice-bubble--playing .voice-bar:nth-child(3n) {
-  animation-delay: 0.15s;
-}
-
-.voice-bubble--playing .voice-bar:nth-child(3n + 1) {
-  animation-delay: 0.3s;
-}
-
-@keyframes voice-bar-pulse {
-  0%,
-  100% {
-    transform: scaleY(0.6);
-  }
-  50% {
-    transform: scaleY(1.3);
-  }
-}
-
-.voice-duration {
-  font-size: 24rpx;
-  color: inherit;
-  opacity: 0.85;
+/* scroll-into-view 锚点：0 高度，仅用于把列表滚到底 */
+.chat-anchor {
+  height: 0;
 }
 
 /* ===== 输入栏 ===== */
@@ -342,9 +527,8 @@
   bottom: 0;
   background: var(--bg);
   transition: bottom 0.25s ease;
-  /* 胶囊与屏幕两侧留白（--pad-page 与 TDesign 卡片一致）；
-     下内边距由内联样式给：键盘弹起时为 0，否则让出安全区 */
-  padding: var(--sp-2) var(--pad-page) 0;
+  /* 胶囊与屏幕两侧留白；下内边距由内联样式给：键盘弹起时为 0，否则让出安全区 */
+  padding: var(--sp-2) var(--sp-3) 0;
   box-sizing: border-box;
 }
 
@@ -356,26 +540,24 @@
   min-height: 96rpx;
   /* 胶囊整体上移一档（--sp-2 = 16rpx = 8px）。
      注意只能加在胶囊「下方」：容器是底部锚定的，加大上方留白（padding-top）
-     只会把对话区挤短，胶囊本身不会动。这段会被 measureSender 量进
-     .sender-wrap 的高度，对话区随之收窄同样的量，
-     所以「最后一条消息 ↔ 胶囊」的间距不变，只是胶囊离屏幕底边更远了 */
+     只会把对话区挤短，胶囊本身不会动 */
   margin-bottom: var(--sp-2);
   padding: 8rpx 10rpx;
   box-sizing: border-box;
-  background: var(--c-card);
-  border: 2rpx solid var(--c-border);
+  background: var(--surface);
+  border: 2rpx solid var(--line);
   border-radius: 999rpx;
-  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.25);
 }
 
-/* 模式键（语音 / 键盘）：与发送键同规格，比组件自带的 64rpx 放大到 76rpx，更好点按 */
+/* 模式键（语音 / 键盘）：比组件自带的 64rpx 放大到 76rpx，更好点按 */
 .bar-btn {
   flex: none;
   width: 76rpx;
   height: 76rpx;
   border-radius: 50%;
-  background: var(--c-fill);
-  color: var(--c-gray);
+  background: var(--surface-2);
+  color: var(--ink-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -383,7 +565,7 @@
 }
 
 .bar-btn--hover {
-  background: var(--c-hover);
+  background: var(--line);
 }
 
 /* 输入区：紧贴模式键右侧，多行时随内容长高（textarea auto-height） */
@@ -405,7 +587,7 @@
   max-height: 88rpx;
   font-size: 30rpx;
   line-height: 44rpx;
-  color: var(--c-ink);
+  color: var(--ink);
 }
 
 /* 语音态：胶囊中央的「按住说话」 */
@@ -414,8 +596,8 @@
   min-width: 0;
   height: 76rpx;
   border-radius: 999rpx;
-  background: var(--c-fill);
-  color: var(--c-ink);
+  background: var(--surface-2);
+  color: var(--ink);
   font-size: 30rpx;
   display: flex;
   align-items: center;
@@ -425,17 +607,17 @@
 }
 
 .bar-hold--active {
-  background: var(--c-tint);
+  background: rgba(233, 185, 73, 0.14);
   transform: scale(0.99);
 }
 
-/* 发送键：无内容时是灰底，有内容才点亮成主蓝 */
+/* 发送键：无内容时是次级面，有内容才点亮成金色 */
 .bar-send {
   flex: none;
   width: 76rpx;
   height: 76rpx;
   border-radius: 50%;
-  background: var(--c-border);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -443,28 +625,27 @@
 }
 
 .bar-send--active {
-  background: var(--c-blue);
+  background: var(--accent);
 }
 
 .bar-send--hover {
   opacity: 0.85;
 }
 
-/* 加载态：方块代替发送图标（沿用 chat-sender 的「停止」观感） */
+/* 加载态：方块代替发送图标（沿用 chat-sender 的「停止」观感）。
+   金色底上改用深色方块，与发送图标同色系 */
 .bar-send-stop {
   width: 26rpx;
   height: 26rpx;
   border-radius: 6rpx;
-  background: #ffffff;
+  background: #20180A;
 }
 
-/* ===== 侧边抽屉内容 ===== */
-/* popup 面板本体：popup 不提供宽度，需自定。
-   内部分组列表交由 TDesign cell-group 承载（自带卡片外边距与圆角） */
+/* ===== 侧边抽屉 ===== */
+/* 面板本体由 base-popup 提供（surface 底 + 左滑动画），这里只管内容排版 */
 .drawer-body {
   width: 520rpx;
   height: 100%;
-  background: var(--c-card);
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
@@ -477,65 +658,119 @@
 .drawer-head {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   /* 上下留白加大，让品牌头部整体更突出 */
-  padding: var(--sp-3) var(--pad-page);
-  /* 品牌头部整体上移一点（负 margin 抵消 drawerTop 里多让出的 44px 空间） */
+  padding: var(--sp-3) var(--sp-3);
+  /* 品牌头部整体上移一点（负 margin 抵消 drawerTop 里多让出的空间） */
   margin-top: -12rpx;
 }
 
-/* TDesign image（Logo） */
 .drawer-logo {
   flex: none;
   width: 128rpx;
   height: 128rpx;
   border-radius: 50%;
   overflow: hidden;
+  border: 1px solid var(--line);
 }
 
 .drawer-title-col {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
 }
 
 .drawer-title {
-  font-size: 22px;
+  font-size: 40rpx;
   font-weight: 700;
-  color: var(--c-ink);
+  color: var(--ink);
 }
 
 .drawer-sub {
-  font-size: 15px;
-  color: var(--c-gray);
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
 }
 
-/* 抽屉导航项标题区：去掉默认右边距，让图标+文字整组真正居中 */
-.drawer-nav-center {
-  margin-right: 0;
+.drawer-section {
+  padding: 0 var(--sp-3);
 }
 
-/* cell 的 note 插槽：大盘数值。指数值与涨跌幅拆成两段，
-   flex + gap 在两者间留距离；note 整体右对齐，gap 会把指数往左推一点 */
+.drawer-section-title {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+  letter-spacing: 1rpx;
+}
+
+/* 导航菜单：分组卡片承载 */
+.drawer-menu {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  overflow: hidden;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 96rpx;
+  padding: 0 var(--sp-3);
+}
+
+/* 行间分隔线：sep 由 JS 按行号算好（WXSS 禁兄弟选择器） */
+.drawer-item--sep {
+  border-top: 1rpx solid var(--line);
+}
+
+.drawer-item--hover {
+  background: var(--surface);
+}
+
+.drawer-item-text {
+  flex: 1;
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+
+/* 今日大盘：分组卡片 + 行 */
+.drawer-markets {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  overflow: hidden;
+}
+
+.market-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-height: 88rpx;
+  padding: 0 var(--sp-3);
+}
+
+/* 行间分隔线：sep 由 JS 按行号算好（WXSS 禁兄弟选择器） */
+.market-row--sep {
+  border-top: 1rpx solid var(--line);
+}
+
+.market-name {
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+/* 指数值与涨跌幅拆成两段，gap 留距离；涨红跌绿由 up/down 类着色 */
 .market-note {
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
-  gap: 16rpx;
-  font-size: 13px;
+  gap: var(--sp-2);
+  font-size: var(--fs-aux);
   font-weight: 500;
 }
 
-/* 涨跌幅固定最小宽度并右对齐，让四行的百分比纵向对齐成列，指数值随之整体左移 */
+/* 涨跌幅固定最小宽度并右对齐，让四行的百分比纵向对齐成列 */
 .market-pct {
   min-width: 100rpx;
   text-align: right;
-}
-
-.market-note.up {
-  color: var(--c-red);
-}
-
-.market-note.down {
-  color: var(--c-green);
 }

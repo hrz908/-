@@ -1,13 +1,9 @@
 {
   "usingComponents": {
-    "t-navbar": "tdesign-miniprogram/navbar/navbar",
-    "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-switch": "tdesign-miniprogram/switch/switch",
-    "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-toast": "tdesign-miniprogram/toast/toast",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
-    "t-input": "tdesign-miniprogram/input/input"
+    "base-navbar": "/components/base/navbar/navbar",
+    "base-icon": "/components/base/icon/icon",
+    "base-popup": "/components/base/popup/popup",
+    "base-toast": "/components/base/toast/toast"
   },
   "backgroundColor": "#0B1219",
   "backgroundColorTop": "#0B1219",

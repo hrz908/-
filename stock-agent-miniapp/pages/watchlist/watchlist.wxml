@@ -1,173 +1,175 @@
-<!-- 页面结构完全基于 TDesign 布局组件：
-     navbar（导航，带占位）+ tabs（筛选）+ cell-group / cell（分组列表）
-     + swipe-cell（左滑操作）+ empty（空态）
-     + dialog / input / picker（添加自选表单）+ toast（反馈） -->
+<!-- 页面结构：自研 navbar + 自绘概览卡 + chips 筛选 + 自绘列表（含左滑删除）。
+     左滑删除用触摸事件自绘（替代 t-swipe-cell）：transform 位移由 data 驱动，
+     拖动中关过渡、松手时开过渡归位；纵向滚动让位（先判方向再锁定）。 -->
 <view class="page">
-  <t-navbar title="自选股" left-arrow="{{true}}" placeholder="{{true}}" bind:go-back="goBack" />
+  <base-navbar title="自选股" left-arrow="{{true}}" bind:back="goBack" />
 
-  <!-- 页面分两段：概览卡片与筛选 tabs 固定，只有自选列表在下面的容器里滚动 -->
   <view class="content">
-    <!-- 总浮动概览：cell-group 卡片主题 + cell 承载主数据 -->
-    <t-cell-group theme="card" bordered="{{true}}" title="自选总浮动（今日）" t-class-title="watch-title">
-      <t-cell>
-        <view slot="title" class="hero-amount {{profitClass}}">¥ {{totalProfitText}}</view>
-        <view slot="description" class="hero-desc">{{totalRateText}} · 已同步 {{syncedAt}}</view>
-        <view slot="note" class="hero-tags">
-          <t-tag theme="danger" variant="light" size="small">上涨 {{upCount}}</t-tag>
-          <t-tag theme="success" variant="light" size="small">下跌 {{downCount}}</t-tag>
+    <!-- 总浮动概览：自绘卡片（替代 cell-group card 主题） -->
+    <view class="overview-card">
+      <view class="overview-head">
+        <text class="overview-title">自选总浮动（今日）</text>
+        <view class="overview-tags">
+          <view class="mini-tag mini-tag--up"><text class="num">上涨 {{upCount}}</text></view>
+          <view class="mini-tag mini-tag--down"><text class="num">下跌 {{downCount}}</text></view>
         </view>
-      </t-cell>
-
-      <t-cell title="刷新行情" arrow="{{true}}" hover="{{true}}" bind:click="onRefresh">
-        <t-icon slot="left-icon" name="refresh" size="40rpx" color="#8A8F99" />
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 筛选：TDesign tabs（受控模式，value + change） -->
-    <t-tabs value="{{filter}}" bind:change="onTabsChange" class="filter-tabs">
-      <t-tab-panel
-        wx:for="{{filters}}"
-        wx:for-item="f"
-        wx:key="key"
-        label="{{f.label}}"
-        value="{{f.key}}"
-      />
-    </t-tabs>
-
-    <!-- 自选列表：只有这一个容器内部滚动，底边停在「添加股票」按钮上方
-         （预留量在 wxss 的 .stock-scroll，含安全区），概览与筛选不参与滚动。
-
-         scroll-y 由 scrollable 控制：内容没超出容器时直接关掉滚动，
-         因为 scroll-view 是原生滚动容器，只要内容比容器高就能拖，
-         而且 iOS 上还有回弹——光靠 CSS 挡不住。
-
-         内层 .stock-inner 是测量用的：它的高度就是真实内容高度，
-         拿它和 .stock-scroll 的可见高度比，才知道到底有没有被遮挡 -->
-    <scroll-view class="stock-scroll" scroll-y="{{scrollable}}">
-      <view class="stock-inner">
-      <view class="stock-list" wx:if="{{filtered.length > 0}}">
-      <t-swipe-cell
-        wx:for="{{filtered}}"
-        wx:for-item="item"
-        wx:for-index="index"
-        wx:key="code"
-        right="{{swipeActions}}"
-        data-index="{{index}}"
-        bind:click="onDelete"
-      >
-        <!-- 新增自选只有代码，description 用等待行情占位，不重复显示一遍代码 -->
-        <t-cell
-          title="{{item.name}}"
-          description="{{item.pending ? '等待行情' : item.code}}"
-          hover="{{true}}"
-        >
-          <view slot="note" class="price-note">
-            <view class="p1 {{item.up ? 'up' : 'down'}}">{{item.price}}</view>
-            <view class="p2 {{item.up ? 'up' : 'down'}}">{{item.pct}}</view>
-          </view>
-        </t-cell>
-      </t-swipe-cell>
+      </view>
+      <!-- 盈亏红涨绿跌（A 股习惯），profitClass 由 JS 按符号推导 -->
+      <view class="hero-amount num {{profitClass}}">¥ {{totalProfitText}}</view>
+      <view class="hero-desc num">{{totalRateText}} · 已同步 {{syncedAt}}</view>
+      <view class="overview-refresh {{refreshing ? 'overview-refresh--spinning' : ''}}" hover-class="overview-refresh--hover" bindtap="onRefresh">
+        <base-icon icon-class="refresh-icon" name="refresh" size="32rpx" color="var(--ink-2)" />
+        <text class="overview-refresh-text">刷新行情</text>
+      </view>
     </view>
 
-    <!-- 空态 -->
-    <t-empty wx:else image="" description="暂无符合条件的自选股" />
+    <!-- 筛选 chips（替代 t-tabs） -->
+    <base-tabs class="filter-tabs" items="{{filters}}" value="{{filter}}" bind:change="onTabsChange" />
+
+    <!-- 自选列表：只有这一个容器内部滚动，底边停在「添加股票」按钮上方 -->
+    <scroll-view class="stock-scroll" scroll-y="{{scrollable}}">
+      <view class="stock-inner">
+        <view class="stock-list" wx:if="{{filtered.length > 0}}">
+          <view
+            class="stock-row {{swipeDragging ? 'stock-row--dragging' : ''}}"
+            wx:for="{{filtered}}"
+            wx:for-item="item"
+            wx:for-index="index"
+            wx:key="code"
+          >
+            <!-- 主行：绝对定位于操作区之上，位移由 swipeIndex / swipeOpen 决定 -->
+            <view
+              class="stock-row-main {{item.sep ? 'stock-row-main--sep' : ''}}"
+              style="transform: translateX({{index === swipeIndex ? swipeDx : (index === swipeOpen ? -128 : 0)}}px);"
+              hover-class="stock-row-main--hover"
+              data-index="{{index}}"
+              bindtap="onRowMainTap"
+              bindtouchstart="onRowTouchStart"
+              bindtouchmove="onRowTouchMove"
+              bindtouchend="onRowTouchEnd"
+              bindtouchcancel="onRowTouchEnd"
+            >
+              <view class="stock-info">
+                <view class="stock-name">{{item.name}}</view>
+                <!-- 新增自选只有代码，等待行情时显示占位，不重复显示一遍代码 -->
+                <view class="stock-code num">{{item.pending ? '等待行情' : item.code}}</view>
+              </view>
+              <view class="price-note">
+                <view class="p1 num {{item.up ? 'up' : 'down'}}">{{item.price}}</view>
+                <view class="p2 num {{item.up ? 'up' : 'down'}}">{{item.pct}}</view>
+              </view>
+            </view>
+            <!-- 左滑露出的删除操作 -->
+            <view class="stock-row-action" data-index="{{index}}" bindtap="onDelete">
+              <base-icon name="delete" size="36rpx" color="#FFFFFF" />
+              <text class="stock-row-action-text">删除</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 空态 -->
+        <base-empty wx:else text="暂无符合条件的自选股" />
       </view>
     </scroll-view>
   </view>
 
-  <!-- 底部操作区 -->
+  <!-- 底部主操作：金色行动点（唯一强调色的合法用途） -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
-    <t-button theme="primary" block="{{true}}" icon="add" bindtap="onAdd">添加股票</t-button>
+    <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
+      <base-icon name="add" size="36rpx" color="#20180A" />
+      <text class="add-btn-text">添加股票</text>
+    </view>
   </view>
 
-  <!-- 删除确认（TDesign dialog） -->
-  <t-dialog
+  <!-- 删除确认（base-popup center，危险色确认） -->
+  <base-popup
     visible="{{confirmVisible}}"
+    mode="center"
     title="移出自选"
-    content="确定将「{{pendingName}}」移出自选吗？"
-    confirm-btn="确定"
-    cancel-btn="取消"
+    desc="确定将「{{pendingName}}」移出自选吗？"
+    confirm-text="确定"
+    cancel-text="取消"
+    confirm-danger="{{true}}"
     bind:confirm="confirmDelete"
     bind:cancel="cancelDelete"
+    bind:mask="cancelDelete"
   />
 
-  <!-- 添加自选（TDesign dialog 承载表单，content 插槽放自定义内容）
-       只需输入代码，交易所由前缀反推（EXCHANGES）
-       custom-style 会落到弹窗根节点（t-popup）的行内样式上，比组件 wxss 里任何类名规则都高，
-       所以这里一次性做两件事：
-       --td-popup-transition 限成 opacity、transform 固定为居中位移，
-       彻底关掉 t-popup 的 scale(.6) 入场/离场缩放（popup.wxss line 27）。
-       既要关掉是因为：原生 input 在父容器做 transform 期间会错位（placeholder 下坠），
-       而只用 CSS 类名覆盖时离场态仍会瞬时缩到 0.6 再淡出，看着就是「小一号的弹窗闪一下」 -->
-  <t-dialog
+  <!-- 添加自选（base-popup center 承载表单；center 模式纯淡入，原生 input 不错位） -->
+  <base-popup
     visible="{{addVisible}}"
+    mode="center"
     title="添加自选股"
-    confirm-btn="确定"
-    cancel-btn="取消"
-    custom-style="--td-popup-transition: opacity 300ms ease; transform: translate3d(-50%, -50%, 0);"
+    confirm-text="确定"
+    cancel-text="取消"
     bind:confirm="onAddConfirm"
     bind:cancel="onAddCancel"
+    bind:mask="onAddCancel"
   >
     <view slot="content" class="add-form">
-      <!-- 股票代码：模糊搜索，下拉给出最匹配的 5 条。
-           去掉 type="number" 与 maxlength 是为了能直接输中文和拼音，
-           不再需要用户背 6 位代码，也不用靠前缀猜交易所 -->
+      <!-- 股票代码：模糊搜索，下拉给出最匹配的几条。
+           去掉 type="number" 是为了能直接输中文和拼音，不用背 6 位代码 -->
       <view class="search-field">
-        <t-input
-          label="股票代码"
-          placeholder="代码 / 名称 / 拼音"
+        <view class="form-label">股票代码</view>
+        <input
+          class="form-input"
           value="{{addCode}}"
-          clearable="{{ { name: 'close', size: 24 } }}"
-          always-embed="{{true}}"
-          status="{{codeError ? 'error' : 'default'}}"
-          tips="{{codeError}}"
-          bind:change="onAddCode"
+          placeholder="代码 / 名称 / 拼音"
+          placeholder-class="form-input-placeholder"
+          bindinput="onAddCode"
         />
         <!-- 下拉只在有结果时占位，避免空框挤压表单 -->
         <view class="search-dropdown" wx:if="{{searchVisible && searchResults.length > 0}}">
           <view
             class="search-item"
             wx:for="{{searchResults}}"
+            wx:for-item="item"
             wx:key="code"
             data-code="{{item.code}}"
             data-market="{{item.market}}"
             bindtap="onPickSearch"
           >
             <text class="search-item-name">{{item.name}}</text>
-            <text class="search-item-code">{{item.market}}{{item.code}}</text>
+            <text class="search-item-code num">{{item.market}}{{item.code}}</text>
           </view>
         </view>
       </view>
       <!-- 成本价：type="digit" 带小数点键盘，可留空（还没建仓 / 不想记） -->
-      <t-input
-        label="买入单价"
-        placeholder="元"
-        value="{{addCost}}"
-        type="digit"
-        clearable="{{true}}"
-        always-embed="{{true}}"
-        bind:change="onAddCost"
-      />
+      <view class="form-field">
+        <view class="form-label">买入单价</view>
+        <input
+          class="form-input"
+          type="digit"
+          value="{{addCost}}"
+          placeholder="元"
+          placeholder-class="form-input-placeholder"
+          bindinput="onAddCost"
+        />
+      </view>
       <!-- 持股数量：整数，可留空 -->
-      <t-input
-        label="持股数量"
-        placeholder="股"
-        value="{{addQty}}"
-        type="number"
-        clearable="{{true}}"
-        always-embed="{{true}}"
-        bind:change="onAddQty"
-      />
+      <view class="form-field">
+        <view class="form-label">持股数量</view>
+        <input
+          class="form-input"
+          type="number"
+          value="{{addQty}}"
+          placeholder="股"
+          placeholder-class="form-input-placeholder"
+          bindinput="onAddQty"
+        />
+      </view>
+      <!-- 行内报错（替代 t-input 的 status/tips） -->
+      <view wx:if="{{codeError}}" class="form-error">{{codeError}}</view>
+
       <view class="add-note">
         <view class="note-title">支持这些交易所的代码前缀</view>
         <view class="note-row" wx:for="{{exchanges}}" wx:for-item="ex" wx:key="label">
           <text class="note-label">{{ex.label}}</text>
-          <text class="note-codes">{{ex.codes}}</text>
+          <text class="note-codes num">{{ex.codes}}</text>
         </view>
       </view>
     </view>
-  </t-dialog>
+  </base-popup>
 
-  <!-- 轻提示（TDesign toast，替代 wx.showToast） -->
-  <t-toast id="t-toast" />
+  <base-toast id="base-toast" />
 </view>

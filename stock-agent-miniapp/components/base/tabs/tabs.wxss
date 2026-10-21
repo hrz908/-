@@ -1,0 +1,45 @@
+/* chips 行：底色与卡片一致，激活项用金色描边 + 金字（单一强调色） */
+.tabs {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.tabs-track {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96rpx;
+  /* 触摸目标 ≥ 44pt（88rpx） */
+  height: 64rpx;
+  padding: 0 var(--sp-3);
+  box-sizing: border-box;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+}
+
+.chip-text {
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+.chip--on {
+  background: rgba(233, 185, 73, 0.12);
+  border-color: #5A4A1E;
+}
+
+.chip--on .chip-text {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chip--hover {
+  opacity: 0.85;
+}
