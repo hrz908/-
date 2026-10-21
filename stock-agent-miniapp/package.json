@@ -15,6 +15,7 @@
     "marked": "^4.0.0"
   },
   "devDependencies": {
-    "@babel/parser": "^8.0.7"
+    "@babel/parser": "^8.0.7",
+    "lucide-static": "^1.61.0"
   }
 }
