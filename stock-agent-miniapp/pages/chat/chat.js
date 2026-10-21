@@ -224,6 +224,113 @@ function klineCard(rows) {
   };
 }
 
+// ===== 估值 / 资金流向 / 财报速览三张卡（数据源：Tushare 增强工具） =====
+// 由 agent 的 _emit_structured 以 card 事件下发，字段映射在此完成，
+// 组件（components/finance/*）只做展示。行载荷统一可能是「数组包一行」或「直接一行」
+
+// 报告期标签：end_date "20260630" -> "2026 中报"
+function periodLabelOf(endDate) {
+  const s = String(endDate || '');
+  if (!/^\d{8}$/.test(s)) return '';
+  const map = { '03': '一季报', '06': '中报', '09': '三季报', '12': '年报' };
+  return s.slice(0, 4) + ' ' + (map[s.slice(4, 6)] || '报告期');
+}
+
+// YYYYMMDD -> YYYY-MM-DD（不成型原样返回空串）
+function fmtTsDate(v) {
+  const s = String(v || '');
+  return /^\d{8}$/.test(s) ? s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6) : '';
+}
+
+// 万元 -> 元（Tushare 的金额字段单位是万元，卡内亿万换算是元口径）
+function wanToYuan(v) {
+  const n = numOrNull(v);
+  return n == null ? null : n * 10000;
+}
+
+// 估值卡：daily_basic 行。历史分位 / 行业均值当前数据源没有，传空由卡片降级
+function valuationCard(payload) {
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!row) return null;
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'valuation',
+    content: [],
+    valuation: {
+      peStatic: numOrNull(row.pe),
+      peTTM: numOrNull(row.pe_ttm),
+      pb: numOrNull(row.pb),
+      ps: numOrNull(row.ps_ttm),
+      dividendYield: numOrNull(row.dv_ttm),
+      totalCap: wanToYuan(row.total_mv),
+      note: [row.ts_code, row.trade_date ? '数据日期 ' + fmtTsDate(row.trade_date) : '']
+        .filter(Boolean).join(' · ')
+    }
+  };
+}
+
+// 资金流向卡：moneyflow 行。四档净额 = 买入 - 卖出；net_mf_amount 即主力净流入
+function fundflowCard(payload) {
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!row) return null;
+  const net = (b, s) => {
+    const nb = numOrNull(b);
+    const ns = numOrNull(s);
+    return nb == null || ns == null ? null : (nb - ns) * 10000;
+  };
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'fundflow',
+    content: [],
+    fundflow: {
+      mainNet: wanToYuan(row.net_mf_amount),
+      tiers: [
+        { label: '超大单', value: net(row.buy_elg_amount, row.sell_elg_amount) },
+        { label: '大单', value: net(row.buy_lg_amount, row.sell_lg_amount) },
+        { label: '中单', value: net(row.buy_md_amount, row.sell_md_amount) },
+        { label: '小单', value: net(row.buy_sm_amount, row.sell_sm_amount) }
+      ],
+      note: [row.ts_code, row.trade_date ? '数据日期 ' + fmtTsDate(row.trade_date) : '']
+        .filter(Boolean).join(' · ')
+    }
+  };
+}
+
+// 财报速览卡：get_financial_report 组合载荷 { indicator, income, cashflow }，
+// 任一子表可能为 null（积分不足时常见）。金额单位元，比率/同比是百分数值
+function reportCard(payload) {
+  const data = payload || {};
+  const ind = data.indicator || {};
+  const inc = data.income || {};
+  const cf = data.cashflow || {};
+  const endDate = inc.end_date || ind.end_date || cf.end_date || '';
+  const date = fmtTsDate(endDate);
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'report',
+    content: [],
+    report: {
+      periodLabel: periodLabelOf(endDate),
+      period: date,
+      revenue: { value: numOrNull(inc.revenue), yoy: numOrNull(ind.or_yoy) },
+      netProfit: { value: numOrNull(inc.n_income_attr_p), yoy: numOrNull(ind.netprofit_yoy) },
+      cashFlow: { value: numOrNull(cf.n_cashflow_act), yoy: null },
+      grossMargin: numOrNull(ind.grossprofit_margin),
+      netMargin: numOrNull(ind.netprofit_margin),
+      roe: numOrNull(ind.roe),
+      eps: numOrNull(ind.eps),
+      // 一致预期数据源没有，beat/consensus 留空（卡片不出「超预期」标签）
+      beat: '',
+      consensus: null,
+      note: [inc.ts_code || ind.ts_code || cf.ts_code, date ? '报告期 ' + date : '', '单位：元']
+        .filter(Boolean).join(' · ')
+    }
+  };
+}
+
 // ===== 语音消息 =====
 // 录音时长的两条边界：短于下限当作误触、不发；触及上限自动结束
 const REC_MIN_MS = 1000;
@@ -385,15 +492,22 @@ Page({
       this._appendToken(delta);
     });
 
-    // 行情卡片：结构化数据，直接复用现有的 quoteCard 渲染。
+    // 结构化卡片：quote / valuation / fundflow / report 四类（事件契约见
+    // agent 的 _emit_structured 与 server/README.md）。
     // 插入卡片后要把当前流式消息收尾（_finishStreaming）：
     // 后端常见的节奏是「文字 → 卡片 → 文字」，不断流的话
     // 卡片之后的 token 会被追加到卡片上方的旧消息里，顺序就乱了
     agentSocket.on('card', (data) => {
-      if (!data || data.type !== 'quote_card' || !data.payload) return;
+      if (!data || !data.payload) return;
+      let msg = null;
+      if (data.type === 'quote_card') msg = quoteCard(data.payload);
+      else if (data.type === 'valuation_card') msg = valuationCard(data.payload);
+      else if (data.type === 'fundflow_card') msg = fundflowCard(data.payload);
+      else if (data.type === 'report_card') msg = reportCard(data.payload);
+      if (!msg) return;
       this._flushStream({ force: true });
       this._finishStreaming();
-      this.setData({ messages: this.data.messages.concat([quoteCard(data.payload)]) });
+      this.setData({ messages: this.data.messages.concat([msg]) });
       this.scrollToBottom({ force: true });
     });
 

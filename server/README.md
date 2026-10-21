@@ -135,6 +135,27 @@ server/
 | DELETE | `/api/v1/alerts/:id` | 删除提醒 | 是 |
 | GET | `/api/v1/ws` | WebSocket 长连接 | 是 |
 
+### Agent WS 事件契约（`/api/v1/ws/agent`）
+
+网关只做透传，`data` 结构由 Python Agent（`agent/subgraphs/mcp.py` 的 `_emit_structured`）约定；
+改卡片类型必须同步 `stock-agent-miniapp/pages/chat/chat.js` 的卡片工厂与本文本表。
+
+| event | data.type | 载荷 | 前端渲染 |
+|---|---|---|---|
+| `card` | `quote_card` | `QuoteDetail` 单对象（code/name/price/change/change_percent/open/high/low/volume/amount/status/time） | 行情速览卡 |
+| `card` | `valuation_card` | `daily_basic` 单行（pe/pe_ttm/pb/ps_ttm/dv_ttm/total_mv 等；**金额单位万元**） | 估值卡 |
+| `card` | `fundflow_card` | `moneyflow` 单行（buy/sell_sm/md/lg/elg_amount、net_mf_amount；**金额单位万元**） | 资金流向卡 |
+| `card` | `report_card` | `{indicator, income, cashflow}` 三表合并（各为单行 dict，可缺表；**金额单位元**） | 财报速览卡 |
+| `table` | `kline_table` | `KlineRow` 数组（date/open/high/low/close/volume/change_percent） | K 线图卡 |
+| `table` | `symbol_list` | 股票搜索候选行数组 | 搜索候选列表 |
+
+说明：
+
+1. `valuation_card` / `fundflow_card` 按行发射（一轮问多只股票时一标的一卡，单工具上限 3 张）；
+2. `report_card` 来自组合工具 `get_financial_report`（并发拉 fina_indicator + income + cashflow），
+   任一子表取不到时对应字段为 `null`，前端渲染 `--`，不影响其它字段；
+3. 历史分位、行业均值、一致预期、龙虎榜明细等字段当前**没有数据源**，卡片按缺失降级，不编造。
+
 ---
 
 ## 四、业务规则与降级策略

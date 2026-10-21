@@ -5,7 +5,10 @@
     "base-popup": "/components/base/popup/popup",
     "base-toast": "/components/base/toast/toast",
     "finance-quote-card": "/components/finance/quote-card/quote-card",
-    "finance-kline-card": "/components/finance/kline-card/kline-card"
+    "finance-kline-card": "/components/finance/kline-card/kline-card",
+    "finance-valuation-card": "/components/finance/valuation-card/valuation-card",
+    "finance-fundflow-card": "/components/finance/fundflow-card/fundflow-card",
+    "finance-report-card": "/components/finance/report-card/report-card"
   },
   "backgroundColor": "#0B1219",
   "backgroundColorTop": "#0B1219",

@@ -149,13 +149,17 @@ def get_tools() -> list:
     # Tushare 增强工具：仅在配置了 token 时注册，
     # 否则 LLM 选中后必然失败（白白消耗一次工具往返与降级）
     if TUSHARE_TOKEN:
-        from tools.fundamental import get_valuation, get_financial_indicator
+        from tools.fundamental import (
+            get_valuation,
+            get_financial_indicator,
+            get_financial_report,
+        )
         from tools.moneyflow import get_money_flow, get_top_list, get_hsgt_flow
         from tools.news import get_stock_news
         from tools.history import get_history_daily
 
         tools += [
-            get_valuation, get_financial_indicator,
+            get_valuation, get_financial_indicator, get_financial_report,
             get_money_flow, get_top_list, get_hsgt_flow,
             get_stock_news, get_history_daily,
         ]

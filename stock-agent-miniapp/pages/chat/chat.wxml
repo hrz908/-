@@ -98,6 +98,48 @@
                 note="{{msg.klineNote}}"
               />
 
+              <!-- 估值卡片：金融卡组件（components/finance/valuation-card）。
+                   历史分位/行业均值当前数据源没有，卡片内显示「--」降级 -->
+              <finance-valuation-card
+                wx:elif="{{msg.card === 'valuation'}}"
+                card-class="msg-card"
+                pe-ttm="{{msg.valuation.peTTM}}"
+                pe-static="{{msg.valuation.peStatic}}"
+                pb="{{msg.valuation.pb}}"
+                ps="{{msg.valuation.ps}}"
+                dividend-yield="{{msg.valuation.dividendYield}}"
+                total-cap="{{msg.valuation.totalCap}}"
+                note="{{msg.valuation.note}}"
+              />
+
+              <!-- 资金流向卡片：金融卡组件（components/finance/fundflow-card） -->
+              <finance-fundflow-card
+                wx:elif="{{msg.card === 'fundflow'}}"
+                card-class="msg-card"
+                main-net="{{msg.fundflow.mainNet}}"
+                tiers="{{msg.fundflow.tiers}}"
+                note="{{msg.fundflow.note}}"
+              />
+
+              <!-- 财报速览卡片：金融卡组件（components/finance/report-card）。
+                   一致预期数据源没有，不出「超预期」标签 -->
+              <finance-report-card
+                wx:elif="{{msg.card === 'report'}}"
+                card-class="msg-card"
+                period-label="{{msg.report.periodLabel}}"
+                period="{{msg.report.period}}"
+                revenue="{{msg.report.revenue}}"
+                net-profit="{{msg.report.netProfit}}"
+                cash-flow="{{msg.report.cashFlow}}"
+                gross-margin="{{msg.report.grossMargin}}"
+                net-margin="{{msg.report.netMargin}}"
+                roe="{{msg.report.roe}}"
+                eps="{{msg.report.eps}}"
+                beat="{{msg.report.beat}}"
+                consensus="{{msg.report.consensus}}"
+                note="{{msg.report.note}}"
+              />
+
               <!-- 纯文本回答：markdown 块渲染（见页面底部 md-* 模板与样式） -->
               <block wx:else>
                 <block wx:for="{{msg.blocks}}" wx:for-item="b" wx:key="index">

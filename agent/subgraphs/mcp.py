@@ -54,12 +54,23 @@ _MAX_TOOL_ROUNDS = 3
 _MAX_MSG_CHARS = 2000
 # synthesize 里塞进提示词的工具结果上限（字符）
 _MAX_TOOL_CHARS = 6000
+# 单个工具的卡片事件上限：一轮问多只股票时一标的一卡，封顶防刷屏
+_MAX_CARDS_PER_TOOL = 3
 
-# 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）
+# 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）。
+# Tushare 增强工具也要给标签，否则前端只能显示原始工具名
 _TOOL_LABELS = {
     "get_quote": "实时行情",
     "get_kline": "K线数据",
     "symbol_search": "股票搜索",
+    "get_valuation": "估值指标",
+    "get_financial_indicator": "财务指标",
+    "get_financial_report": "财报数据",
+    "get_money_flow": "资金流向",
+    "get_top_list": "龙虎榜",
+    "get_hsgt_flow": "北向资金",
+    "get_stock_news": "财经资讯",
+    "get_history_daily": "历史行情",
 }
 
 # 工具名 -> 结构化事件构造器
@@ -123,7 +134,7 @@ def _current_run_messages(state: dict) -> list:
 
 
 # 取数类工具：只有它们的结果才能支撑回答里的数字
-_DATA_TOOLS = ("get_quote", "get_kline", "get_valuation")
+_DATA_TOOLS = ("get_quote", "get_kline", "get_valuation", "get_financial_report", "get_money_flow")
 
 
 def _pending_nudge(state: dict) -> str:
@@ -235,7 +246,21 @@ async def tool_execute(state: dict) -> dict:
 
 
 def _emit_structured(tool_results: list) -> None:
-    """把行情/K线/搜索结果以独立 card/table 事件发射（不进入 token 流）。"""
+    """把行情/K线/估值/资金流/财报等结构化数据以独立 card/table 事件发射
+    （不进入 token 流）。
+
+    事件契约（与小程序 chat.js 的卡片工厂一一对应，改这里必须同步那边
+    与 server/README.md 第三节）：
+    - get_quote            -> card: quote_card（行情速览卡）
+    - get_kline            -> table: kline_table（K 线数据）
+    - symbol_search        -> table: symbol_list（股票搜索候选）
+    - get_valuation        -> card: valuation_card（估值卡，daily_basic 行）
+    - get_money_flow       -> card: fundflow_card（资金流向卡，moneyflow 行）
+    - get_financial_report -> card: report_card（财报速览卡，三表合并行）
+
+    行载荷按行发射：Tushare 返回的是数组，一轮问多只股票时一标的一卡，
+    前端每张卡是一条独立消息。单工具最多发 _MAX_CARDS_PER_TOOL 张，防刷屏。
+    """
     for item in tool_results:
         name = item.get("tool")
         result = item.get("result") or {}
@@ -248,13 +273,35 @@ def _emit_structured(tool_results: list) -> None:
             emit_table("kline_table", data)
         elif name == "symbol_search" and data:
             emit_table("symbol_list", data)
+        elif name == "get_valuation" and data:
+            for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
+                emit_card("valuation_card", row)
+        elif name == "get_money_flow" and data:
+            for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
+                emit_card("fundflow_card", row)
+        elif name == "get_financial_report" and data:
+            emit_card("report_card", data)
 
 
-# 命中这些词说明用户就是要数据；此时若一个数据都没取到，绝不能让模型自由发挥
-_DATA_KEYWORDS = ("k线", "K线", "行情", "价格", "涨跌", "走势", "收盘", "报价", "涨幅")
+def _rows_of(data):
+    """把工具载荷归一成行列表：Tushare 给数组，组合工具给 dict。"""
+    if isinstance(data, list):
+        return [r for r in data if isinstance(r, dict)]
+    return [data] if isinstance(data, dict) else []
+
+
+# 命中这些词说明用户就是要数据；此时若一个数据都没取到，绝不能让模型自由发挥。
+# 除行情价格类外，补上估值/财报/资金三类：它们对应各自的 Tushare 工具与卡片，
+# 取不到数时同样必须走兜底文案，而不是让模型凭印象编数字
+_DATA_KEYWORDS = (
+    "k线", "K线", "行情", "价格", "涨跌", "走势", "收盘", "报价", "涨幅",
+    "估值", "市盈率", "市净率", "市销率", "股息", "市值",
+    "财报", "业绩", "营收", "净利润", "毛利", "ROE", "EPS",
+    "资金", "主力", "北向", "南向", "龙虎榜", "流入", "流出", "融资融券",
+)
 
 _NO_DATA_REPLY = (
-    "抱歉，这一轮没有取到行情数据（工具没返回有效结果），我无法给出价格或涨跌幅。"
+    "抱歉，这一轮没有取到行情数据（工具没返回有效结果），我无法给出你要的数字。"
     "请稍后再试一次；也可以带上代码再问，例如「000568 最近10天日K」。"
 )
 
