@@ -39,8 +39,8 @@ function currentConfig() {
 const config = currentConfig();
 
 export const apiBase = config.apiBase;
-export const wsBase = config.wsBase;
 
-// AI 对话的 WebSocket 通道（server 侧 agent ws），握手无法带自定义头，
-// token / session_id 走 query 参数（见 services/agent.js）
-export const agentWsPath = '/api/v1/ws/agent';
+// AI 对话的 SSE 流式通道（server 侧 agent stream）：每次提问一个独立
+// POST 请求，响应 text/event-stream 逐帧下发，走 Header Bearer 鉴权
+//（见 services/agent.js 与 server/internal/agent/sse_agent.go）
+export const agentSsePath = '/api/v1/agent/stream';

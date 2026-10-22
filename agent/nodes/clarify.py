@@ -8,6 +8,7 @@
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from llm import get_small_llm
+from subgraphs import emit
 
 _BLOCK_REPLY = "抱歉，我无法处理该请求。如果你有股票行情或投研相关的问题，欢迎换个方式告诉我。"
 
@@ -28,11 +29,17 @@ async def clarify(state: dict) -> dict:
     query = state.get("rewritten") or state.get("query", "") or ""
     try:
         llm = get_small_llm(streaming=True, temperature=0.3)
-        resp = await llm.ainvoke([
+        parts = []
+        async for chunk in llm.astream([
             SystemMessage(content=_CLARIFY_SYSTEM),
             HumanMessage(content=f"用户问题：{query}"),
-        ])
-        text = (resp.content or "").strip()
+        ]):
+            if isinstance(chunk.content, str) and chunk.content:
+                emit("token", {"delta": chunk.content})
+            parts.append(chunk)
+        text = "".join(
+            (p.content if isinstance(p.content, str) else "") for p in parts
+        ).strip()
     except Exception:  # noqa: BLE001 - 模型异常时用固定兜底话术
         text = ""
     return {"messages": [AIMessage(content=text or _FALLBACK)]}

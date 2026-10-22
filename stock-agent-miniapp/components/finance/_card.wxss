@@ -20,6 +20,13 @@
   gap: var(--gap-grid);
 }
 
+/* 头部左侧标题列（名称 + 代码）：占满剩余宽度并允许收缩，
+   避免长名称把右侧标签挤出可视区；8 张卡共用 */
+.fcard-title-col {
+  flex: 1;
+  min-width: 0;
+}
+
 .fcard-name {
   font-size: var(--fs-title);
   font-weight: 600;

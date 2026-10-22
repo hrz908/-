@@ -1,4 +1,4 @@
-// 对话页：消息收发走 Agent WebSocket（services/agent.js 单例），流式 token 逐字追加；
+// 对话页：消息收发走 Agent SSE（services/agent.js 单例），流式 token 逐字追加；
 // 纯文本走自绘气泡 + markdown 渲染（utils/markdown.js），行情/K 线这类结构化数据走自绘卡片消息
 
 import agentSocket from '../../services/agent';
@@ -168,6 +168,8 @@ function quoteCard(q) {
       high: numOrNull(q.high),
       low: numOrNull(q.low),
       amount: isNaN(amount) ? null : amount,
+      turnoverRate: numOrNull(q.turnover),
+      totalCap: numOrNull(q.total_mv),
       note: q.time ? '行情时间 ' + q.time : ''
     }
   };
@@ -392,8 +394,11 @@ Page({
     messages: [
       assistantMsg('你好，我是溜来。你可以问我行情、K 线、研报等问题。')
     ],
-    // 状态提示（「正在思考…」「正在查询…」）：挂在消息列表底部，done/error 后清空
-    statusText: ''
+    // 状态提示（「正在查询…」「重连中」）：挂在消息列表底部，done/error 后清空
+    statusText: '',
+    // 思考气泡：发送后到首个 token 到达前显示（占位在 AI 回复该出现的位置），
+    // 比底部小条更醒目；首个 token 一到即撤销，由流式气泡接管
+    thinking: false
   },
 
   onLoad() {
@@ -475,12 +480,12 @@ Page({
       wx.onWindowResize(this._onResize);
     }
 
-    // 接入 Agent WS：先挂监听再连接，免得漏掉 onOpen 后立即到达的事件
+    // 接入 Agent SSE：先挂监听，发送时由 agentSocket 内部按提问开流
     this._initAgentSocket();
   },
 
-  // ===== Agent WebSocket =====
-  // agentSocket 是单例，连接跨页面生命周期复用；这里只负责挂/摘本页的监听
+  // ===== Agent SSE =====
+  // agentSocket 是单例；这里只负责挂/摘本页的监听（SSE 为每问一请求，无持久连接）
   _initAgentSocket() {
     // 流式 token：逐字追加到当前 streaming 状态的 assistant 消息。
     // 性能约束：token 频率很高，不能每次都把整个 messages 回传给视图层——
@@ -541,7 +546,7 @@ Page({
       this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
-      this.setData({ sending: false, statusText: '' });
+      this.setData({ sending: false, statusText: '', thinking: false });
       this.toast((data && data.msg) || '服务异常');
     });
 
@@ -550,7 +555,7 @@ Page({
       this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
-      this.setData({ sending: false, statusText: '' });
+      this.setData({ sending: false, statusText: '', thinking: false });
     });
 
     // 断连：连接层会自动重连，这里只在正在等回答时给个提示
@@ -568,6 +573,8 @@ Page({
   _appendToken(delta) {
     // 已经有内容在回来，说明这一轮是活的，撤掉看门狗
     this._clearSendWatchdog();
+    // 首个 token 到达即收起思考气泡，交给流式消息
+    if (this.data.thinking) this.setData({ thinking: false });
     if (this._streamIndex < 0) {
       const messages = this.data.messages;
       const last = messages[messages.length - 1];
@@ -775,12 +782,13 @@ Page({
       messages: this.data.messages.concat([userMsg(text)]),
       input: '',
       sending: true,
-      statusText: '正在思考...'
+      thinking: true,
+      statusText: ''
     });
     this.scrollToBottom({ force: true });
     this._armSendWatchdog();
 
-    // 通过 WS 发送；未连接时 agentSocket 内部会先缓存并触发连接
+    // 通过 SSE 发送；每次提问开一条独立流，agentSocket 内部负责解析事件
     agentSocket.sendMessage(text);
   },
 
@@ -793,7 +801,7 @@ Page({
     this._sendWatchdog = setTimeout(() => {
       this._sendWatchdog = 0;
       if (!this.data.sending) return;
-      this.setData({ sending: false, statusText: '' });
+      this.setData({ sending: false, statusText: '', thinking: false });
       this.toast('服务暂时没有响应，请重试');
     }, SEND_TIMEOUT_MS);
   },

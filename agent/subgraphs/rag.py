@@ -9,12 +9,13 @@ generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并
 （数据格式 {"docs": [{title, chunk_id, score}]}，与前端和 Go 事件协议一致）。
 """
 from datetime import datetime
+from typing import Literal
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 
 from llm import get_llm
-from state import AgentState
+from state import AgentState, recent_turns
 from config import RAG_THRESHOLD
 from retriever import build_retriever
 from prompts.parse import render
@@ -62,7 +63,7 @@ def sufficiency_check(state: dict) -> dict:
     return {}
 
 
-def route_after_check(state: dict) -> str:
+def route_after_check(state: dict) -> Literal["escalate", "generate"]:
     # escalate 后 intent 被改成 mcp
     return "escalate" if state.get("intent") == "mcp" else "generate"
 
@@ -99,14 +100,22 @@ async def generate_with_citations(state: dict) -> dict:
         "score": c.get("score", 0.0),
     } for c in citations]})
 
-    # 带上最近对话历史（最近 6 条，排除末尾当前 query），让回答能衔接上下文
+    # 带上最近对话历史（复用 recent_turns 统一口径，跳过当前问题避免重复），让回答衔接上下文
     messages = [SystemMessage(content=prompt)]
-    messages.extend(list(state.get("messages", []))[-7:-1])
+    messages.extend(recent_turns(state, 6, query=query))
     messages.append(HumanMessage(content=state.get("query", "") or query))
 
     llm = get_llm(streaming=True, temperature=0.3)
-    ai = await llm.ainvoke(messages)
-    return {"messages": [ai], "citations": citations}
+    # 流式生成：节点内 astream 逐块生成，用 stream writer 显式发 token 事件
+    parts = []
+    async for chunk in llm.astream(messages):
+        if isinstance(chunk.content, str) and chunk.content:
+            emit("token", {"delta": chunk.content})
+        parts.append(chunk)
+    ai = parts[0] if parts else None
+    for p in parts[1:]:
+        ai = ai + p
+    return {"messages": [ai if ai is not None else AIMessage(content="")], "citations": citations}
 
 
 def build_rag_subgraph():

@@ -1,15 +1,18 @@
 """纯对话子图：单节点流式生成，无工具、无检索。
 
 用 prompts/chat.xml 作为 system，携带最近对话历史，直接流式产出回答。
+token 在 astream 循环里显式 emit("token", ...) 经 main.py 的 custom 模式透传，
+不再依赖 LangGraph 的 messages 流模式（避免双重发射）。
 """
 from datetime import datetime
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 
 from llm import get_llm
-from state import AgentState
+from state import AgentState, recent_turns
 from prompts.parse import render
+from subgraphs import emit
 
 
 async def llm_stream(state: dict) -> dict:
@@ -17,13 +20,22 @@ async def llm_stream(state: dict) -> dict:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system = render("chat.xml", now=now, query=query)
 
-    # 保留最近历史以维持连贯，但当前问题已通过 query 明确，避免重复
-    history = list(state.get("messages", []))[-10:]
+    # 保留最近历史以维持连贯（复用 recent_turns 统一口径，跳过当前问题避免重复）
+    history = recent_turns(state, 10, query=query)
     msgs = [SystemMessage(content=system)] + history
 
     llm = get_llm(streaming=True, temperature=0.7)
-    ai = await llm.ainvoke(msgs)
-    return {"messages": [ai]}
+    # 流式生成：节点内 astream 逐块生成，用 stream writer 显式发 token 事件
+    #（main.py 的 custom 模式透传），同时累加成完整 AIMessage 写回 state
+    parts = []
+    async for chunk in llm.astream(msgs):
+        if isinstance(chunk.content, str) and chunk.content:
+            emit("token", {"delta": chunk.content})
+        parts.append(chunk)
+    ai = parts[0] if parts else None
+    for p in parts[1:]:
+        ai = ai + p
+    return {"messages": [ai if ai is not None else AIMessage(content="")]}
 
 
 def build_chat_subgraph():

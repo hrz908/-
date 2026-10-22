@@ -10,6 +10,8 @@ post -> END
 
 route_by_intent 是纯函数，仅读取 state["intent"]，异常/未知一律回退 clarify。
 """
+from typing import Literal
+
 from langgraph.graph import StateGraph, START, END
 
 from state import AgentState
@@ -21,18 +23,18 @@ from subgraphs.chat import build_chat_subgraph
 _VALID_INTENTS = {"mcp", "rag", "chat", "clarify"}
 
 
-def route_after_guardrail(state: dict) -> str:
+def route_after_guardrail(state: dict) -> Literal["clarify", "rewrite"]:
     """护栏命中 -> 降级澄清；否则进入改写。"""
     return "clarify" if state.get("error") else "rewrite"
 
 
-def route_by_intent(state: dict) -> str:
-    """纯函数路由：按 intent 分派到对应子图/节点。"""
+def route_by_intent(state: dict) -> Literal["mcp", "rag", "chat", "clarify"]:
+    """纯函数路由：按 intent 分派到对应子图/节点；未知一律回退 clarify。"""
     intent = state.get("intent", "")
     return intent if intent in _VALID_INTENTS else "clarify"
 
 
-def route_after_rag(state: dict) -> str:
+def route_after_rag(state: dict) -> Literal["mcp", "post"]:
     """RAG 检索不足会把 intent 改成 mcp，此时重路由到行情子图。"""
     return "mcp" if state.get("intent") == "mcp" else "post"
 

@@ -31,11 +31,6 @@ from tools import close_http_client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("stocka.agent")
 
-# 只有这些“回答生成”节点的 token 才允许流入 token 事件，
-# 避免把 rewrite / classify / tool_call 等内部小模型输出泄露给前端。
-_TOKEN_NODES = {"synthesize", "llm_stream", "generate", "clarify"}
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 预热图与 checkpointer（建表 + 连接池）
@@ -90,17 +85,9 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             else:  # 兜底：单模式
                 mode, data = "messages", item
 
-            if mode == "messages":
-                msg, meta = data
-                node = meta.get("langgraph_node") if isinstance(meta, dict) else None
-                if node in _TOKEN_NODES:
-                    content = getattr(msg, "content", "")
-                    if isinstance(content, str) and content:
-                        if ttft_ms is None:
-                            ttft_ms = int((time.monotonic() - t0) * 1000)
-                        yield _line("token", {"delta": content})
-
-            elif mode == "custom":
+            # token 事件由生成节点（chat/rag/mcp/clarify）在 astream 循环里
+            # 显式 emit("token", ...) 经 custom 模式透传，避免与 messages 模式重复。
+            if mode == "custom":
                 # data 已是 {"event":..,"data":..}（由 subgraphs.emit 产出），直接透传
                 if isinstance(data, dict) and "event" in data:
                     yield json.dumps(data, ensure_ascii=False) + "\n"

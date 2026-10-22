@@ -93,7 +93,35 @@ class HybridRetriever(BaseRetriever):
                     "similarity": float(similarity) if similarity is not None else 0.0,
                 },
             ))
-        return docs
+        # 融合结果后处理：去噪、去重、控多样性（详见 _clean_docs）
+        return _clean_docs(docs)
+
+
+def _clean_docs(docs: List[Document], sim_floor: float = 0.05, per_title: int = 2) -> List[Document]:
+    """对融合后的候选片段做轻量后处理，提升送入生成的质量。
+
+    - 丢弃余弦相似度过低（< sim_floor）的噪声片段，避免无关资料污染回答；
+    - 按「标题 + 内容前缀」去重，排除被向量/全文两路重复命中的同一段；
+    - 同一标题最多保留 per_title 条，防止单一文档刷屏、保证来源多样性。
+    不改变原有按 RRF 分数的排序，sufficiency_check 仍按最高相似度与数量判定。
+    """
+    seen: set = set()
+    per_title_count: dict = {}
+    out: List[Document] = []
+    for d in docs:
+        sim = d.metadata.get("similarity", 0.0) or 0.0
+        if sim < sim_floor:
+            continue
+        key = (d.metadata.get("title", ""), (d.page_content or "").strip()[:40])
+        if key in seen:
+            continue
+        seen.add(key)
+        title = d.metadata.get("title", "")
+        if per_title_count.get(title, 0) >= per_title:
+            continue
+        per_title_count[title] = per_title_count.get(title, 0) + 1
+        out.append(d)
+    return out
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun

@@ -24,32 +24,22 @@ import re
 import time
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 
 from config import MAX_INPUT_TOKENS
 from llm import get_llm, count_message_tokens, is_context_overflow
-from state import AgentState
+from state import AgentState, recent_turns
 from tools import get_tools
 from prompts.parse import render
 from subgraphs import emit, emit_card, emit_table
 
 logger = logging.getLogger("stocka.agent")
 
-_TOOL_SYSTEM = (
-    "你是股票行情助手，可调用工具获取实时数据。规则：\n"
-    "1. 需要行情/K线/代码时，必须调用工具，不要凭空作答。\n"
-    "2. 用户只给了名称/拼音时，先用 symbol_search 拿到代码，下一轮再用代码查行情/K线/估值。\n"
-    "3. 可分多轮逐步取数（先搜代码再查数据），也可一轮内并行调用多个工具。\n"
-    "4. 拿到足够数据后停止调用工具，直接回答。\n"
-    "5. K 线默认取最近 10 根（count=10）；只有用户明确要更长区间（如近三个月、半年）\n"
-    "   时才加大 count，上限 60。不要一次拉满：数据要进对话卡片，太多会挤爆前端。\n"
-    "6. 每轮提问都要重新取数：不得因为历史消息里已有数据就跳过工具调用，\n"
-    "   行情/ K 线是实时数据，沿用上一轮的数字等于给出过期答案。\n"
-    "7. 工具全部失败时如实说明「暂无法获取」，禁止编造数字，\n"
-    "   也禁止出现与用户提问无关的标的名称。"
-)
+# 工具调用系统提示已抽到 prompts/mcp_toolcall.xml（与 chat/rag/router 同目录统一管理），
+# 由 render("mcp_toolcall.xml") 注入 tool_call 节点，不在代码里硬编码长文本。
 
 # 多跳工具调用的轮次上限：tool_execute 每完成一轮就回到 tool_call，
 # 最多允许 _MAX_TOOL_ROUNDS 轮工具执行，超过则强制进入 synthesize，防止无限循环。
@@ -95,31 +85,12 @@ def _tools_by_name():
 
 
 def _recent_history(state: dict, limit: int = 6) -> list:
-    """取最近 limit 条「纯文本」对话历史。
+    """最近 limit 条纯文本历史（复用 state.recent_turns 的过滤口径），并逐条截断正文。
 
-    工具调用与工具结果一律不进 LLM 上下文，两个原因：
-    1. ToolMessage 里是 json.dumps 的完整工具载荷，Tushare 类接口一次能返回几千行
-       （估值接口整段历史实测约 30 万 token），直接进对话会触发上游 max_seq_len 报错，
-       整条回答变成空；
-    2. 带 tool_calls 的 AIMessage 一旦与对应 ToolMessage 配对被裁掉，就会变成残缺的
-       tool_call，上游接口同样会报错。
-    工具数据统一由 prompts/mcp.xml 的 <tool_results> 段承载（那里有字符上限）。
+    工具消息与残缺 tool_call 已由 recent_turns 统一剔除，这里只保留 _shrink 的截断职责：
+    只截正文、不重建消息类型，避免破坏 tool_call_id 配对让上游接口报错。
     """
-    msgs = list(state.get("messages", []))[-(limit + 1):-1]
-    current = (state.get("query") or "").strip()
-    out = []
-    for m in msgs:
-        if isinstance(m, ToolMessage):
-            continue
-        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
-            continue
-        if isinstance(m, HumanMessage) and current:
-            content = m.content if isinstance(m.content, str) else str(m.content or "")
-            if content.strip() == current:
-                # 本轮问题由 synthesize 显式追加，历史里的同一句不重复带
-                continue
-        out.append(_shrink(m))
-    return out
+    return [_shrink(m) for m in recent_turns(state, limit, query=state.get("query"))]
 
 
 def _shrink(msg):
@@ -345,7 +316,7 @@ async def tool_call(state: dict) -> dict:
     if not run_msgs:
         # 兜底：拿不到本轮消息时至少把问题本身交给模型
         run_msgs = [HumanMessage(content=state.get("query", "") or "")]
-    msgs = [SystemMessage(content=_TOOL_SYSTEM)] + run_msgs
+    msgs = [SystemMessage(content=render("mcp_toolcall.xml"))] + run_msgs
     nudge = _pending_nudge(state)
     if nudge:
         msgs.append(SystemMessage(content=nudge))
@@ -375,7 +346,7 @@ def _call_rounds(state: dict) -> int:
     return sum(1 for m in _current_run_messages(state) if isinstance(m, AIMessage))
 
 
-def route_after_call(state: dict) -> str:
+def route_after_call(state: dict) -> Literal["tool_execute", "tool_call", "synthesize"]:
     """路由：该取数就去取，该取而没取就再给一次机会，最后才合成。
 
     - 有 tool_calls 且未超轮次上限 -> 执行工具
@@ -436,10 +407,9 @@ async def tool_execute(state: dict) -> dict:
         ))
         tool_results.append({"tool": name, "result": result})
 
-    # 跨轮累加：tool_results 无 reducer（覆盖式写入），这里手动拼接已有结果，
-    # 否则多跳循环里后一轮会覆盖前一轮，synthesize 就看不到早先轮次的工具数据
-    prev = state.get("tool_results") or []
-    return {"messages": tool_messages, "tool_results": prev + tool_results}
+    # tool_results 已配置 operator.add reducer：这里只返回本轮新增结果，
+    # 由 reducer 跨轮拼接到已有列表，synthesize 仍能看到全部轮次的工具数据
+    return {"messages": tool_messages, "tool_results": tool_results}
 
 
 def _emit_structured(tool_results: list) -> None:
@@ -644,14 +614,21 @@ async def synthesize(state: dict) -> dict:
 
     llm = get_llm(streaming=True, temperature=0.4)
     try:
-        ai = await llm.ainvoke(messages)
+        parts = []
+        async for chunk in llm.astream(messages):
+            if isinstance(chunk.content, str) and chunk.content:
+                emit("token", {"delta": chunk.content})
+            parts.append(chunk)
     except Exception as e:  # noqa: BLE001
         if not is_context_overflow(e):
             raise
         # 上游仍报超长：降级成一条能用的回答，绝不让整条对话只剩 error 事件
         logger.warning("synthesize context overflow, fallback to safe reply", exc_info=True)
         return {"messages": [AIMessage(content=_OVERFLOW_REPLY)]}
-    return {"messages": [ai]}
+    ai = parts[0] if parts else None
+    for p in parts[1:]:
+        ai = ai + p
+    return {"messages": [ai if ai is not None else AIMessage(content="")]}
 
 
 def build_mcp_subgraph():

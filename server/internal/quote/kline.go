@@ -47,7 +47,7 @@ type KlineRow struct {
 }
 
 // QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出
-// 开高低、涨跌额、量额、状态与时间，供行情详情页使用
+// 开高低、涨跌额、量额、换手率、总市值、状态与时间，供行情详情页使用
 type QuoteDetail struct {
 	Code          string          `json:"code"`
 	Name          string          `json:"name"`
@@ -59,6 +59,8 @@ type QuoteDetail struct {
 	Low           decimal.Decimal `json:"low"`
 	Volume        int64           `json:"volume"` // 成交量（手）
 	Amount        decimal.Decimal `json:"amount"` // 成交额（万元）
+	Turnover      decimal.Decimal `json:"turnover"` // 换手率（%）
+	TotalMv       decimal.Decimal `json:"total_mv"` // 总市值（元；上游亿元×1e8）
 	Status        string          `json:"status"` // trading / closed
 	Time          string          `json:"time"`   // 行情时间（腾讯返回的原始串）
 }
@@ -257,6 +259,8 @@ const (
 	tecLow       = 34 // 最低
 	tecAmount    = 37 // 成交额（万元）
 	tecTime      = 30 // 行情时间，形如 20261020150003
+	tecTurnover  = 38 // 换手率（%）
+	tecTotalMv   = 44 // 总市值（亿元）
 )
 
 // parseTencentDetails 解析腾讯行情文本为完整快照，字段布局同 parseTencentQuotes
@@ -273,7 +277,7 @@ func parseTencentDetails(body string) []*QuoteDetail {
 		}
 
 		fields := strings.Split(m[1], "~")
-		if len(fields) <= tecAmount {
+		if len(fields) <= tecTotalMv {
 			continue
 		}
 
@@ -300,6 +304,8 @@ func parseTencentDetails(body string) []*QuoteDetail {
 			Low:           parseDecimal(fields[tecLow]),
 			Volume:        int64(parseDecimal(fields[tecVolume]).IntPart()),
 			Amount:        parseDecimal(fields[tecAmount]),
+			Turnover:      parseDecimal(fields[tecTurnover]),
+			TotalMv:       parseDecimal(fields[tecTotalMv]).Mul(decimal.NewFromInt(100000000)),
 			Status:        marketStatus(time.Now()),
 			Time:          formatQuoteTime(strings.TrimSpace(fields[tecTime])),
 		})
