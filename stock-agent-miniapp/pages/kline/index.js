@@ -19,10 +19,10 @@ const ITEM_COUNT = 40; // 一屏最多 40 根，超出靠 enableScroll 拖动
 // 浅色主题图表色：canvas 不吃 CSS 变量，这里与 styles/token.wxss 保持同值
 const C = {
   bg: '#FFFFFF',
-  grid: '#E8EBF0',
-  axis: '#9AA1AC',
-  up: '#F04A4A',
-  down: '#1AA97C',
+  grid: '#e4e4e7',
+  axis: '#a1a1aa',
+  up: '#dc2626',
+  down: '#16a34a',
   ma5: '#2559EB',
   ma10: '#F5A623',
   ma20: '#8B5CF6'

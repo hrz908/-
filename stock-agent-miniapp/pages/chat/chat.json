@@ -10,7 +10,7 @@
     "finance-fundflow-card": "/components/finance/fundflow-card/fundflow-card",
     "finance-report-card": "/components/finance/report-card/report-card"
   },
-  "backgroundColor": "#F5F6F8",
-  "backgroundColorTop": "#F5F6F8",
-  "backgroundColorBottom": "#F5F6F8"
+  "backgroundColor": "#ffffff",
+  "backgroundColorTop": "#ffffff",
+  "backgroundColorBottom": "#ffffff"
 }

@@ -87,3 +87,6 @@ Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
+
+# UI 重构过程截图（本地产物，不入库）
+stock-agent-miniapp/.restyle-shots/

@@ -19,10 +19,10 @@ const VOL_BOTTOM = 192;
 
 // 国内习惯：涨红跌绿；均线三色（蓝 / 琥珀 / 紫）——
 // 浅色主题下金色与深灰在白底上对比度不足，换成蓝/琥珀/紫这一组常规均线配色
-const COLOR_UP = '#F04A4A';
-const COLOR_DOWN = '#1AA97C';
+const COLOR_UP = '#dc2626';
+const COLOR_DOWN = '#16a34a';
 const MA_COLORS = { ma5: '#2559EB', ma10: '#F5A623', ma20: '#8B5CF6' };
-const GRID_COLOR = '#E8EBF0';
+const GRID_COLOR = '#e4e4e7';
 
 // 默认周期枚举（设计文档②）
 const DEFAULT_PERIODS = [

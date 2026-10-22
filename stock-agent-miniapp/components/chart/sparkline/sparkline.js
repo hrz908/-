@@ -95,7 +95,7 @@ Component({
         this.setData({ src: '' });
         return;
       }
-      const color = resolveColor(this.data.color, resolveColor(this.data.trend, '#F04A4A'));
+      const color = resolveColor(this.data.color, resolveColor(this.data.trend, '#dc2626'));
       this.setData({ src: buildSrc(nums, color, this.data.strokeWidth, this.data.fill) });
     }
   }

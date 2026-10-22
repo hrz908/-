@@ -1,68 +1,261 @@
 /* =============================================================
-   设计 Token · 浅色专业金融视觉语言（2026-10-22 由深色终端风整体切换）
-   来源：用户提供的三张产品参考图（chat / 自选股 / 提醒）
-   规则：所有页面 / 组件只允许引用本文件变量，禁止写死颜色与字号；
-   自定义组件通过 CSS 变量继承拿到这些值（styleIsolation 默认隔离
-   不影响 custom property 透传）。
+   设计 Token · shadcn 风视觉语言（zinc 色阶）
+   本项目唯一风格真相源，被 app.wxss @import，全站只允许引用这里的变量。
+
+   变更沿革：
+   - 2026-10-22 建立「浅色专业金融」主题（参考图三张），负责浅底 + 蓝强调色。
+   - 2026-10-22 重构为 shadcn 风：色板整体换成 zinc 色阶、圆角收紧、
+     卡片去投影、主按钮改近黑底白字。变量名沿用旧名，页面无需改名迁移。
+
+   规则：
+   - 变量只允许在 page{} 定义；组件通过 CSS 自定义属性继承拿到
+     （styleIsolation 默认隔离不影响 custom property 透传，
+     但【工具类 class 不透传】，组件内部需要自己写或 apply-shared，见 DESIGN.md）。
+   - canvas（uCharts / K 线）不吃 CSS 变量，配色在各自 js 里另配一份；
+     改本文件色值时必须同步那批硬编码，否则图表与页面脱色。
    ============================================================= */
 page {
-  /* ---- 背景与层次（参考图：浅灰页面 + 白卡片 + 细描边 + 轻投影） ---- */
-  --bg: #F5F6F8;        /* 页面背景：浅灰 */
-  --surface: #FFFFFF;   /* 卡片面 */
-  --surface-2: #F2F4F7; /* 次级面：芯片底、进度槽、骨架块 */
-  --line: #E8EBF0;      /* 描边 / 分割线 */
+  /* ---- 背景与层次（shadcn：纯白底 + 白卡片 + 发丝描边 + 默认无阴影） ---- */
+  --bg: #ffffff;        /* 页面背景：纯白 */
+  --surface: #ffffff;   /* 卡片面 */
+  --surface-2: #f4f4f5; /* 次级面：芯片底、进度槽、标签底（zinc-100） */
+  --line: #e4e4e7;      /* 描边 / 分割线（zinc-200） */
 
-  /* ---- 文字 ---- */
-  --ink: #181A1C;       /* 主文字：近黑 */
-  --ink-2: #5F6875;     /* 次文字 */
-  --ink-3: #9AA1AC;     /* 弱文字：字段说明 / 免责声明 */
+  /* ---- 文字（zinc 主阶） ---- */
+  --ink: #09090b;       /* 主文字 = 主按钮底（zinc-950）*/
+  --ink-2: #71717a;     /* 次文字（zinc-500） */
+  --ink-3: #a1a1aa;     /* 弱文字：字段说明 / 免责声明（zinc-400） */
 
   /* ---- 涨跌平：国内习惯红涨绿跌，与欧美相反，不要搞反 ---- */
-  --up: #F04A4A;
-  --down: #1AA97C;
-  --flat: #8A97A5;
+  --up: #dc2626;        /* 涨（red-600） */
+  --down: #16a34a;      /* 跌（green-600） */
+  --flat: #71717a;      /* 平：shadcn 无独立平色，取辅助文字色 */
 
-  /* ---- 强调色：浅色主题的主行动色（蓝）。
-       按钮 / 链接 / 激活态 / 用户气泡都用它；
-       原深色主题的金色强调色在浅底上对比度不足，整体弃用 ---- */
+  /* ---- 强调色：shadcn 只允许「一个」强调色，用途收紧到
+        链接 / 选中态 / 焦点 ring；主按钮保持近黑底，不再用蓝做主按钮 ---- */
   --accent: #2559EB;
+  --primary-fg: #fafafa; /* 主按钮文字（zinc-50） */
+  --ring: var(--ink);    /* 焦点描边 */
 
-  /* ---- 状态淡色底与淡色描边（标签 / 药丸 / 图标底，浅底专用） ---- */
-  --up-tint: rgba(240, 74, 74, 0.08);
-  --up-border: rgba(240, 74, 74, 0.28);
-  --down-tint: rgba(26, 169, 124, 0.08);
-  --down-border: rgba(26, 169, 124, 0.28);
+  /* ---- 状态语义色（数据/状态专用，不得挪作 UI 强调色）---- 
+       以下变量是为补齐 2026-10-22 之前就在用、但从未在 token 里定义过的引用
+       而补：settings 的退出登录按钮、event-card 的时间轴圆点、
+       report-card 的条形图此前全部处于失效状态（元素不可见/透明）。 */
+  --warn: #d97706;                     /* 警示：琥珀 amber-600，白底上对比度足够 */
+  --warn-tint: rgba(217, 119, 6, 0.10);
+  --warn-soft: rgba(217, 119, 6, 0.22);
+  --accent-deep: #1e40af;              /* 蓝深一档：图表主系列、条形填充 */
+  --accent-soft: rgba(37, 89, 235, 0.12);
+  --danger: #dc2626;                   /* 危险操作（退出登录等），与涨色同值但语义独立 */
+  --danger-strong: #b91c1c;
+  --danger-tint: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.28);
+  --press: rgba(9, 9, 11, 0.05);       /* 通用按压态底色（hover-class 用） */
+
+  /* ---- 状态淡色底与淡色描边（标签 / 药丸 / 图标底） ---- */
+  --up-tint: rgba(220, 38, 38, 0.08);
+  --up-border: rgba(220, 38, 38, 0.28);
+  --down-tint: rgba(22, 163, 74, 0.08);
+  --down-border: rgba(22, 163, 74, 0.28);
   --accent-tint: rgba(37, 89, 235, 0.08);
   --accent-border: rgba(37, 89, 235, 0.30);
 
-  /* ---- 投影：浅色主题用「轻投影 + 细描边」表达层次，
-       深色主题那套重投影（0.45 黑）在浅底上会发脏 ---- */
-  --shadow-card: 0 4rpx 20rpx rgba(16, 24, 40, 0.05);
-  --shadow-pop: 0 12rpx 40rpx rgba(16, 24, 40, 0.16);
+  /* ---- 投影：shadcn 默认无阴影，层次靠发丝边框与留白表达。
+        --shadow-card 置 none 实现「卡片去投影」；仅浮层（弹窗/toast）保留 ---- */
+  --shadow-card: none;
+  --shadow-pop: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
 
-  /* ---- 圆角（设计稿 16px / 6px / 8px，按 750rpx = 屏宽 ×2） ---- */
-  --r-card: 32rpx;    /* 卡片 */
-  --r-tag: 12rpx;     /* 标签 / 芯片 */
-  --r-nav-btn: 16rpx; /* 导航按钮 */
+  /* ---- 圆角（shadcn 形状规范：卡片/按钮/输入框 16rpx，标签 8rpx） ---- */
+  --r-card: 16rpx;
+  --r-tag: 8rpx;
+  --r-nav-btn: 16rpx;
+  --r-pill: 999rpx;               /* 胶囊全圆：chip / 药丸按钮 / 输入框 */
 
-  /* ---- 字号（设计稿 32px / 16px / 13px / 10-11px，×2 取 rpx） ----
-     层级（自上而下）：行情主价 32px > 主数字 28px > 抽屉品牌 20px
-     > 卡片标题 / 列表价 16px > 正文 14px > 辅助 / 分区标题 11px > 弱辅助 10px
-     正文设计稿为 13px（26rpx），但无障碍硬约束要求 ≥28rpx，
-     故上取整到 28rpx；辅助与弱辅助维持 11px / 10px 规格。
-     规则：任何字号都必须取用这里的档位，页面里不再写裸数字
-     （唯一例外：行内代码这类跟随上下文缩放的相对写法，用 em） */
-  --fs-price: 64rpx;  /* 32px 行情卡主价格 */
-  --fs-hero: 56rpx;   /* 28px 主数字：总浮动金额 / 提醒计数 / 提醒阈值 */
-  --fs-value: 44rpx;  /* 22px 次级主数字：资金流主力净额 */
-  --fs-brand: 40rpx;  /* 20px 抽屉品牌名 */
-  --fs-title: 32rpx;  /* 16px 卡片标题 */
-  --fs-body: 28rpx;   /* 14px 正文（≥28rpx 底线） */
-  --fs-aux: 22rpx;    /* 11px 辅助 */
-  --fs-min: 20rpx;    /* 10px 弱辅助：字段说明 / 免责声明 */
+  /* ---- 字号：沿用本项目既有七档。
+        shadcn 目标层级（hero 40 / title 36 / body 30 / caption 24）比现行档位小，
+        且现行 --fs-body 28rpx 是无障碍硬约束底线，是否收敛见 DESIGN.md「字号」节，
+        阶段 2 试点页确认后再动，本文件暂不调整 ---- */
+  --fs-price: 64rpx;  /* 行情卡主价格 */
+  --fs-hero: 56rpx;   /* 主数字：总浮动金额 / 提醒计数 / 阈值 */
+  --fs-value: 44rpx;  /* 次级主数字：资金流主力净额 */
+  --fs-brand: 40rpx;  /* 抽屉品牌名 */
+  --fs-title: 32rpx;  /* 卡片标题 */
+  --fs-body: 28rpx;   /* 正文（无障碍底线 ≥28rpx，不可下调） */
+  --fs-aux: 22rpx;    /* 辅助 */
+  --fs-min: 20rpx;    /* 弱辅助：字段说明 / 免责声明 */
 
-  /* ---- 间距（设计稿 14px / 14px / 10px，×2 取 rpx） ---- */
-  --sp-card: 28rpx;   /* 卡片间距 */
-  --pad-card: 28rpx;  /* 卡片内边距 */
-  --gap-grid: 20rpx;  /* 栅格间距 */
+  /* ---- 间距：只有这五档（8pt 栅格），任何地方不许写裸 rpx ---- */
+  --sp-1: 8rpx;   /* 4px  图标与文字、紧密元素之间 */
+  --sp-2: 16rpx;  /* 8px  卡片内相邻行 */
+  --sp-3: 24rpx;  /* 12px 卡片内区块、行列表左右内边距 */
+  --sp-4: 32rpx;  /* 16px 区块标准间距：卡片与卡片、卡片与容器边缘 */
+  --sp-5: 48rpx;  /* 24px 大区块之间（如列表与底部操作区） */
+
+  /* ---- 语义别名 ----
+     TODO-restyle(阶段1B)：--pad-card(28rpx) / --gap-grid(20rpx) 现值仍非五档，
+     阶段 1B 排版修复时再统一收敛到 var(--sp-*) ---- */
+  /* ---- 例外档：仍被引用，原值保留，阶段 1B 再评估是否收敛进五档 ---- */
+  --sp-6: 96rpx;             /* 仅 components/base/empty 首屏标识区在用 */
+  --sp-card: 28rpx;          /* 仅 components/finance/_card.wxss 在用 */
+
+  --pad-card: 28rpx;         /* 卡片内边距：原值保留，确保阶段 0 无布局位移 */
+  --pad-page: var(--sp-4);   /* 页面左右留白 */
+  --gap-grid: 20rpx;         /* 栅格间距：原值保留，确保阶段 0 无布局位移 */
+
+  /* ---- 发丝线：全站分割线 / 边框统一用它，禁止再自定 border 粗细与颜色 ---- */
+  --hairline: 2rpx solid var(--line);
+  --hairline-dashed: 2rpx dashed var(--line);  /* 仅口径分隔这类「虚线」场景，需显式豁免 */
 }
+
+/* =============================================================
+   深色模式：根节点（page）加 class="dark" 即整站换肤。
+   本项目尚未有页面根节点挂 theme class，真要启用需阶段 4 统一处理，
+   届时 app.js 里按系统/用户偏好给每页根节点注入，不要只切一半。
+   ============================================================= */
+page.dark {
+  --bg: #09090b;
+  --surface: #09090b;
+  --surface-2: #27272a;
+  --line: #27272a;
+  --ink: #fafafa;
+  --ink-2: #a1a1aa;
+  --ink-3: #71717a;
+  --primary-fg: #18181b;
+  --shadow-pop: 0 8rpx 24rpx rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================================
+   全局工具类（阶段 1 排版修复直接用，替代逐页手写）
+   注意：这里的 class 由 app.wxss @import 引入，属「全局样式」；
+   组件样式隔离（无 apply-shared）下不会穿透进 components/* 内部节点，
+   组件内部需要同样写法时，在其自身 wxss 里再写一遍或用 :host 继承。
+   命名提醒：components/base/navbar、components/base/tabs 内部有同名
+   .navbar / .tabs 私有类，二者各自隔离互不影响，改组件时不要混引。
+   ============================================================= */
+
+/* ---- 居中与截断：排版八条第 1/2/4 条的唯一标准写法 ---- */
+.flex-center {                       /* 垂直 + 水平居中 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ellipsis {                          /* 单行截断三件套 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clamp-2 {                           /* 两行截断 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* ---- flex 子项截断生效的前提 ---- */
+.min-w0 { min-width: 0; }
+
+/* ---- 导航栏：88rpx + 安全区 + flex 垂直居中（第 3 条） ---- */
+.navbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 88rpx;
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+}
+.navbar__title {                     /* 标题视口绝对居中，有返回键也不跳动 */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 60%;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 行情行：112rpx 行高 + 发丝分割线（第 5/8 条） ---- */
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 112rpx;
+  padding: 0 var(--sp-3);
+  border-bottom: var(--hairline);
+}
+.list-row__name {                    /* 左列：flex:1 + min-width:0 是截断生效前提 */
+  flex: 1;
+  min-width: 0;
+}
+.list-row__price  {                  /* 数字列定宽右对齐，保证竖向成线 */
+  width: 160rpx;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.list-row__change {
+  width: 140rpx;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---- 大数字：等宽 + 右对齐降级（tabular-nums 真机不生效的兜底） ---- */
+.num-hero {
+  font-size: var(--fs-hero);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---- 容器与按钮（shadcn 组件对应物） ---- */
+.card {
+  background: var(--surface);
+  border: var(--hairline);
+  border-radius: var(--r-card);
+  padding: var(--sp-3);
+  box-shadow: var(--shadow-card);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--fs-aux);
+  border-radius: var(--r-tag);
+  padding: 4rpx 12rpx;
+}
+.btn-primary {                       /* 近黑底白字 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;                 /* 第 7 条：热区 ≥88rpx */
+  background: var(--ink);
+  color: var(--primary-fg);
+  border-radius: var(--r-card);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.btn-outline {                       /* 白底描边 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;
+  background: transparent;
+  color: var(--ink);
+  border: var(--hairline);
+  border-radius: var(--r-card);
+  font-size: var(--fs-body);
+}
+
+/* ---- 语义文字色 ---- */
+.text-muted { color: var(--ink-2); font-size: var(--fs-aux); }
+.price-up   { color: var(--up); }
+.price-down { color: var(--down); }
+.price-flat { color: var(--flat); }
+
+/* ---- 标签页：gap 管间距，子项等分带截断（第 6 条） ---- */
+.tabs { display: flex; gap: var(--sp-3); }
+.tabs__item { flex: 1; min-width: 0; }
