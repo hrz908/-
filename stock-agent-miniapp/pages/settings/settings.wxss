@@ -112,9 +112,10 @@
 }
 
 /* 开关打开时图标托底跟进主行动色（浅色主题下为蓝） */
+/* 开关打开时图标容器同步「选中态」：近黑底白图标，与 chip 选中一致 */
 .pref-icon-wrap--on {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .pref-text {

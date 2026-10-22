@@ -43,6 +43,7 @@ page {
        report-card 的条形图此前全部处于失效状态（元素不可见/透明）。 */
   --warn: #d97706;                     /* 警示：琥珀 amber-600，白底上对比度足够 */
   --warn-tint: rgba(217, 119, 6, 0.10);
+  --warn-border: rgba(217, 119, 6, 0.30);
   --warn-soft: rgba(217, 119, 6, 0.22);
   --accent-deep: #1e40af;              /* 蓝深一档：图表主系列、条形填充 */
   --accent-soft: rgba(37, 89, 235, 0.12);

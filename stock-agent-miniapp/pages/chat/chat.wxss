@@ -53,10 +53,12 @@
   justify-content: flex-end;
 }
 
+/* 用户气泡：shadcn primary 近黑底（原先用主行动蓝，属大面积强调色，
+   违反「强调色只做链接/焦点」的收口规则） */
 .bubble--user {
   max-width: 80%;
   padding: var(--sp-2) var(--sp-3);
-  background: var(--accent);
+  background: var(--ink);
   border-radius: var(--r-tag) var(--r-tag) 0 var(--r-tag);
 }
 
@@ -252,7 +254,7 @@
   background: var(--surface-2);
   font-family: Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 0.9em;
-  color: var(--accent);
+  color: var(--ink);
   white-space: pre-wrap;
 }
 
@@ -533,12 +535,13 @@
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
+/* 按住反馈：中性按压色，不用强调蓝 */
 .bar-hold--active {
-  background: var(--accent-tint);
+  background: var(--press);
   transform: scale(0.99);
 }
 
-/* 发送键：无内容时是次级面，有内容才点亮成主行动蓝 */
+/* 发送键：无内容时是次级面，有内容才点亮成主按钮近黑 */
 .bar-send {
   flex: none;
   width: 88rpx;
@@ -552,7 +555,7 @@
 }
 
 .bar-send--active {
-  background: var(--accent);
+  background: var(--ink);
 }
 
 .bar-send--hover {

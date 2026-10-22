@@ -87,10 +87,12 @@
   background: var(--up-tint);
 }
 
+/* 「需关注」标签：琥珀系（--warn）。原先用 --accent 蓝，
+   既超出「强调色只做链接」的收口，又与 event-card 的需关注圆点（琥珀）不一致 */
 .ftag--gold {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-tint);
+  border-color: var(--warn-border);
+  color: var(--warn);
+  background: var(--warn-tint);
 }
 
 /* 数据栅格：一条顶部分隔线 + 两行三列（设计稿 3 列 × 2 行） */

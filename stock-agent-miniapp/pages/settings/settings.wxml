@@ -27,7 +27,7 @@
             <base-icon
               name="notification"
               size="40rpx"
-              color="{{pushEnabled ? 'var(--accent)' : 'var(--ink-3)'}}"
+              color="{{pushEnabled ? 'var(--primary-fg)' : 'var(--ink-3)'}}"
             />
           </view>
           <view class="pref-text">
@@ -35,10 +35,10 @@
             <view class="pref-desc">接收订单状态与活动提醒</view>
           </view>
           <!-- 原生 switch 的 color 只接受具体色值、不解析 var()，
-               这里与设计 token --accent (#2559EB) 保持一致 -->
+               这里与设计 token --ink (#09090b，shadcn 选中态近黑) 保持一致 -->
           <switch
             class="pref-switch"
-            color="#2559EB"
+            color="#09090b"
             checked="{{pushEnabled}}"
             bindchange="onTogglePush"
           />

@@ -24,8 +24,9 @@
 }
 
 .evt-dot--blue {
-  /* 常规事件：纯蓝。原先用 --accent-soft（12% 透明蓝），白底上几乎看不见 */
-  background: var(--accent);
+  /* 常规事件：中性灰。与「需关注=琥珀」配对，默认态用中性色，
+     不再占用强调蓝（shadcn 状态表达：默认中性 + 单状态色） */
+  background: var(--ink-3);
 }
 
 .evt-body {
