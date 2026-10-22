@@ -13,7 +13,7 @@
   width: 16rpx;
   height: 16rpx;
   border-radius: 50%;
-  margin-top: 10rpx;
+  margin-top: var(--sp-1);
 }
 
 /* 需关注：琥珀色（金色在白底上对比度不足，降一档到琥珀仍保留「提醒」语义）；
@@ -24,7 +24,8 @@
 }
 
 .evt-dot--blue {
-  background: var(--accent-soft);
+  /* 常规事件：纯蓝。原先用 --accent-soft（12% 透明蓝），白底上几乎看不见 */
+  background: var(--accent);
 }
 
 .evt-body {
@@ -48,9 +49,9 @@
 .evt-type {
   display: inline-block;
   margin-right: var(--sp-1);
-  padding: 1rpx 10rpx;
+  padding: 4rpx 12rpx;
   border-radius: var(--r-tag);
-  border: 1rpx solid var(--line);
+  border: var(--hairline);
   background: var(--surface-2);
   font-size: var(--fs-min);
   color: var(--ink-2);
@@ -81,4 +82,5 @@
   font-size: var(--fs-min);
   color: var(--accent);
   text-decoration: underline;
+  display: inline-flex; align-items: center; min-height: 88rpx;
 }

@@ -16,18 +16,19 @@
   align-items: center;
   justify-content: center;
   min-width: 96rpx;
-  /* 触摸目标 ≥ 44pt（88rpx） */
-  height: 64rpx;
+  /* 触摸目标 ≥ 88rpx */
+  min-height: 88rpx;
   padding: 0 var(--sp-3);
   box-sizing: border-box;
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
 .chip-text {
   font-size: var(--fs-aux);
   color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .chip--on {
@@ -38,6 +39,7 @@
 .chip--on .chip-text {
   color: var(--accent);
   font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .chip--hover {

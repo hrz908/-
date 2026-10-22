@@ -16,8 +16,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64rpx;
-  height: 64rpx;
+  width: 88rpx;
+  height: 88rpx;
 }
 
 /* ===== 对话区 ===== */
@@ -62,7 +62,7 @@
 
 /* 蓝底上文字必须反白，否则 var(--ink) 近黑字看不见 */
 .bubble--user .bubble-text {
-  color: #FFFFFF;
+  color: var(--primary-fg); /* 深色底上的浅色文字 */
 }
 
 .bubble-text {
@@ -83,7 +83,7 @@
   max-width: 92%;
   padding: var(--sp-3) var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag) var(--r-tag) var(--r-tag) 0;
   /* 浅色主题：白气泡落在浅灰底上靠轻投影浮起来（参考图 chat 页） */
   box-shadow: var(--shadow-card);
@@ -119,7 +119,7 @@
 .md-quote {
   margin: var(--sp-2) 0;
   padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
-  border-left: 4rpx solid var(--line);
+  border-left: 4rpx solid var(--line); /* 第8条例外：引用线是 4rpx 强调竖线，不适用 --hairline */
   font-size: var(--fs-aux);
   line-height: 1.7;
   color: var(--ink-2);
@@ -130,7 +130,7 @@
 .md-hr {
   height: 0;
   margin: var(--sp-3) 0;
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 /* 代码块：等宽 + 次级面 */
@@ -138,7 +138,7 @@
   margin: var(--sp-2) 0;
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   overflow: hidden;
 }
@@ -188,7 +188,7 @@
 /* 表格：div 行模拟（WXSS 无 table 版式需求，flex 更可控） */
 .md-table {
   margin: var(--sp-2) 0;
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   overflow: hidden;
 }
@@ -199,12 +199,12 @@
 
 /* 行间分隔线：sep 由 utils/markdown.js 按行号算好（WXSS 禁兄弟选择器） */
 .md-tr--sep {
-  border-top: 1px solid var(--line);
+  border-top: var(--hairline);
 }
 
 .md-tr--head {
   background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline);
 }
 
 .md-th,
@@ -248,7 +248,7 @@
 /* 行内代码：等宽 + 次级面小底 */
 .md-code.md-i {
   padding: 0 var(--sp-1);
-  border-radius: 6rpx;
+  border-radius: var(--r-tag);
   background: var(--surface-2);
   font-family: Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 0.9em;
@@ -258,7 +258,7 @@
 
 /* 链接：图表蓝 + 下划线；点击复制（见 onMdLinkTap） */
 .md-link {
-  color: #5B9BEF;
+  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -304,7 +304,7 @@
 
 .voice-bar {
   width: 4rpx;
-  border-radius: 4rpx;
+  border-radius: 4rpx; /* 形状条例外：语音波形迷你条，尺寸小于 --r-tag 档位 */
   background: currentColor;
 }
 
@@ -353,7 +353,7 @@
   margin-top: var(--sp-4);
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: 0 var(--r-tag) var(--r-tag) var(--r-tag);
 }
 
@@ -431,7 +431,7 @@
 .disclaimer {
   margin-top: var(--sp-4);
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   background: var(--surface-2);
   font-size: var(--fs-min);
@@ -469,19 +469,19 @@
      注意只能加在胶囊「下方」：容器是底部锚定的，加大上方留白（padding-top）
      只会把对话区挤短，胶囊本身不会动 */
   margin-bottom: var(--sp-2);
-  padding: 8rpx 10rpx;
+  padding: var(--sp-1) 12rpx;
   box-sizing: border-box;
   background: var(--surface);
-  border: 2rpx solid var(--line);
-  border-radius: 999rpx;
+  border: var(--hairline);
+  border-radius: var(--r-pill);
   box-shadow: var(--shadow-pop);
 }
 
-/* 模式键（语音 / 键盘）：比组件自带的 64rpx 放大到 76rpx，更好点按 */
+/* 模式键（语音 / 键盘）：比组件自带的 64rpx 放大到 88rpx，更好点按 */
 .bar-btn {
   flex: none;
-  width: 76rpx;
-  height: 76rpx;
+  width: 88rpx;
+  height: 88rpx;
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--ink-2);
@@ -502,7 +502,7 @@
   display: flex;
   align-items: center;
   /* 上下留白把单行文字垂直居中；多行时 auto-height 会把胶囊一起撑高 */
-  padding: 14rpx 0;
+  padding: var(--sp-2) 0;
 }
 
 .bar-input {
@@ -521,8 +521,8 @@
 .bar-hold {
   flex: 1;
   min-width: 0;
-  height: 76rpx;
-  border-radius: 999rpx;
+  height: 88rpx;
+  border-radius: var(--r-pill);
   background: var(--surface-2);
   color: var(--ink);
   font-size: var(--fs-body);
@@ -541,8 +541,8 @@
 /* 发送键：无内容时是次级面，有内容才点亮成主行动蓝 */
 .bar-send {
   flex: none;
-  width: 76rpx;
-  height: 76rpx;
+  width: 88rpx;
+  height: 88rpx;
   border-radius: 50%;
   background: var(--surface-2);
   display: flex;
@@ -564,8 +564,8 @@
 .bar-send-stop {
   width: 26rpx;
   height: 26rpx;
-  border-radius: 6rpx;
-  background: #FFFFFF;
+  border-radius: var(--r-tag);
+  background: var(--surface);
 }
 
 /* ===== 侧边抽屉 ===== */
@@ -589,7 +589,7 @@
   /* 上下留白加大，让品牌头部整体更突出 */
   padding: var(--sp-3) var(--sp-3);
   /* 品牌头部整体上移一点（负 margin 抵消 drawerTop 里多让出的空间） */
-  margin-top: -12rpx;
+  margin-top: var(--sp-1);
 }
 
 .drawer-logo {
@@ -598,7 +598,7 @@
   height: 128rpx;
   border-radius: 50%;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: var(--hairline);
 }
 
 .drawer-title-col {
@@ -611,11 +611,13 @@
   font-size: var(--fs-brand);
   font-weight: 700;
   color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .drawer-sub {
   font-size: var(--fs-aux);
   color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .drawer-section {
@@ -632,7 +634,7 @@
 /* 导航菜单：分组卡片承载 */
 .drawer-menu {
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   overflow: hidden;
 }
@@ -647,7 +649,7 @@
 
 /* 行间分隔线：sep 由 JS 按行号算好（WXSS 禁兄弟选择器） */
 .drawer-item--sep {
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .drawer-item--hover {
@@ -658,12 +660,13 @@
   flex: 1;
   font-size: var(--fs-body);
   color: var(--ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* 今日大盘：分组卡片 + 行 */
 .drawer-markets {
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   overflow: hidden;
 }
@@ -673,18 +676,19 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  min-height: 88rpx;
+  min-height: 112rpx;
   padding: 0 var(--sp-3);
 }
 
 /* 行间分隔线：sep 由 JS 按行号算好（WXSS 禁兄弟选择器） */
 .market-row--sep {
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .market-name {
   font-size: var(--fs-aux);
   color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* 指数值与涨跌幅拆成两段，gap 留距离；涨红跌绿由 up/down 类着色 */
@@ -696,8 +700,12 @@
   font-weight: 500;
 }
 
-/* 涨跌幅固定最小宽度并右对齐，让四行的百分比纵向对齐成列 */
+/* 指数值定宽右对齐，与涨跌幅列竖向成线 */
+.market-val { width: 160rpx; text-align: right; white-space: nowrap; }
+
+/* 涨跌幅固定宽度并右对齐，让四行的百分比纵向对齐成列 */
 .market-pct {
-  min-width: 100rpx;
+  width: 140rpx;
   text-align: right;
+  white-space: nowrap;
 }

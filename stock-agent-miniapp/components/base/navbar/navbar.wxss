@@ -10,8 +10,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 44px;
-  padding: 0 12px;
+  height: 88rpx;
+  padding: 0 var(--sp-3);
   box-sizing: border-box;
 }
 
@@ -21,9 +21,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  margin-left: -12px;
+  width: 88rpx;
+  height: 88rpx;
+  margin-left: calc(-1 * var(--sp-3));
   border-radius: var(--r-nav-btn);
 }
 
@@ -32,12 +32,17 @@
   background: var(--surface-2);
 }
 
+/* 标题容器：以视口水平中心为锚点绝对定位（左 50% + 反向平移自身宽度一半）。
+   旧写法是 left:0; right:0，在 wxml 还带了内联 max-width 的情况下，
+   right 会被 CSS 过约束规则忽略 → 容器被钉在左边界，标题整体偏左。
+   这里保留 flex 居中，但让容器本身先回到视口中心，有返回键也不会跳动 */
 .nav-title {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   top: 0;
   bottom: 0;
+  max-width: 60%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -45,9 +50,11 @@
   pointer-events: none;
 }
 
-/* 标题文本：超长时省略号截断，绝不被胶囊遮挡（max-width 由 JS 按胶囊位置算） */
+/* 标题文本：超长时省略号截断，绝不被胶囊遮挡（max-width 由 JS 按胶囊位置算）。
+   min-width:0 是 flex 子项让三件套真正生效的前提，缺了它 nowrap+ellipsis 会被忽略 */
 .nav-title-text {
   max-width: 100%;
+  min-width: 0;
   font-size: var(--fs-title);
   font-weight: 600;
   color: var(--ink);

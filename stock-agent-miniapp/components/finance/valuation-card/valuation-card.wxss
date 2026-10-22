@@ -13,19 +13,20 @@
   width: 96rpx;
   font-size: var(--fs-aux);
   color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .pct-track {
   flex: 1;
   height: 12rpx;
-  border-radius: 6rpx;
+  border-radius: var(--r-tag);
   background: var(--surface-2);
   overflow: hidden;
 }
 
 .pct-fill {
   height: 100%;
-  border-radius: 6rpx;
+  border-radius: var(--r-tag);
 }
 
 /* 档位配色：偏低=绿 / 偏高=红 / 中位=灰（与涨跌语义一致，不引入新色） */
