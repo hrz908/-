@@ -52,11 +52,18 @@
 3. `navbar.wxml` 内联 `max-width` 彻底版 —— CSS 版已修，待真机确认
 4. `settings` 原生 switch 热区 56rpx < 88rpx —— 需包可点容器
 
-## 六、深色模式：不启用
+## 六、主题：仅浅色（终局）
 
-2026-10-22 用户决策**不做深色模式**。`token.wxss` 中原有的 `page.dark` 变量块
-已删除（避免死代码误导）；如需重启此课题，从 `style/shadcn` 分支历史取回变量，
-并先解决每个页面根节点 `theme` class 的注入方式。
+当天经历三次反复：**浅色专业金融 → shadcn 亮色 → 短暂整站 shadcn dark →
+晚 用户以「太暗了」改回浅色**。两轮深色决策均以当晚终局为准，本项目的主题就是
+浅色 shadcn，不要再按中间态改。
+
+- `token.wxss` 即浅色值；`page.dark` 变量块已删除，不做主题切换
+- `app.json` 与 3 个页面 json 窗口底色 `#ffffff`、`navigationBarTextStyle: black`
+- canvas/SVG 侧 5 个 JS 文件（`utils/color.js`、`pages/kline/index.js`、
+  `kline-card.js`、`sparkline.js`、`empty.js`）同为浅色值
+- 深色专属规则（主按钮白底深字、强调色 blue-400、状态色提亮、投影 0.5 黑）
+  随深色批次一并回退，`DESIGN.md` 已无这些条目
 
 ## 七、字号层级：已收敛
 
@@ -78,5 +85,6 @@ body 30 / caption 24**。变量名保留（300+ 处引用不动），同档变�
   `node_modules/.tdesign-miniprogram-*` npm 缓存已删除；
   `miniprogram_npm/` 实际只含 `@qiun/ucharts` 与 `marked`，主包未被污染，
   「残留包缩小主包」的担心不成立
-- 字号收敛 + 深色模式按「不做」清理（本节上方第六、七节）
+- 字号收敛（8 档 → shadcn 四层 hero 40 / title 36 / body 30 / caption 24）
+- 主题反复：短暂整站深色 → **回浅色（终局，「太暗了」）**，详见第六节
 - 已合并 `main`（merge commit `7c6f9ea`），`style/shadcn` 分支保留作历史记录
