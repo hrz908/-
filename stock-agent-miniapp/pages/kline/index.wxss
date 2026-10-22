@@ -21,7 +21,7 @@
   margin: 0 var(--sp-4);
   margin-top: var(--sp-3);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -51,7 +51,7 @@
   margin: var(--sp-3) var(--sp-4) 0;
   padding: var(--sp-3) var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
 }
@@ -59,28 +59,25 @@
 /* 四列 */
 .stats {
   display: flex;
-}
+  gap: var(--gap-grid);}
 
 .stat {
   flex: 1;
   min-width: 0;
-  padding-right: var(--gap-grid);
-}
-
-.stat:last-child {
-  padding-right: 0;
-}
+  }
 
 /* 字段名弱辅助级、字段值正文级：与金融卡栅格的层级一致 */
 .stat-k {
   font-size: var(--fs-min);
   color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .stat-v {
   margin-top: var(--sp-1);
   font-size: var(--fs-body);
   color: var(--ink);
+  width: 180rpx; text-align: right;
 }
 
 /* 红涨绿跌（国内习惯）：区间涨跌幅、最高、最低跟随语义着色。

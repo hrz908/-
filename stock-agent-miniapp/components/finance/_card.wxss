@@ -7,9 +7,9 @@
   box-sizing: border-box;
   padding: var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
-  /* 浅色主题：细描边 + 轻投影表达层次（参考图白卡片落在浅灰底上） */
+  /* shadcn：卡片默认无阴影（--shadow-card 已置 none），层次靠发丝边框 */
   box-shadow: var(--shadow-card);
 }
 
@@ -27,17 +27,32 @@
   min-width: 0;
 }
 
+/* 等宽数字：全局 .num 定义在 styles/base.wxss，组件样式隔离下 class 不透传，
+   8 张卡里 33 处 class="num" 此前全部失效（数值仍会跳动），按隔离规则在此复写。
+   .up/.down/.flat 下面那份同理 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* 主标题：长股票名必须截断，否则换行会把卡头撑高、挤压右侧标签 */
 .fcard-name {
   font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.2;
   color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fcard-code {
-  margin-top: 6rpx;
+  margin-top: var(--sp-1);
   font-size: var(--fs-aux);
   color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 头部右侧标签组（异动 / 需关注等），可放多个 */
@@ -49,15 +64,19 @@
   gap: var(--sp-1);
 }
 
-/* 悬浮标签：默认中性；hot=异动（红）；gold=需关注（金） */
+/* 悬浮标签：默认中性；hot=异动（红）；gold=需关注（金）。
+   max-width + 三件套防止长标签溢出卡外（--minw 前缀避免与 flex:none 冲突） */
 .ftag {
-  padding: 3rpx 14rpx;
+  max-width: 240rpx;
+  padding: 4rpx 12rpx;
   border-radius: var(--r-tag);
-  border: 1rpx solid var(--line);
+  border: var(--hairline);
   background: var(--surface-2);
   font-size: var(--fs-min);
   color: var(--ink-2);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 浅底上的标签统一淡色底 + 同色系淡描边；
@@ -80,7 +99,7 @@
   flex-direction: column;
   margin-top: var(--sp-card);
   padding-top: var(--sp-3);
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 /* 无顶线的变体（卡片头部下方直接跟栅格时用） */
@@ -91,9 +110,9 @@
 
 .fgrid-row {
   display: flex;
-}
+  gap: var(--gap-grid);
 
-/* 行间距用显式类名，不用兄弟选择器（WXSS 禁用） */
+/* 行间距用显式类名，不用兄弟选择器（WXSS 禁用） */}
 .fgrid-row--gap {
   margin-top: var(--gap-grid);
 }
@@ -101,12 +120,7 @@
 .fcell {
   flex: 1;
   min-width: 0;
-  padding-right: var(--gap-grid);
-}
-
-.fcell:last-child {
-  padding-right: 0;
-}
+  }
 
 .fcell-k {
   font-size: var(--fs-min);
@@ -114,7 +128,7 @@
 }
 
 .fcell-v {
-  margin-top: 6rpx;
+  margin-top: var(--sp-1);
   font-size: var(--fs-body);
   color: var(--ink);
 }
@@ -123,7 +137,7 @@
 .fnote {
   margin-top: var(--sp-3);
   padding-top: var(--sp-2);
-  border-top: 1rpx dashed var(--line);
+  border-top: var(--hairline-dashed);
   font-size: var(--fs-min);
   line-height: 1.75;
   color: var(--ink-3);

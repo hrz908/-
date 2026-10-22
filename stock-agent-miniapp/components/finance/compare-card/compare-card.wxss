@@ -15,15 +15,15 @@
 .cmp-row {
   display: flex;
   align-items: center;
-}
+  min-height: 96rpx;
 
-/* 行间分隔线：sep 由 WXML 行号计算（WXSS 禁兄弟选择器） */
+/* 行间分隔线：sep 由 WXML 行号计算（WXSS 禁兄弟选择器） */}
 .cmp-row--sep {
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .cmp-row--head {
-  border-bottom: 1rpx solid var(--line);
+  border-bottom: var(--hairline);
 }
 
 /* 指标列固定宽度，数值列均分且不收缩（横向滚动由外层 scroll-view 负责） */
@@ -35,6 +35,7 @@
   font-size: var(--fs-aux);
   color: var(--ink);
   text-align: right;
+  white-space: nowrap;
 }
 
 .cmp-cell--label {
@@ -43,16 +44,19 @@
   text-align: left;
   color: var(--ink-3);
   font-size: var(--fs-min);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .cmp-row--head .cmp-cell {
   color: var(--ink-3);
   font-size: var(--fs-min);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .cmp-row--head .cmp-cell--label {
   color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* 一句话结论：次级文字，仅陈述事实 */

@@ -22,9 +22,9 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--pad-card);
+  padding: var(--sp-3) var(--sp-4);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
 }
@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: var(--hairline);
 }
 
 .profile-info {
@@ -85,7 +85,7 @@
 
 .pref-card {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -95,8 +95,9 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--pad-card);
-}
+  padding: var(--sp-3) var(--sp-4);
+  min-height: 96rpx;
+  border-bottom: var(--hairline);}
 
 .pref-icon-wrap {
   flex: none;
@@ -107,7 +108,7 @@
   height: 72rpx;
   border-radius: var(--r-tag);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
 }
 
 /* 开关打开时图标托底跟进主行动色（浅色主题下为蓝） */
@@ -125,12 +126,14 @@
   font-size: var(--fs-body);
   font-weight: 500;
   color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .pref-desc {
   margin-top: var(--sp-1);
   font-size: var(--fs-aux);
   color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
 
 /* 原生 switch：平台仅支持改 color，其余用组件默认 */
@@ -147,6 +150,8 @@
   right: var(--sp-4);
 }
 
+/* 底部按钮：shadcn 主按钮范式——近黑底白字（--ink / --primary-fg）。
+    danger 变体覆盖为红描边淡红底（退出登录不是主流程动作） */
 .footer-btn {
   display: flex;
   align-items: center;
@@ -155,17 +160,22 @@
   border-radius: var(--r-card);
   font-size: var(--fs-body);
   font-weight: 600;
+  background: var(--ink);
+  color: var(--primary-fg);
 }
 
 /* 危险操作：红色描边 + 红字，不用实底（退出登录不是主流程动作） */
 .footer-btn--danger {
   color: var(--danger);
-  border: 1px solid var(--danger-border);
+  border: 1px solid var(--danger-border); /* 第8条例外：状态色描边，不适用中性 --hairline */
   background: var(--danger-tint);
 }
 
 .footer-btn--danger-hover {
-  background: var(--danger-strong);
+  /* 按压改「深红底 + 白字」：原先是红底+红字，按下后文字直接消失 */
+  color: var(--primary-fg);
+  border-color: var(--danger-strong);
+  background: var(--danger-tint);
 }
 
 .footer-hint {
@@ -204,7 +214,7 @@
   height: 160rpx;
   border-radius: 50%;
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
 }
 
 /* 空头像：与个人资料页的空头像同一套（次级面底 + user 图标） */
@@ -228,7 +238,7 @@
   font-size: var(--fs-body);
   color: var(--ink);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
@@ -256,6 +266,7 @@
   font-size: var(--fs-aux);
   color: var(--accent);
   border-radius: var(--r-tag);
+  display: flex; align-items: center; justify-content: center; min-height: 88rpx;
 }
 
 .nickname-link--hover {

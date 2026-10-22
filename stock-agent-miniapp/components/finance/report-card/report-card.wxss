@@ -17,28 +17,30 @@
   width: 128rpx;
   font-size: var(--fs-aux);
   color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .bar-track {
   flex: 1;
   height: 12rpx;
-  border-radius: 6rpx;
+  border-radius: var(--r-tag);
   background: var(--surface-2);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  border-radius: 6rpx;
+  border-radius: var(--r-tag);
 }
 
-/* 三条主数据配色（视觉稿规格；浅色主题下金色换成琥珀，白底上才看得清） */
+/* 三条主数据配色（视觉稿规格；原先写 linear-gradient 既违反 DESIGN.md 禁止清单，
+   两个端点变量又都未定义导致填充透明；收敛为纯色 + token 收口） */
 .bar-fill--revenue {
-  background: linear-gradient(90deg, var(--accent-deep), var(--accent-soft));
+  background: var(--accent-deep);
 }
 
 .bar-fill--profit {
-  background: linear-gradient(90deg, var(--warn), var(--warn-soft));
+  background: var(--warn);
 }
 
 .bar-fill--cash {

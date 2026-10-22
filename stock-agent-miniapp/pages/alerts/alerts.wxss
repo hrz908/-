@@ -27,7 +27,7 @@
   flex: 1;
   padding: var(--sp-3) var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
 }
 
@@ -61,8 +61,8 @@
   flex: 1;
   height: 0;
   min-height: 0;
-  margin-bottom: 84px;
-  margin-bottom: calc(84px + env(safe-area-inset-bottom));
+  margin-bottom: var(--sp-5);
+  margin-bottom: calc(84px + env(safe-area-inset-bottom)); /* 间距条例外：底部按钮让位值，与 JS 的 bottomGap 配套；calc+env 是安全区唯一合法非 rpx 写法 */
 }
 
 .alert-list {
@@ -75,8 +75,9 @@
 .alert-card {
   padding: var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
+  min-height: 96rpx;
 }
 
 .alert-card-head {
@@ -90,6 +91,7 @@
   font-size: var(--fs-body);
   font-weight: 600;
   color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .alert-card-code {
@@ -106,6 +108,7 @@
   gap: var(--sp-1);
   padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
   flex: none;
+  min-height: 88rpx;
 }
 
 .alert-card-edit-text {
@@ -132,12 +135,13 @@
   font-size: var(--fs-aux);
   color: var(--ink-2);
   line-height: 1.6;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
 
 .alert-card-divider {
   height: 0;
   margin: var(--sp-3) 0;
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .alert-card-foot {
@@ -160,9 +164,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  padding: 3rpx 12rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid var(--line);
+  padding: 4rpx 12rpx;
+  border-radius: var(--r-pill);
+  border: var(--hairline);
   background: var(--surface-2);
   font-size: var(--fs-min);
   white-space: nowrap;
@@ -199,6 +203,8 @@
   right: var(--sp-4);
 }
 
+/* 底部主按钮：shadcn 近黑底白字（原主行动蓝已按 DESIGN.md「强调色收口」
+   降级为链接/选中态专用，主按钮不再用蓝；重投影一并去除） */
 .add-btn {
   display: flex;
   align-items: center;
@@ -206,15 +212,15 @@
   gap: var(--sp-1);
   height: 96rpx;
   border-radius: var(--r-card);
-  background: var(--accent);
-  box-shadow: 0 8rpx 24rpx rgba(37, 89, 235, 0.24);
+  background: var(--ink);
+  box-shadow: var(--shadow-card);
 }
 
 .add-btn-text {
   font-size: var(--fs-body);
   font-weight: 600;
   /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
-  color: #FFFFFF;
+  color: var(--primary-fg); /* 深色底上的浅色文字 */
 }
 
 .add-btn--hover {
@@ -245,7 +251,7 @@
   font-size: var(--fs-body);
   color: var(--ink);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
@@ -268,8 +274,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56rpx;
-  height: 56rpx;
+  width: 88rpx;
+  height: 88rpx;
   border-radius: 50%;
 }
 
@@ -291,13 +297,14 @@
   margin-top: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
 .selected-stock-text {
   font-size: var(--fs-aux);
   color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* 带标题的选择器行（替代 t-cell + arrow） */
@@ -309,12 +316,12 @@
   min-height: 96rpx;
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
 .option-row--hover {
-  border-color: #3A4A5A;
+  border-color: var(--line);
 }
 
 /* 原生 picker 触发区：hover-class 加在 picker 根节点上，
@@ -325,7 +332,7 @@
 }
 
 .option-picker.option-row--hover .option-row {
-  border-color: #3A4A5A;
+  border-color: var(--line);
 }
 
 .option-label {
@@ -357,7 +364,7 @@
   top: 100%;
   margin-top: var(--sp-1);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
@@ -369,7 +376,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--sp-2) var(--sp-3);
-  border-bottom: 1rpx solid var(--line);
+  border-bottom: var(--hairline);
 }
 
 .search-item:last-child {

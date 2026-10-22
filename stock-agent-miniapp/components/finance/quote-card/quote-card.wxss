@@ -3,7 +3,7 @@
 /* 价格行：大号价格 + 涨跌幅，基线对齐 */
 .price-row {
   display: flex;
-  align-items: baseline;
+  align-items: baseline; /* 第1条例外：价格与百分比按文字基线排是有意选择 */
   gap: var(--sp-2);
   margin-top: var(--sp-3);
 }

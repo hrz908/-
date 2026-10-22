@@ -5,7 +5,7 @@
     "base-popup": "/components/base/popup/popup",
     "base-toast": "/components/base/toast/toast"
   },
-  "backgroundColor": "#F5F6F8",
-  "backgroundColorTop": "#F5F6F8",
-  "backgroundColorBottom": "#F5F6F8"
+  "backgroundColor": "#ffffff",
+  "backgroundColorTop": "#ffffff",
+  "backgroundColorBottom": "#ffffff"
 }

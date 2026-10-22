@@ -3,7 +3,7 @@
 /* 主数字行：大号净流入 + 占成交额比 */
 .flow-hd {
   display: flex;
-  align-items: baseline;
+  align-items: baseline; /* 第1条例外：标题与数值按文字基线排是有意选择（小数点对齐），非 line-height 撑居中 */
   justify-content: space-between;
   gap: var(--sp-2);
   margin-top: var(--sp-3);
@@ -24,7 +24,7 @@
 /* 四档列表：顶部分隔线，逐行展开 */
 .flow-list {
   margin-top: var(--sp-3);
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .flow-item {
@@ -32,8 +32,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-2) 0;
-  border-bottom: 1rpx solid var(--line);
+  min-height: 96rpx;
+  border-bottom: var(--hairline);
   font-size: var(--fs-aux);
 }
 
@@ -87,4 +87,5 @@
   flex: none;
   display: flex;
   gap: var(--sp-2);
+  width: 320rpx; text-align: right;
 }

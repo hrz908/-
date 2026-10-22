@@ -21,7 +21,7 @@
   flex: none;
   padding: var(--pad-card);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
 }
 
@@ -35,6 +35,7 @@
 .overview-title {
   font-size: var(--fs-aux);
   color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .overview-tags {
@@ -45,9 +46,9 @@
 /* 小标签：圆角 6px + 边框 + 浅底（设计稿 .tag 规格）。
    数据计数用辅助级字号（11px），弱辅助级（10px）在小字号下读不清 */
 .mini-tag {
-  padding: 3rpx 12rpx;
+  padding: 4rpx 12rpx;
   border-radius: var(--r-tag);
-  border: 1rpx solid var(--line);
+  border: var(--hairline);
   font-size: var(--fs-aux);
   background: var(--surface-2);
   color: var(--ink-2);
@@ -101,7 +102,8 @@
   gap: var(--sp-1);
   margin-top: var(--sp-3);
   padding-top: var(--sp-2);
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
+  min-height: 88rpx;
 }
 
 .overview-refresh-text {
@@ -144,13 +146,13 @@
   height: 0;
   min-height: 0;
   margin-top: var(--sp-3);
-  margin-bottom: 84px;
-  margin-bottom: calc(84px + env(safe-area-inset-bottom));
+  margin-bottom: 84px; /* 间距条例外：同上，无安全区时的让位值 */
+  margin-bottom: calc(84px + env(safe-area-inset-bottom)); /* 间距条例外：底部按钮让位值，与 JS 的 bottomGap 配套 */
 }
 
 .stock-list {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-card);
   overflow: hidden;
 }
@@ -186,7 +188,7 @@
 /* 行与行之间的分隔线：sep 由 JS 按行号算好（WXSS 禁用兄弟选择器）。
    最后一条的分隔线由 .stock-list 的 overflow:hidden + 圆角裁掉 */
 .stock-row-main--sep {
-  border-top: 1rpx solid var(--line);
+  border-top: var(--hairline);
 }
 
 .stock-info {
@@ -212,16 +214,19 @@
 .price-note {
   flex: none;
   text-align: right;
+  width: 200rpx;
 }
 
 .p1 {
   font-size: var(--fs-title);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .p2 {
   margin-top: var(--sp-1);
   font-size: var(--fs-aux);
+  white-space: nowrap;
 }
 
 .up {
@@ -249,7 +254,7 @@
 
 .stock-row-action-text {
   font-size: var(--fs-min);
-  color: #ffffff;
+  color: var(--primary-fg); /* 深色底上的浅色文字 */
 }
 
 /* ===== 底部「添加股票」 ===== */
@@ -259,6 +264,8 @@
   right: var(--sp-4);
 }
 
+/* 底部主按钮：shadcn 近黑底白字（原主行动蓝已按 DESIGN.md「强调色收口」
+   降级为链接/选中态专用，主按钮不再用蓝；重投影一并去除） */
 .add-btn {
   display: flex;
   align-items: center;
@@ -266,15 +273,15 @@
   gap: var(--sp-1);
   height: 96rpx;
   border-radius: var(--r-card);
-  background: var(--accent);
-  box-shadow: 0 8rpx 24rpx rgba(37, 89, 235, 0.24);
+  background: var(--ink);
+  box-shadow: var(--shadow-card);
 }
 
 .add-btn-text {
   font-size: var(--fs-body);
   font-weight: 600;
   /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
-  color: #FFFFFF;
+  color: var(--primary-fg); /* 深色底上的浅色文字 */
 }
 
 .add-btn--hover {
@@ -304,7 +311,7 @@
   font-size: var(--fs-body);
   color: var(--ink);
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
@@ -331,7 +338,7 @@
   top: 100%;
   margin-top: var(--sp-1);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
@@ -343,7 +350,8 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--sp-2) var(--sp-3);
-  border-bottom: 1rpx solid var(--line);
+  border-bottom: var(--hairline);
+  min-height: 88rpx;
 }
 
 .search-item:last-child {
@@ -353,19 +361,21 @@
 .search-item-name {
   font-size: var(--fs-body);
   color: var(--ink);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .search-item-code {
   font-size: var(--fs-aux);
   color: var(--ink-3);
   font-feature-settings: 'tnum';
+  flex: none; white-space: nowrap;
 }
 
 /* ===== 弹窗里的交易所提示：一行一个交易所 ===== */
 .add-note {
   margin-top: var(--sp-4);
   padding-top: var(--sp-3);
-  border-top: 1rpx dashed var(--line);
+  border-top: var(--hairline-dashed);
 }
 
 .note-title {

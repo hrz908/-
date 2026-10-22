@@ -1,0 +1,109 @@
+# DESIGN.md — 视觉规格（shadcn 风 / 股票工具类小程序）
+
+> 本项目唯一视觉真相源。配套执行文件：`styles/token.wxss`（变量与工具类）、
+> `.codebuddy/rules/ui-restyle.md`（执行军规）。
+> 争议以本文件为准；本文件未覆盖的，按 shadcn 默认审美判断并回填到这里。
+
+## 色板（亮色）
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `--bg` | #ffffff | 页面底色 |
+| `--surface` | #ffffff | 卡片背景 |
+| `--surface-2` | #f4f4f5 | 次级背景（输入框、标签底、进度槽）zinc-100 |
+| `--line` | #e4e4e7 | 发丝边框 / 分割线 zinc-200 |
+| `--ink` | #09090b | 主文字 + 主按钮底 zinc-950 |
+| `--ink-2` | #71717a | 次文字 zinc-500 |
+| `--ink-3` | #a1a1aa | 弱文字（字段说明 / 免责声明）zinc-400 |
+| `--primary-fg` | #fafafa | 主按钮文字 |
+| `--ring` | `--ink` | 焦点描边 |
+| `--up` | #dc2626 | 涨（red-600，A股红涨） |
+| `--down` | #16a34a | 跌（green-600） |
+| `--flat` | #71717a | 平，复用次文字色 |
+
+**强调色收口**：全站只允许一个强调色 `--accent: #2559EB`，且仅用于
+**链接 / 选中态 / 焦点**。主按钮一律近黑底（`--ink`）+ 白字（`--primary-fg`），
+不用蓝色做大按钮 —— 这是本次重构与旧「浅色专业金融」主题最大的行为差异。
+
+## 深色模式（根节点 `class="dark"`）
+
+bg/surface `#09090b`；`--ink` #fafafa；surface-2/line `#27272a`（zinc-800）；
+ink-2 `#a1a1aa`；ink-3 `#71717a`；primary-fg `#18181b`。
+**现状：尚未启用**。启用需给每个页面根节点注入 Theme class（列表：chat / watchlist /
+alerts / settings + 分包 kline），只切一半比不切更糟；留到阶段 4 统一做。
+
+## 字号
+
+沿用本项目既有七档（`--fs-price` 64 / `--fs-hero` 56 / `--fs-value` 44 /
+`--fs-brand` 40 / `--fs-title` 32 / `--fs-body` 28 / `--fs-aux` 22 / `--fs-min` 20）。
+
+shadcn 目标层级为 hero 40 / title 36 / body 30 / caption 24（rpx），普遍小于现行值，
+且 `--fs-body` 28rpx 是无障碍硬底线（不可下调）。
+**是否向 shadcn 层级收敛，待阶段 2 试点页确认后决定**；在此之前维持现行七档。
+
+行高：正文 1.6，标题 1.4。数字全部 `.num`（`font-variant-numeric: tabular-nums`）。
+
+## 间距刻度（rpx）
+
+只允许这五档：**8 / 16 / 24 / 32 / 48** → `--sp-1` … `--sp-5`。
+
+语义别名：`--pad-card`（卡片内边距）= `--sp-3`、`--pad-page`（页面左右留白）= `--sp-4`、
+`--gap-grid`（栅格间距）= `--sp-2`。
+遗留的 `--sp-6`(96rpx) 不在五档内，已从 `token.wxss` 移除。
+
+## 形状
+
+- 卡片 / 按钮 / 输入框圆角 **16rpx**（`--r-card`）；标签 / 药丸 **8rpx**（`--r-tag`）
+- 边框统一 `--hairline`（2rpx solid `--line`）
+- **卡片默认无阴影**（`--shadow-card: none`）；层次靠发丝边框 + 留白表达
+- 仅浮层（弹窗 / toast / 抽屉）允许 `--shadow-pop`
+
+## 组件范式
+
+- **行情列表项**：左名称 + 代码两行 / 右现价 + 涨跌幅两行；行高 **112rpx**；
+  底部发丝分割线；整列表一张卡，行不单独包卡
+- **指标标签**：`--surface-2` 底、22rpx 字、圆角 8、状态色仅作用于文字
+- **按钮**：主按钮近黑底白字；次按钮白底描边；高度 ≥88rpx
+- **空状态**：线性图标 96rpx 灰 + 两行说明，**禁止 emoji**
+- **导航**：88rpx 高 + `env(safe-area-inset-top)`；标题视口绝对居中
+- **tabbar**：本项目 `app.json` 未配置 tabBar（页面切换不走 tabbar），
+  原手册阶段 4 的 tabbar 改色条目对本项目**不适用**
+
+## 排版八条（结构与居中专章）
+
+1. 垂直居中唯一写法：flex + `align-items:center`。禁止用 line-height 撑高居中
+   （导航标题不居中基本都病源于此）。
+2. 水平居中唯一写法：flex + `justify-content:center`，纯文本用 `text-align:center`。
+   禁止 `margin:auto` 猜宽度。
+3. 导航栏标准：height 88rpx + `padding-top: env(safe-area-inset-top)`；
+   title 视口绝对居中（有返回按钮时 `position:absolute` + `left:50%` +
+   `translateX(-50%)`，禁止排布居中导致标题跳动）。
+4. 文字防溢出三件套：`overflow:hidden` + `text-overflow:ellipsis` +
+   `white-space:nowrap`；多行用 `-webkit-line-clamp`。名称 / 标题字段必须带三件套。
+5. 数字右对齐列：价格 / 涨跌幅 / 市值统一定宽 + `text-align:right` + 等宽数字；
+   名称列 `flex:1` + `min-width:0` 左对齐；数字必须竖向成线。
+6. 间距不重叠：相邻元素垂直间距取 max 不取 sum；容器统一 padding，
+   子项间用 gap 而非互相 margin。
+7. 点击热区 ≥ 88rpx × 88rpx，小图标用 padding 撑热区。
+8. 基线节奏：分割线 / 边框统一 `--hairline`；同列表行高统一
+   （行情 112rpx，普通 96rpx），禁止逐行自定。
+
+## 禁止清单
+
+- wxss 硬编码 hex / rgba / 非五档间距（必须 `var(--*)`）
+- 渐变背景、重阴影、圆角 > 16rpx、彩色分割线
+- emoji 当图标；同屏超过 2 种强调色（涨跌色按语义不计）
+- 给卡片单独加 `box-shadow`（除非该元素是浮层并显式引用 `--shadow-pop`）
+
+## 项目专属约束（原手册未覆盖，务必遵守）
+
+1. **canvas 双轨**：uCharts（kline 页、kline-card、sparkline）不吃 CSS 变量，
+   配色在各自 `.js` 里另写一份。改本文件色值时必须同步那批 JS 硬编码，
+   否则「页面换肤、图表没换」。
+2. **组件样式隔离**：`components/**` 默认隔离，`styles/token.wxss` 里的
+   **自定义属性能透传**、**工具类 class 不透传**。给组件内部节点用工具类，
+   需在组件自身 wxss 内复写，或组件 json 设 `styleIsolation`（属结构调整，须走军规第 7 条上报）。
+3. **WXSS 是 CSS 受限子集**：禁 `*` 通配符、禁 `:hover/:active`（按压走 `hover-class`）、
+   禁 `@media` / `rem` / `vh` / `vw`、单位统一 rpx（安全区与胶囊对齐处除外）。
+4. **涨跌语义类**：涨跌平一律用 `.price-up` / `.price-down` / `.price-flat`，
+   不要再按 `--up` / `--down` 逐处写 color。

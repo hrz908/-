@@ -13,11 +13,11 @@
   align-items: center;
   justify-content: center;
   min-width: 88rpx;
-  height: 56rpx;
+  min-height: 88rpx;
   padding: 0 var(--sp-2);
   box-sizing: border-box;
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline);
   border-radius: var(--r-tag);
 }
 
