@@ -7,5 +7,4 @@ import "github.com/gin-gonic/gin"
 func Register(g *gin.RouterGroup) {
 	g.GET("/stocks/search", SearchStock)
 	g.GET("/stock/quote", GetQuote)
-	g.GET("/stock/kline", GetKline)
 }

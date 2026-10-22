@@ -8,18 +8,21 @@ import { parseMarkdown } from '../../utils/markdown';
 
 // 侧边抽屉导航项（自绘列表）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去。
-// sep：行间分隔线类名由 JS 按行号算（WXSS 禁兄弟选择器）
+// 纯文字条目（无图标，视觉更收敛）；sep 由 JS 按行号算（WXSS 禁兄弟选择器）
 const MENUS = [
-  { key: 'watchlist', label: '自选股', icon: 'star' },
-  { key: 'alerts', label: '提醒', icon: 'notification' },
-  { key: 'settings', label: '我的', icon: 'user' }
+  { key: 'watchlist', label: '自选股' },
+  { key: 'alerts', label: '提醒' },
+  { key: 'settings', label: '我的' },
+  // K 线卡片画廊（静态测试页，不接后端）：从抽屉进可随时查看八张金融卡样式
+  { key: 'kline', label: 'K线测试' }
 ].map((m, i) => Object.assign({}, m, { sep: i > 0 }));
 
 // 抽屉导航项 → 子页面路由，key 与 MENUS 一一对应
 const ROUTES = {
   watchlist: '/pages/watchlist/watchlist',
   alerts: '/pages/alerts/alerts',
-  settings: '/pages/settings/settings'
+  settings: '/pages/settings/settings',
+  kline: '/pages/kline/index'
 };
 
 // 今日大盘指数：代码 -> 展示名。实时行情在 onLoad 与抽屉打开时从后端 /stock/quote 拉取。

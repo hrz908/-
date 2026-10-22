@@ -2,11 +2,8 @@ package quote
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
@@ -14,37 +11,6 @@ import (
 
 	"stock-agent-server/internal/stock"
 )
-
-// K 线接口（腾讯 fqkline）相关常量。
-// 与批量行情接口分开：行情走 qt.gtimg.cn，K 线走 web.ifzq.gtimg.cn
-const (
-	// tencentKlineURL 腾讯财经前复权 K 线接口。
-	// 形如 ?param=sh600519,day,,,10,qfq
-	tencentKlineURL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param="
-
-	// klineTimeout 单次 HTTP 超时。K 线是详情页数据，
-	// 第三方卡住时不能把接口一起拖死
-	klineTimeout = 5 * time.Second
-
-	// klineMaxBodyBytes K 线响应体读取上限。365 根日 K 的 JSON 远小于 4MB，
-	// 超出说明上游异常，直接报错而非撑爆内存
-	klineMaxBodyBytes = 4 << 20
-
-	// MaxKlineCount 单次最多返回的 K 线根数（约一年半的交易日）
-	MaxKlineCount = 365
-)
-
-// KlineRow 单根 K 线。数值一律字符串传递（decimal 序列化为字符串），
-// 与项目里「数值不走 float64」的约定一致
-type KlineRow struct {
-	Date          string          `json:"date"`
-	Open          decimal.Decimal `json:"open"`
-	High          decimal.Decimal `json:"high"`
-	Low           decimal.Decimal `json:"low"`
-	Close         decimal.Decimal `json:"close"`
-	Volume        int64           `json:"volume"` // 成交量（手）
-	ChangePercent decimal.Decimal `json:"change_percent"`
-}
 
 // QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出
 // 开高低、涨跌额、量额、换手率、总市值、状态与时间，供行情详情页使用
@@ -57,17 +23,13 @@ type QuoteDetail struct {
 	Open          decimal.Decimal `json:"open"`
 	High          decimal.Decimal `json:"high"`
 	Low           decimal.Decimal `json:"low"`
-	Volume        int64           `json:"volume"` // 成交量（手）
-	Amount        decimal.Decimal `json:"amount"` // 成交额（万元）
+	Volume        int64           `json:"volume"`   // 成交量（手）
+	Amount        decimal.Decimal `json:"amount"`   // 成交额（万元）
 	Turnover      decimal.Decimal `json:"turnover"` // 换手率（%）
 	TotalMv       decimal.Decimal `json:"total_mv"` // 总市值（元；上游亿元×1e8）
-	Status        string          `json:"status"` // trading / closed
-	Time          string          `json:"time"`   // 行情时间（腾讯返回的原始串）
+	Status        string          `json:"status"`   // trading / closed
+	Time          string          `json:"time"`     // 行情时间（腾讯返回的原始串）
 }
-
-// klineHTTP 独立 client：K 线超时（5s）与批量行情（3s）不同，
-// 复用连接但各配各的超时
-var klineHTTP = &http.Client{Timeout: klineTimeout}
 
 // FetchDetail 拉单只股票的完整行情。
 // 配置了自建行情源时降级复用 FetchOne（自建接口只约定了 4 个字段），
@@ -101,143 +63,6 @@ func FetchDetail(ctx context.Context, code string) (*QuoteDetail, error) {
 		return nil, fmt.Errorf("no quote detail for %s", code)
 	}
 	return details[0], nil
-}
-
-// FetchKline 拉取前复权 K 线。period 取 day / week / month，count 上限 MaxKlineCount
-func FetchKline(ctx context.Context, code, period string, count int) ([]KlineRow, error) {
-	normalized, ok := stock.NormalizeCode(code)
-	if !ok {
-		return nil, fmt.Errorf("invalid stock code %q", code)
-	}
-	if count <= 0 {
-		count = 10
-	}
-	if count > MaxKlineCount {
-		count = MaxKlineCount
-	}
-
-	symbol := strings.ToLower(normalized)
-	url := fmt.Sprintf("%s%s,%s,,,%d,qfq", tencentKlineURL, symbol, period, count)
-
-	body, err := requestKline(ctx, url)
-	if err != nil {
-		return nil, err
-	}
-	return parseKlineBody(body, symbol, period)
-}
-
-func requestKline(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (stock-agent-miniapp)")
-
-	resp, err := klineHTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("kline api http %d", resp.StatusCode)
-	}
-	// fqkline 返回 UTF-8 JSON，无需 GBK 转码
-	return io.ReadAll(io.LimitReader(resp.Body, klineMaxBodyBytes))
-}
-
-// parseKlineBody 解析 fqkline 响应：
-//
-//	{"code":0,"data":{"sh600519":{"day":[["2026-10-17","1700.00","1705.30","1710.00","1690.00","23456.00"],...]}}}
-//
-// 每行是 [日期, 开, 收, 高, 低, 量(手)]，个别品种行尾还会挂一个附加对象，忽略即可。
-// 前复权数据的 key 可能带 qfq 后缀（如 "qfqday"），两种都试
-func parseKlineBody(body []byte, symbol, period string) ([]KlineRow, error) {
-	var envelope struct {
-		Code json.Number              `json:"code"`
-		Data map[string]map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, fmt.Errorf("decode kline body failed: %w", err)
-	}
-	if envelope.Code.String() != "0" {
-		return nil, fmt.Errorf("kline api code %s", envelope.Code.String())
-	}
-
-	node := envelope.Data[symbol]
-	if node == nil {
-		return nil, fmt.Errorf("no kline data for %s", symbol)
-	}
-	rawRows, ok := pickKlineRows(node[period], node["qfq"+period])
-	if !ok {
-		return nil, fmt.Errorf("no %s kline rows for %s", period, symbol)
-	}
-
-	rows := make([]KlineRow, 0, len(rawRows))
-	prevClose := decimal.Zero
-	for _, r := range rawRows {
-		if len(r) < 5 {
-			continue // 不足「日期+开收高低」的行直接丢弃
-		}
-		row := KlineRow{Date: r[0]}
-		row.Open = parseDecimal(r[1])
-		row.Close = parseDecimal(r[2])
-		row.High = parseDecimal(r[3])
-		row.Low = parseDecimal(r[4])
-		if len(r) > 5 {
-			row.Volume = int64(parseDecimal(r[5]).IntPart())
-		}
-		// 涨跌幅按前收盘价计算；首行没有前收，退化为按开盘价
-		base := prevClose
-		if base.IsZero() {
-			base = row.Open
-		}
-		if !base.IsZero() {
-			row.ChangePercent = row.Close.Sub(base).
-				Div(base).Mul(decimal.NewFromInt(100)).Round(2)
-		}
-		prevClose = row.Close
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-// pickKlineRows 从候选值里挑出第一个能解析成 [][]string 的。
-// 腾讯偶发把行数据挂在带 qfq 前缀的 key 下，两种 key 都兜住
-func pickKlineRows(candidates ...any) ([][]string, bool) {
-	for _, cand := range candidates {
-		if cand == nil {
-			continue
-		}
-		b, err := json.Marshal(cand)
-		if err != nil {
-			continue
-		}
-		var rows [][]json.RawMessage
-		if err := json.Unmarshal(b, &rows); err != nil {
-			continue
-		}
-		out := make([][]string, 0, len(rows))
-		for _, r := range rows {
-			cells := make([]string, 0, len(r))
-			for _, cell := range r {
-				var s string
-				// 单元格可能是字符串也可能是数字，统一转成字符串再走 decimal
-				if err := json.Unmarshal(cell, &s); err != nil {
-					var n json.Number
-					if err := json.Unmarshal(cell, &n); err != nil {
-						s = ""
-					} else {
-						s = n.String()
-					}
-				}
-				cells = append(cells, s)
-			}
-			out = append(out, cells)
-		}
-		return out, true
-	}
-	return nil, false
 }
 
 func parseDecimal(s string) decimal.Decimal {

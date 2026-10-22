@@ -17,11 +17,3 @@ export function search(keyword, limit = 5) {
 export function quote(code) {
   return get(`${API}/stock/quote`, { code });
 }
-
-// 前复权 K 线（K 线详情页用）：{ code, period, rows: [KlineRow] }。
-// period 只支持 day / week / month（后端白名单，分时与分钟线不在契约里）；
-// count 默认 60（一屏 40 根 + 预取缓冲），上限 365。
-// rows 按日期升序（旧 -> 新），后端走 Redis 缓存
-export function kline(code, period = 'day', count = 60) {
-  return get(`${API}/stock/kline`, { code, period, count });
-}

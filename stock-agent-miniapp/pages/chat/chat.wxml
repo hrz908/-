@@ -351,7 +351,6 @@
             data-menu="{{m.key}}"
             bindtap="onMenuSelect"
           >
-            <base-icon name="{{m.icon}}" size="40rpx" color="var(--ink-2)" />
             <text class="drawer-item-text">{{m.label}}</text>
             <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
           </view>
