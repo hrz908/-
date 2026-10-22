@@ -1,5 +1,18 @@
 @import "../_card.wxss";
 
+/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+   避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
+.fcard-title-col,
+.fcard-name,
+.fcard-code {
+  text-align: left;
+}
+
+/* 底部口径说明（分位区间 / 行业均值 / 数据日期）左对齐 */
+.fnote {
+  text-align: left;
+}
+
 /* PE 分位进度条：标签 + 槽 + 值，槽底用次级面 */
 .pct-row {
   display: flex;
@@ -13,7 +26,7 @@
   width: 96rpx;
   font-size: var(--fs-aux);
   color: var(--ink-2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  word-break: break-word;        /* 不裁剪：窄标签内超长文案换行显示 */
 }
 
 .pct-track {
@@ -48,4 +61,37 @@
   text-align: right;
   font-size: var(--fs-aux);
   color: var(--ink-2);
+}
+
+/* ===== 卡内信息：等距 + 居中（本卡覆盖，共享 _card.wxss 不动） =====
+   等距：两块指标栅格与分位条统一 24rpx 顶距（原为 28 / 20rpx 混用，视觉不齐）；
+        每行四格由共享样式的 flex:1 + gap 均分，天然等距。
+   居中：两行指标、分位条文字、底部口径说明全部居中。 */
+.fgrid {
+  margin-top: var(--sp-3);
+}
+
+.fgrid-row--gap {
+  margin-top: var(--sp-3);       /* 与 .fgrid 取同值，保证两块栅格间距一致 */
+}
+
+.pct-row {
+  margin-top: var(--sp-3);       /* 显式写出，三块顶距统一为 24rpx */
+}
+
+.fcell-k,
+.fcell-v {
+  text-align: center;            /* PE/PB/股息率/PEG 与 PE静/PS/总市值/近5年分位 居中 */
+}
+
+.pct-label {
+  text-align: center;            /* 「PE分位」标签居中 */
+}
+
+.pct-value {
+  text-align: center;            /* 分位数值：原右对齐改为居中 */
+}
+
+.fnote {
+  text-align: center;            /* 底部口径说明居中 */
 }

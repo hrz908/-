@@ -1,5 +1,18 @@
 @import "../_card.wxss";
 
+/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+   避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
+.fcard-title-col,
+.fcard-name,
+.fcard-code {
+  text-align: left;
+}
+
+/* 底部口径说明（融资融券余额 / 数据日期）左对齐 */
+.fnote {
+  text-align: left;
+}
+
 /* 主数字行：大号净流入 + 占成交额比 */
 .flow-hd {
   display: flex;
@@ -78,9 +91,7 @@
   flex: 1;
   min-width: 0;
   color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;        /* 不裁剪：长席位名（如「中信证券上海分公司」）完整换行显示 */
 }
 
 .lhb-vals {
@@ -88,4 +99,90 @@
   display: flex;
   gap: var(--sp-2);
   width: 320rpx; text-align: right;
+}
+
+/* 资金流向数据改成「左右对齐」：名称 / 主数字靠左，数值 / 占比靠右。
+   撤销此前的等宽居中（flex:1 + center）——容器 .flow-hd / .flow-item 本就是
+   space-between，这里只需让子项恢复自适应宽度并按左右对齐。 */
+.flow-big {
+  flex: none;
+  text-align: left;              /* 主力净流入靠左 */
+}
+
+.flow-pct {
+  flex: none;
+  text-align: right;             /* 占成交额比靠右 */
+}
+
+.flow-k {
+  flex: none;
+  text-align: left;              /* 超大单 / 大单 / 中单 / 小单 / 北向持股 靠左 */
+}
+
+.flow-v {
+  flex: none;
+  text-align: right;             /* 对应金额靠右 */
+}
+
+.lhb-title {
+  text-align: center;
+}
+
+/* 龙虎榜行（表格格式）：席位占 1/2，买 / 卖 合计占另外 1/2（各 1/4），各列文字居中。
+   .lhb-vals 与 .lhb-seat 同为 flex:1 → 各半；内部买、卖再各 flex:1 → 各占 1/4。 */
+.lhb-seat {
+  flex: 1;                       /* 席位：整行 1/2 */
+  text-align: left;              /* 席位名左对齐（表头「席位」同步左对齐） */
+}
+
+.lhb-vals {
+  flex: 1;                       /* 买卖合计：整行 1/2（取消原固定 320rpx） */
+  width: auto;
+  gap: var(--gap-grid);
+  text-align: center;
+}
+
+.lhb-vals text {
+  flex: 1;                       /* +买入、-卖出 各占整行 1/4 */
+  text-align: right;             /* 金融表格习惯：数值列右对齐，数位竖向对齐 */
+}
+
+/* 纵向等距：各块顶部间距统一为一档 */
+.flow-hd,
+.flow-list,
+.flow-spark,
+.lhb {
+  margin-top: var(--sp-3);
+}
+
+/* ===== 龙虎榜表格化 ===== */
+/* 表头：复用列宽类，与数据行自动对齐；弱文字 + 发丝底线 */
+.lhb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);              /* 与 .lhb-row 的 gap 一致，保证列对齐 */
+  margin-top: var(--sp-2);       /* 与「龙虎榜」标题的间距 */
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--hairline);
+  font-size: var(--fs-min);
+  color: var(--ink-3);
+}
+
+/* 表头对齐与数据行一致（左右对齐）：
+   「席位」跟随 .lhb-seat 的左对齐；「买入 / 卖出」跟随 .lhb-vals text 的右对齐。
+   这里不再覆盖 text-align。 */
+.lhb-head .lhb-seat {
+  color: var(--ink-3);           /* 覆盖 .lhb-seat 的 --ink-2，表头用弱文字 */
+  font-weight: 400;
+}
+
+/* 数据行：行间发丝分隔线，最后一行不画底线 */
+.lhb-row {
+  margin-top: 0;
+  padding: var(--sp-2) 0;        /* 行距改由 padding 给，分隔线之间等距 */
+  border-bottom: var(--hairline);
+}
+
+.lhb-row:last-child {
+  border-bottom: none;
 }

@@ -1,5 +1,18 @@
 @import "../_card.wxss";
 
+/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+   避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
+.fcard-title-col,
+.fcard-name,
+.fcard-code {
+  text-align: left;
+}
+
+/* 底部口径说明（对比口径 / 数据日期）左对齐 */
+.fnote {
+  text-align: left;
+}
+
 /* 表格：横向滚动容器，内部表格按列数撑开 */
 .cmp-scroll {
   margin-top: var(--sp-3);
@@ -44,7 +57,7 @@
   text-align: left;
   color: var(--ink-3);
   font-size: var(--fs-min);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  word-break: break-word;        /* 不裁剪：指标名换行完整显示 */
 }
 
 .cmp-row--head .cmp-cell {
@@ -56,7 +69,7 @@
 
 .cmp-row--head .cmp-cell--label {
   color: var(--ink-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  word-break: break-word;        /* 不裁剪：表头指标名换行完整显示 */
 }
 
 /* 一句话结论：次级文字，仅陈述事实 */
@@ -65,4 +78,17 @@
   font-size: var(--fs-aux);
   line-height: 1.7;
   color: var(--ink-2);
+}
+
+/* 表格与结论居中（数值列原右对齐、指标列原左对齐，统一居中） */
+.cmp-cell {
+  text-align: center;
+}
+
+.cmp-cell--label {
+  text-align: center;
+}
+
+.cmp-conclusion {
+  text-align: center;
 }

@@ -23,11 +23,24 @@
       </view>
     </view>
 
-    <!-- 筛选 chips（替代 t-tabs） -->
-    <base-tabs class="filter-tabs" items="{{filters}}" value="{{filter}}" bind:change="onTabsChange" />
+    <!-- 筛选：占满整行的段式单选（radio）；选中黑底白字 + 滑块滑动动画 -->
+    <view class="filter-radio">
+      <view
+        class="filter-radio__thumb"
+        style="width: calc((100% - 8rpx) / {{filters.length}}); transform: translateX({{filterIndex * 100}}%);"
+      ></view>
+      <view
+        class="filter-radio__item {{item.key === filter ? 'filter-radio__item--on' : ''}}"
+        wx:for="{{filters}}"
+        wx:for-item="item"
+        wx:key="key"
+        data-key="{{item.key}}"
+        bindtap="onFilterTap"
+      >{{item.label}}</view>
+    </view>
 
     <!-- 自选列表：只有这一个容器内部滚动，底边停在「添加股票」按钮上方 -->
-    <scroll-view class="stock-scroll" scroll-y="{{scrollable}}">
+    <scroll-view class="stock-scroll" scroll-y="{{scrollable}}" enhanced="{{true}}" show-scrollbar="{{false}}">
       <view class="stock-inner">
         <view class="stock-list" wx:if="{{filtered.length > 0}}">
           <view

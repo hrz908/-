@@ -46,6 +46,8 @@
         period-pct="{{msg.klinePct}}"
         amplitude="{{msg.klineAmplitude}}"
         volume-ratio="{{msg.klineVolumeRatio}}"
+        support="{{msg.klineSupport}}"
+        resistance="{{msg.klineResistance}}"
         note="{{msg.klineNote}}"
       />
 
@@ -57,7 +59,13 @@
         pe-static="{{msg.valuation.peStatic}}"
         pb="{{msg.valuation.pb}}"
         ps="{{msg.valuation.ps}}"
+        peg="{{msg.valuation.peg}}"
         dividend-yield="{{msg.valuation.dividendYield}}"
+        percentile-3y="{{msg.valuation.percentile3y}}"
+        percentile-5y="{{msg.valuation.percentile5y}}"
+        industry-avg-pe="{{msg.valuation.industryAvgPe}}"
+        industry-avg-pb="{{msg.valuation.industryAvgPb}}"
+        industry-avg-yield="{{msg.valuation.industryAvgYield}}"
         total-cap="{{msg.valuation.totalCap}}"
         note="{{msg.valuation.note}}"
       />
@@ -67,7 +75,14 @@
         wx:elif="{{msg.card === 'fundflow'}}"
         card-class="msg-card"
         main-net="{{msg.fundflow.mainNet}}"
+        main-net-pct="{{msg.fundflow.mainNetPct}}"
         tiers="{{msg.fundflow.tiers}}"
+        north-pct="{{msg.fundflow.northPct}}"
+        north-change-pct="{{msg.fundflow.northChangePct}}"
+        streak-days="{{msg.fundflow.streakDays}}"
+        days5="{{msg.fundflow.days5}}"
+        lhb="{{msg.fundflow.lhb}}"
+        margin-balance="{{msg.fundflow.marginBalance}}"
         note="{{msg.fundflow.note}}"
       />
 

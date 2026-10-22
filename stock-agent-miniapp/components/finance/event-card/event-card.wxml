@@ -6,7 +6,7 @@
       <view class="fcard-name">公司动态</view>
       <view class="fcard-code num">{{range}}</view>
     </view>
-    <view wx:if="{{hasImportant}}" class="ftag ftag--gold">需关注</view>
+
   </view>
 
   <view class="evt" wx:for="{{rows}}" wx:for-item="e" wx:key="title">

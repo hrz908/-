@@ -55,8 +55,23 @@ function maSegments(arr, count, xOf, yOf) {
   return segs;
 }
 
-function buildChart(klines, ma) {
-  const n = (klines || []).length;
+// 图区最多画多少根 K 线：小图上数据太密会糊成一片，统一只画最近 MAX_BARS 根，
+// MA 同步按同一区间截取，保证均线长度与蜡烛数对齐（否则均线会画到区间外）
+const MAX_BARS = 15;
+
+function buildChart(klinesRaw, maRaw) {
+  const all = klinesRaw || [];
+  // 只保留最后 MAX_BARS 根
+  const start = Math.max(0, all.length - MAX_BARS);
+  const klines = all.slice(start);
+  const ma = {};
+  if (maRaw) {
+    Object.keys(maRaw).forEach((key) => {
+      ma[key] = (maRaw[key] || []).slice(start);
+    });
+  }
+
+  const n = klines.length;
   if (n < 2) return '';
 
   const highs = klines.map((k) => num(k.h)).filter((v) => v !== null);

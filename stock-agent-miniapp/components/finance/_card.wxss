@@ -35,24 +35,20 @@
   font-feature-settings: "tnum" 1;
 }
 
-/* 主标题：长股票名必须截断，否则换行会把卡头撑高、挤压右侧标签 */
+/* 主标题：不裁剪不截断（需求：卡片信息不要 overflow）——超长名称换行完整显示 */
 .fcard-name {
   font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.2;
   color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .fcard-code {
   margin-top: var(--sp-1);
   font-size: var(--fs-aux);
   color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 /* 头部右侧标签组（异动 / 需关注等），可放多个 */
@@ -161,4 +157,35 @@
 
 .flat {
   color: var(--flat);
+}
+
+/* ---- 卡内信息统一「等距居中」（8 张卡共用） ----
+   居中：栅格标签 / 数值、底部口径说明一律居中。
+   等距：横向由 .fcell 的 flex:1 + .fgrid-row 的 gap 均分；
+        纵向沿用各块既有 margin 与 .fnote 的 line-height。 */
+.fcell-k,
+.fcell-v {
+  text-align: center;
+}
+
+/* 底部口径说明（行情时间 / 数据日期 / 分位口径 / 来源等）左对齐 */
+.fnote {
+  text-align: left;
+}
+
+/* ---- 卡片标题对齐（8 张卡共用）----
+   标题与副标题统一左对齐（默认呈现）；右上角 tag 已移除，头部只剩标题列，
+   故 .fcard-hd 的 justify-content 回到 flex-start；
+   两者间距沿用 .fcard-code 的 --sp-1，保持等距。 */
+.fcard-hd {
+  justify-content: flex-start;
+}
+
+.fcard-title-col {
+  text-align: left;
+}
+
+.fcard-name,
+.fcard-code {
+  text-align: left;
 }

@@ -6,10 +6,7 @@
       <view class="fcard-name">{{org}} · 最新研报</view>
       <view class="fcard-code num">{{publishDate}} · {{reportType}}</view>
     </view>
-    <view class="rating {{ratingTone}}">
-      <text class="rating-r">{{rating}}</text>
-      <text wx:if="{{targetPriceText !== '--'}}" class="rating-t num">目标价 {{targetPriceText}}</text>
-    </view>
+
   </view>
 
   <!-- 核心观点：左竖线引用式排版 -->

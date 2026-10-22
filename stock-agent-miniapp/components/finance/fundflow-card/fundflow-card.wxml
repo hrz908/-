@@ -6,7 +6,7 @@
       <view class="fcard-name">资金流向</view>
       <view class="fcard-code">今日 · 主力净流入</view>
     </view>
-    <view wx:if="{{streakText}}" class="ftag">{{streakText}}</view>
+
   </view>
 
   <view class="flow-hd">
@@ -32,11 +32,19 @@
   <!-- 龙虎榜（有数据才出） -->
   <view wx:if="{{lhbRows.length > 0}}" class="lhb">
     <view class="lhb-title">龙虎榜</view>
+    <!-- 表头：复用 .lhb-seat / .lhb-vals 两个列宽类，与数据行列宽自动对齐 -->
+    <view class="lhb-head">
+      <text class="lhb-seat">席位</text>
+      <view class="lhb-vals">
+        <text>买入</text>
+        <text>卖出</text>
+      </view>
+    </view>
     <view class="lhb-row" wx:for="{{lhbRows}}" wx:for-item="r" wx:key="seat">
       <text class="lhb-seat">{{r.seat}}</text>
       <view class="lhb-vals">
-        <text class="num up">买 {{r.buy}}</text>
-        <text class="num down">卖 {{r.sell}}</text>
+        <text class="num up">+{{r.buy}}</text>
+        <text class="num down">-{{r.sell}}</text>
       </view>
     </view>
   </view>

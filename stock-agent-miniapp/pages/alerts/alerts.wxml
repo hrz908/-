@@ -17,7 +17,7 @@
     <view class="group-title">价格与涨幅提醒</view>
 
     <!-- 提醒列表：只有这一个容器内部滚动，底边停在「新增提醒」按钮上方 -->
-    <scroll-view class="list-scroll" scroll-y>
+    <scroll-view class="list-scroll" scroll-y enhanced="{{true}}" show-scrollbar="{{false}}">
       <view wx:if="{{alerts.length > 0}}" class="alert-list">
         <!-- 每条提醒一张卡片：头部（股票）→ 大号阈值 → 条件描述 → 分割线 → 底部（时间 + 状态标签） -->
         <view class="alert-card" wx:for="{{alerts}}" wx:for-item="item" wx:key="id">

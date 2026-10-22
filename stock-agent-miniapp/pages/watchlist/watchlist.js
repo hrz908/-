@@ -71,6 +71,7 @@ Page({
   data: {
     bottomGap: 20,
     filter: 'all',
+    filterIndex: 0,
     filters: FILTERS,
     stocks: [],
     filtered: [],
@@ -140,8 +141,17 @@ Page({
     }
   },
 
-  /* ================= 筛选（TDesign tabs 受控模式） ================= */
-  // tabs 的 change 事件：detail = { value, label }
+  /* ================= 筛选（段式单选 radio） ================= */
+  // 段式单选点击：data-key 即选项 key，效果与原 tabs change 完全一致
+  onFilterTap(e) {
+    const key = e.currentTarget.dataset.key;
+    if (!key || key === this.data.filter) return;
+    // 滑块位置：按 key 在 filters 中的下标，驱动 thumb 滑动
+    const idx = this.data.filters.findIndex((f) => f.key === key);
+    this.setData({ filter: key, filterIndex: idx, filtered: this.filterList(key) }, () => this.updateScrollable());
+  },
+
+  // tabs 的 change 事件（旧实现保留，供兼容）
   onTabsChange(e) {
     const key = e.detail && e.detail.value;
     if (!key || key === this.data.filter) return;

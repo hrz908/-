@@ -1,5 +1,18 @@
 @import "../_card.wxss";
 
+/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+   避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
+.fcard-title-col,
+.fcard-name,
+.fcard-code {
+  text-align: left;
+}
+
+/* 底部口径说明（支撑压力 / 行情口径等）左对齐 */
+.fnote {
+  text-align: left;
+}
+
 /* 周期 chips：横向不换行，激活项用主行动蓝描边（单一强调色） */
 .chips {
   display: flex;
@@ -49,4 +62,17 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: 100% 100%;
+}
+
+/* ===== 区间指标行 + 底部两行：等距居中（本卡覆盖，共享 _card.wxss 不动） =====
+   等距：四个指标格由共享样式的 flex:1 + gap 均分；底部两行各自等高的行盒，
+   间距由 .fnote 的 line-height 统一给，天然等距。
+   居中：指标标签/数值在各自列里居中；支撑压力与口径说明整行居中。 */
+.fcell-k,
+.fcell-v {
+  text-align: center;            /* 区间涨幅 / 振幅 / MA5 / 量比 居中 */
+}
+
+.fnote {
+  text-align: center;            /* 支撑·压力 与 口径说明 两行居中 */
 }

@@ -6,7 +6,7 @@
       <view class="fcard-name">估值与股息</view>
       <view class="fcard-code">PE(TTM) / PE(静) / PB / PS / PEG / 股息率</view>
     </view>
-    <view wx:if="{{percentile3y != null}}" class="ftag">PE 处于近3年 {{pct3yText}} 分位</view>
+
   </view>
 
   <view class="fgrid fgrid--flat">

@@ -6,7 +6,7 @@
       <view class="fcard-name">{{title}}</view>
       <view class="fcard-code">{{subtitle}}</view>
     </view>
-    <view wx:if="{{tag}}" class="ftag">{{tag}}</view>
+
   </view>
 
   <!-- 表格：横向滚动（固定列宽 + flex-shrink: 0，执行指南 4.4） -->

@@ -6,7 +6,7 @@
       <view class="fcard-name">{{periodLabel}} · 业绩速览</view>
       <view class="fcard-code num">报告期 {{period}}</view>
     </view>
-    <view wx:if="{{beat}}" class="ftag ftag--gold">{{beat}}</view>
+
   </view>
 
   <!-- 营业收入 -->

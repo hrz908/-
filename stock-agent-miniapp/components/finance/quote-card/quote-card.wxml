@@ -6,14 +6,7 @@
       <view class="fcard-name">{{name}}</view>
       <view class="fcard-code num">{{code}}{{status ? ' · ' + status : ''}}</view>
     </view>
-    <view class="fcard-tags">
-      <view
-        class="ftag {{t.theme ? 'ftag--' + t.theme : ''}}"
-        wx:for="{{tags}}"
-        wx:for-item="t"
-        wx:key="index"
-      >{{t.text}}</view>
-    </view>
+
   </view>
 
   <!-- 参考图：主价格保持主文字色（--ink），只有涨跌额/涨跌幅跟随涨跌着色 -->
