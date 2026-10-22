@@ -62,7 +62,16 @@
 ## 七、后续建议（按优先级）
 
 1. **真机验收**：navbar 标题居中、88rpx 热区、长股票名截断 —— 模拟器无法覆盖真机差异
-2. 授权处理 BLOCKED 第 3 项（sparkline 外部类，一行 wxml，收益明确）
+2. BLOCKED 剩余项：`navbar.wxml` 内联 `max-width` 彻底版（CSS 版已生效并通过验收）、
+   `settings` 原生 switch 热区（需包可点容器）、`alerts` 输入框单位居中（P2）
 3. 字号层级是否向 shadcn 规格收敛（`DESIGN.md`「字号」节标注为待定）
-4. `miniprogram_npm` / `node_modules` 里的 TDesign 残留包仍在（虽无页面引用），
-   可考虑从 `package.json` 移除以缩小主包
+4. 深色模式启用方式（`token.wxss` 变量已备，需产品决策挂 `theme` class 的方式）
+
+## 八、已完成的收尾（2026-10-22 验收后）
+
+- `sparkline` 外部类修复：quote-card / fundflow-card 改传 `spark-class=`（BLOCKED #7）
+- TDesign 残留清理：`package.json` 早已无该依赖、全项目零引用（仅注释提及），
+  `node_modules/.tdesign-miniprogram-*` npm 缓存已删除；
+  `miniprogram_npm/` 实际只含 `@qiun/ucharts` 与 `marked`，主包未被污染，
+  「残留包缩小主包」的担心不成立
+- 已合并 `main`（merge commit `7c6f9ea`），`style/shadcn` 分支保留作历史记录
