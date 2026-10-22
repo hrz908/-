@@ -23,7 +23,7 @@
   </view>
 
   <!-- 迷你走势线：分时点位不足两个点时没有可画的线，整块不渲染 -->
-  <sparkline wx:if="{{points.length >= 2}}" class="spark" points="{{points}}" trend="{{dir}}" />
+  <sparkline wx:if="{{points.length >= 2}}" spark-class="spark" points="{{points}}" trend="{{dir}}" />
 
   <view class="fgrid">
     <view class="fgrid-row">

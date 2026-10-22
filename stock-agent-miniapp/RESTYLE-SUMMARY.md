@@ -48,8 +48,8 @@
 见 `RESTYLE-BLOCKED.md`。其中影响最大的四项：
 
 1. `utils/color.js` 等 6 处 JS/配置 —— **已获授权并完成**（阶段 0）
-2. `navbar.wxml` 内联 `max-width` 彻底版 —— CSS 版已修，待真机确认
-3. `sparkline` 外部类（`spark-class` 未传）—— 迷你走势线尺寸失控，改一行 wxml 即可
+2. `sparkline` 外部类（`spark-class` 未传）—— **已修复**（验收后授权）：quote-card / fundflow-card 两处 wxml 改传 `spark-class=`
+3. `navbar.wxml` 内联 `max-width` 彻底版 —— CSS 版已修，待真机确认
 4. `settings` 原生 switch 热区 56rpx < 88rpx —— 需包可点容器
 
 ## 六、深色模式说明

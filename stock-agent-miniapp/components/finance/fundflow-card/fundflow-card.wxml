@@ -27,7 +27,7 @@
   </view>
 
   <!-- 近 5 日流向趋势 -->
-  <sparkline wx:if="{{days5.length >= 2}}" class="flow-spark" points="{{days5}}" trend="{{days5Dir}}" />
+  <sparkline wx:if="{{days5.length >= 2}}" spark-class="flow-spark" points="{{days5}}" trend="{{days5Dir}}" />
 
   <!-- 龙虎榜（有数据才出） -->
   <view wx:if="{{lhbRows.length > 0}}" class="lhb">

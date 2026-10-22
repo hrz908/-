@@ -28,7 +28,7 @@
 
 | # | 位置 | 期望效果 | 所需改动 | 阻塞原因 |
 |---|---|---|---|---|
-| 7 | `sparkline.js:70` + `quote-card.wxml:26` / `fundflow-card.wxml:30` | 外部类生效，让 `.spark`(88rpx) 与 `.flow-spark`(64rpx+24rpx 上间距) 真正控制住迷你走势线尺寸 | wxml 改传 `spark-class="spark"` / `spark-class="flow-spark"`（组件只声明了 `externalClasses: ['spark-class']`，写 `class=` 不生效） | 改 `.wxml` 属性，不在白名单 |
+| 7 | ~~`sparkline.js:70` + `quote-card.wxml:26` / `fundflow-card.wxml:30`~~ | 外部类生效，让 `.spark`(88rpx) 与 `.flow-spark`(64rpx+24rpx 上间距) 真正控制住迷你走势线尺寸 | ~~wxml 改传 `spark-class="spark"` / `spark-class="flow-spark"`~~ | **2026-10-22 已修复**（用户验收后授权）：两处 wxml 已改为 `spark-class=` 传参 |
 | 8 | `navbar.wxml:19` 内联 `max-width` + `navbar.js` 的 `titleMaxWidth` / `statusBarHeight` | 标题视口居中（当前被钉在左边界，见 LAYOUT-ISSUES P0 根因①） | 纯 CSS 版：`.nav-title` 改 `left:50%`+`translateX(-50%)`（白名单内，1B 可做）；彻底版需移除内联 `max-width` | 彻底版要改 wxml+js |
 
 **建议**：第 8 项 1B 先只做 CSS 版（不改结构即可覆盖 5 个页面），效果确认后再决定是否动 wxml。
