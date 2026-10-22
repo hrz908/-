@@ -25,23 +25,27 @@
 **链接 / 选中态 / 焦点**。主按钮一律近黑底（`--ink`）+ 白字（`--primary-fg`），
 不用蓝色做大按钮 —— 这是本次重构与旧「浅色专业金融」主题最大的行为差异。
 
-## 深色模式（根节点 `class="dark"`）
+## 深色模式：不启用
 
-bg/surface `#09090b`；`--ink` #fafafa；surface-2/line `#27272a`（zinc-800）；
-ink-2 `#a1a1aa`；ink-3 `#71717a`；primary-fg `#18181b`。
-**现状：尚未启用**。启用需给每个页面根节点注入 Theme class（列表：chat / watchlist /
-alerts / settings + 分包 kline），只切一半比不切更糟；留到阶段 4 统一做。
+**2026-10-22 用户决策：不做深色模式。** 原先 `token.wxss` 里的 `page.dark`
+变量块已删除，避免死代码误导。如将来重启此课题：从 `style/shadcn` 分支历史
+取回变量，并先解决每个页面根节点 `theme` class 的注入方式（列表：chat /
+watchlist / alerts / settings + 分包 kline）—— 不注入 class 变量不会生效。
 
 ## 字号
 
-沿用本项目既有七档（`--fs-price` 64 / `--fs-hero` 56 / `--fs-value` 44 /
-`--fs-brand` 40 / `--fs-title` 32 / `--fs-body` 28 / `--fs-aux` 22 / `--fs-min` 20）。
+**已向 shadcn 层级收敛（2026-10-22 决策）**：原 8 档（64/56/44/40/32/28/22/20 rpx）
+统一为 4 个层级值，变量名保留、同档互为语义别名：
 
-shadcn 目标层级为 hero 40 / title 36 / body 30 / caption 24（rpx），普遍小于现行值，
-且 `--fs-body` 28rpx 是无障碍硬底线（不可下调）。
-**是否向 shadcn 层级收敛，待阶段 2 试点页确认后决定**；在此之前维持现行七档。
+| 层级 | 值 | 变量 |
+|---|---|---|
+| hero | 40rpx | `--fs-price`（行情主价）、`--fs-hero`（总浮动金额/计数/阈值） |
+| title | 36rpx | `--fs-value`（次级主数字）、`--fs-brand`、`--fs-title`（卡片/页面标题） |
+| body | 30rpx | `--fs-body` |
+| caption | 24rpx | `--fs-aux`、`--fs-min`（弱辅助已并入 caption） |
 
-行高：正文 1.6，标题 1.4。数字全部 `.num`（`font-variant-numeric: tabular-nums`）。
+行高：正文 1.6，标题 1.4。数字一律 `.num`（`font-variant-numeric: tabular-nums`）。
+新页面只允许引用这 4 个层级，不允许自造第五档。
 
 ## 间距刻度（rpx）
 

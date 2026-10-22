@@ -52,26 +52,31 @@
 3. `navbar.wxml` 内联 `max-width` 彻底版 —— CSS 版已修，待真机确认
 4. `settings` 原生 switch 热区 56rpx < 88rpx —— 需包可点容器
 
-## 六、深色模式说明
+## 六、深色模式：不启用
 
-`token.wxss` 已内置 `page.dark` 全套变量（zinc-800/950 暗色阶），
-**但尚未启用**：没有任何页面根节点挂 `theme` class。
-启用方式（阶段 4 遗留，需产品决策）：`app.js` 里按系统/用户偏好给每页根节点注入
-`class="dark"`，或至少提供手动开关。只切一半比不切更糟，故本轮不启用。
+2026-10-22 用户决策**不做深色模式**。`token.wxss` 中原有的 `page.dark` 变量块
+已删除（避免死代码误导）；如需重启此课题，从 `style/shadcn` 分支历史取回变量，
+并先解决每个页面根节点 `theme` class 的注入方式。
 
-## 七、后续建议（按优先级）
+## 七、字号层级：已收敛
 
-1. **真机验收**：navbar 标题居中、88rpx 热区、长股票名截断 —— 模拟器无法覆盖真机差异
+原 8 档（64/56/44/40/32/28/22/20）收敛为 shadcn 四层：**hero 40 / title 36 /
+body 30 / caption 24**。变量名保留（300+ 处引用不动），同档变量互为语义别名
+（price≡hero、value≡brand≡title、aux≡min）。body 由 28→30 为放大，无无障碍风险。
+
+## 八、后续建议（按优先级）
+
+1. **真机验收**：navbar 标题居中、88rpx 热区、长股票名截断、新字号下的换行/溢出
+   —— 模拟器无法覆盖真机差异
 2. BLOCKED 剩余项：`navbar.wxml` 内联 `max-width` 彻底版（CSS 版已生效并通过验收）、
    `settings` 原生 switch 热区（需包可点容器）、`alerts` 输入框单位居中（P2）
-3. 字号层级是否向 shadcn 规格收敛（`DESIGN.md`「字号」节标注为待定）
-4. 深色模式启用方式（`token.wxss` 变量已备，需产品决策挂 `theme` class 的方式）
 
-## 八、已完成的收尾（2026-10-22 验收后）
+## 九、已完成的收尾（2026-10-22 验收后）
 
 - `sparkline` 外部类修复：quote-card / fundflow-card 改传 `spark-class=`（BLOCKED #7）
 - TDesign 残留清理：`package.json` 早已无该依赖、全项目零引用（仅注释提及），
   `node_modules/.tdesign-miniprogram-*` npm 缓存已删除；
   `miniprogram_npm/` 实际只含 `@qiun/ucharts` 与 `marked`，主包未被污染，
   「残留包缩小主包」的担心不成立
+- 字号收敛 + 深色模式按「不做」清理（本节上方第六、七节）
 - 已合并 `main`（merge commit `7c6f9ea`），`style/shadcn` 分支保留作历史记录
