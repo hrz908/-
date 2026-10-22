@@ -274,9 +274,7 @@
   border: none;
 }
 
-.msg-card {
-  width: 100%;
-}
+/* .msg-card 已上收到 styles/token.wxss（与卡片画廊测试页共用，避免两边漂移） */
 
 /* 红涨绿跌（国内习惯） */
 .up {

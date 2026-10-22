@@ -1,51 +1,131 @@
-<!-- K 线详情页：自研导航栏 + 周期 chips（base-tabs）+ uCharts 画布 + 区间统计。
-     画布触摸绑定 scroll/showToolTip（uCharts 实例方法），页面级 disableScroll
-     开启，画布上再加 disable-scroll 双保险 -->
+<!-- 卡片画廊（原 K 线详情页）：八张金融卡的样式测试页，不接后端。
+     卡片分支与 chat 主页面保持同一套写法；样式唯一真相源是
+     components/finance/* 的组件 wxss 与 styles/token.wxss 的 .msg-card，
+     所以调这里的效果 = 调 chat 主页面的效果（约定见 DESIGN.md「卡片画廊」节） -->
 <view class="page">
-  <!-- 导航栏与周期 chips 都用主包组件：标题字号、返回键、chips 规格与其余页面一致 -->
   <base-navbar title="{{titleText}}" left-arrow="{{true}}" bind:back="onBack" />
 
-  <base-tabs class="period-tabs" items="{{periods}}" value="{{activePeriod}}" bind:change="onPeriodChange" />
-
-  <view class="chart-card">
-    <canvas
-      type="2d"
-      id="kline-canvas"
-      class="canvas"
-      disable-scroll="{{true}}"
-      bindtouchstart="onTouchStart"
-      bindtouchmove="onTouchMove"
-      bindtouchend="onTouchEnd"
-    ></canvas>
-    <view wx:if="{{loading}}" class="mask">加载中…</view>
-    <view wx:elif="{{empty}}" class="mask">暂无 K 线数据</view>
-    <view wx:elif="{{errorMsg}}" class="mask">{{errorMsg}}</view>
-  </view>
-
-  <!-- 区间统计：与图表卡同一套卡片语言（白底 + 细描边 + 轻投影） -->
-  <view class="stats-card">
-    <view class="stats">
-      <view class="stat">
-        <view class="stat-k">区间涨跌幅</view>
-        <view class="stat-v num {{stats.pctDir}}">{{stats.pctText}}</view>
-      </view>
-      <view class="stat">
-        <view class="stat-k">区间振幅</view>
-        <view class="stat-v num">{{stats.ampText}}</view>
-      </view>
-      <view class="stat">
-        <view class="stat-k">区间最高</view>
-        <view class="stat-v num up">{{stats.highText}}</view>
-      </view>
-      <view class="stat">
-        <view class="stat-k">区间最低</view>
-        <view class="stat-v num down">{{stats.lowText}}</view>
-      </view>
+  <scroll-view class="gallery" scroll-y="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view class="gallery-hd">
+      <view class="gallery-hd-t">卡片样式测试</view>
+      <view class="gallery-hd-d">八张金融卡 · 假数据实例 · 不接后端。调组件 wxss 或 token 后，chat 主页面自动同步。</view>
     </view>
-  </view>
 
-  <view class="note">
-    <view>口径：前复权；均线为简单移动平均；区间涨跌幅与振幅按区间首末收盘价计算。</view>
-    <view>行情数据存在延迟，仅供参考，不构成投资建议。</view>
-  </view>
+    <block wx:for="{{cards}}" wx:for-item="msg" wx:key="card">
+      <!-- 行情卡片 -->
+      <finance-quote-card
+        wx:if="{{msg.card === 'quote'}}"
+        card-class="msg-card"
+        name="{{msg.quote.name}}"
+        code="{{msg.quote.code}}"
+        status="{{msg.quote.status}}"
+        price="{{msg.quote.price}}"
+        change="{{msg.quote.change}}"
+        change-pct="{{msg.quote.changePct}}"
+        open="{{msg.quote.open}}"
+        high="{{msg.quote.high}}"
+        low="{{msg.quote.low}}"
+        amount="{{msg.quote.amount}}"
+        turnover-rate="{{msg.quote.turnoverRate}}"
+        total-cap="{{msg.quote.totalCap}}"
+        points="{{msg.quote.points}}"
+        tags="{{msg.quote.tags}}"
+        note="{{msg.quote.note}}"
+      />
+
+      <!-- K 线卡片 -->
+      <finance-kline-card
+        wx:elif="{{msg.card === 'kline'}}"
+        card-class="msg-card"
+        name=""
+        subtitle="{{msg.klineSub}}"
+        periods="{{msg.klinePeriods}}"
+        active-period="{{msg.klineActivePeriod}}"
+        klines="{{msg.kline}}"
+        ma="{{msg.klineMa}}"
+        period-pct="{{msg.klinePct}}"
+        amplitude="{{msg.klineAmplitude}}"
+        volume-ratio="{{msg.klineVolumeRatio}}"
+        note="{{msg.klineNote}}"
+      />
+
+      <!-- 估值卡片 -->
+      <finance-valuation-card
+        wx:elif="{{msg.card === 'valuation'}}"
+        card-class="msg-card"
+        pe-ttm="{{msg.valuation.peTTM}}"
+        pe-static="{{msg.valuation.peStatic}}"
+        pb="{{msg.valuation.pb}}"
+        ps="{{msg.valuation.ps}}"
+        dividend-yield="{{msg.valuation.dividendYield}}"
+        total-cap="{{msg.valuation.totalCap}}"
+        note="{{msg.valuation.note}}"
+      />
+
+      <!-- 资金流向卡片 -->
+      <finance-fundflow-card
+        wx:elif="{{msg.card === 'fundflow'}}"
+        card-class="msg-card"
+        main-net="{{msg.fundflow.mainNet}}"
+        tiers="{{msg.fundflow.tiers}}"
+        note="{{msg.fundflow.note}}"
+      />
+
+      <!-- 财报速览卡片 -->
+      <finance-report-card
+        wx:elif="{{msg.card === 'report'}}"
+        card-class="msg-card"
+        period-label="{{msg.report.periodLabel}}"
+        period="{{msg.report.period}}"
+        revenue="{{msg.report.revenue}}"
+        net-profit="{{msg.report.netProfit}}"
+        cash-flow="{{msg.report.cashFlow}}"
+        gross-margin="{{msg.report.grossMargin}}"
+        net-margin="{{msg.report.netMargin}}"
+        roe="{{msg.report.roe}}"
+        eps="{{msg.report.eps}}"
+        beat="{{msg.report.beat}}"
+        consensus="{{msg.report.consensus}}"
+        note="{{msg.report.note}}"
+      />
+
+      <!-- 研报观点卡片 -->
+      <finance-research-card
+        wx:elif="{{msg.card === 'research'}}"
+        card-class="msg-card"
+        org="{{msg.research.org}}"
+        rating="{{msg.research.rating}}"
+        target-price="{{msg.research.targetPrice}}"
+        publish-date="{{msg.research.publishDate}}"
+        report-type="{{msg.research.reportType}}"
+        summary="{{msg.research.summary}}"
+        forecast-dir="{{msg.research.forecastDir}}"
+        upside="{{msg.research.upside}}"
+        rating-dist="{{msg.research.ratingDist}}"
+        source-name="{{msg.research.sourceName}}"
+        source-url="{{msg.research.sourceUrl}}"
+        note="{{msg.research.note}}"
+      />
+
+      <!-- 公司事件卡片 -->
+      <finance-event-card
+        wx:elif="{{msg.card === 'event'}}"
+        card-class="msg-card"
+        events="{{msg.event.events}}"
+        range="{{msg.event.range}}"
+        note="{{msg.event.note}}"
+      />
+
+      <!-- 同业对比卡片 -->
+      <finance-compare-card
+        wx:elif="{{msg.card === 'compare'}}"
+        card-class="msg-card"
+        items="{{msg.compare.items}}"
+        conclusion="{{msg.compare.conclusion}}"
+        note="{{msg.compare.note}}"
+      />
+    </block>
+
+    <view class="gallery-ft">以上卡片均由 components/finance/* 渲染 · 视觉规格以 DESIGN.md 为准</view>
+  </scroll-view>
 </view>

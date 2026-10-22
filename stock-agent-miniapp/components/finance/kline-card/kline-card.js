@@ -215,8 +215,35 @@ Component({
     supportText: '--',
     resistanceText: '--'
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发：首帧三个口径各手动算一次
+    attached() {
+      this.refreshPeriods();
+      this.refreshChart();
+      this.refreshStats();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.refreshPeriods();
+      this.refreshChart();
+      this.refreshStats();
+    }
+  },
   observers: {
     'periods, activePeriod'() {
+      this.refreshPeriods();
+    },
+    'klines, ma'() {
+      this.refreshChart();
+    },
+    'periodPct, amplitude, volumeRatio, ma, support, resistance'() {
+      this.refreshStats();
+    }
+  },
+  methods: {
+    refreshPeriods() {
       const list = this.data.periods && this.data.periods.length ? this.data.periods : DEFAULT_PERIODS;
       const idx = list.findIndex((p) => p.key === this.data.activePeriod);
       const index = idx >= 0 ? idx : 0;
@@ -226,10 +253,10 @@ Component({
         activeLabel: (list[index] && list[index].label) || ''
       });
     },
-    'klines, ma'() {
+    refreshChart() {
       this.setData({ chartSrc: buildChart(this.data.klines, this.data.ma) });
     },
-    'periodPct, amplitude, volumeRatio, ma, support, resistance'() {
+    refreshStats() {
       const d = this.data;
       const ma5 = d.ma && d.ma.ma5;
       // MA5 取最后一根的有效值
@@ -252,9 +279,7 @@ Component({
         supportText: fmtNum(d.support),
         resistanceText: fmtNum(d.resistance)
       });
-    }
-  },
-  methods: {
+    },
     // 周期切换：只上报，不自己拉数据（组件内不做业务计算）
     onChipTap(e) {
       const index = Number(e.currentTarget.dataset.index);

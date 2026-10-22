@@ -1,106 +1,49 @@
-/* K 线详情页：自研导航栏 + base-tabs 周期 chips + uCharts 画布 + 区间统计。
-   样式全部自绘（未引任何 UI 库），间距与字号沿用主包 token 的 rpx 档位，
-   视觉与其它页一致。导航栏与 chips 复用主包组件，页面只负责区块排版。 */
+/* 卡片画廊（原 K 线详情页）：页面骨架 + 卡片间距。
+   卡片自身样式一律在 components/finance/* 与 styles/token.wxss，
+   本文件只管骨架，避免与 chat 主页面出现两份卡片样式 */
 .page {
-  min-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-}
-
-/* 周期 chips：直接用 base-tabs（与自选/提醒页同一套 chip 规格），
-   页面侧只补左右留白，与页面其它区块对齐 */
-.period-tabs {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
-}
-
-/* 图表卡：surface 底 + 描边，画布高度 520rpx（K 线区约 400rpx） */
-.chart-card {
-  position: relative;
-  margin: 0 var(--sp-4);
-  margin-top: var(--sp-3);
-  background: var(--surface);
-  border: var(--hairline);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-card);
+  height: 100%;
   overflow: hidden;
+  background: var(--bg);
+  position: relative;
 }
 
-.canvas {
-  width: 100%;
-  height: 520rpx;
-}
-
-/* 加载 / 空 / 错误遮罩：盖在画布上，不撑布局 */
-.mask {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-aux);
-  color: var(--ink-3);
-}
-
-/* 区间统计卡：与图表卡同一套语言（白底 + 细描边 + 轻投影） */
-.stats-card {
-  margin: var(--sp-3) var(--sp-4) 0;
-  padding: var(--sp-3) var(--pad-card);
-  background: var(--surface);
-  border: var(--hairline);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-card);
-}
-
-/* 四列 */
-.stats {
-  display: flex;
-  gap: var(--gap-grid);}
-
-.stat {
+.gallery {
   flex: 1;
-  min-width: 0;
-  }
-
-/* 字段名弱辅助级、字段值正文级：与金融卡栅格的层级一致 */
-.stat-k {
-  font-size: var(--fs-min);
-  color: var(--ink-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-height: 0;
 }
 
-.stat-v {
+/* 卡片之间的间距：与 chat 消息流同款（--sp-3），用 gap 统一管 */
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-6);
+}
+
+/* 页眉说明：弱辅助级，不抢卡片 */
+.gallery-hd {
+  padding: var(--sp-1) 0 var(--sp-2);
+}
+
+.gallery-hd-t {
+  font-size: var(--fs-aux);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.gallery-hd-d {
   margin-top: var(--sp-1);
-  font-size: var(--fs-body);
-  color: var(--ink);
-  width: 180rpx; text-align: right;
-}
-
-/* 红涨绿跌（国内习惯）：区间涨跌幅、最高、最低跟随语义着色。
-   页面不引 _card.wxss（那是组件内部样式），涨跌色在这里单独给一份 */
-.up {
-  color: var(--up);
-}
-
-.down {
-  color: var(--down);
-}
-
-.flat {
-  color: var(--flat);
-}
-
-/* 口径与免责声明（合规：数据口径 + 不构成建议） */
-.note {
-  margin: var(--sp-3) var(--sp-4) 0;
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--surface-2);
-  border-radius: var(--r-tag);
   font-size: var(--fs-min);
-  line-height: 1.75;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.gallery-ft {
+  padding: var(--sp-4) 0 var(--sp-2);
+  text-align: center;
+  font-size: var(--fs-min);
   color: var(--ink-3);
 }

@@ -255,3 +255,9 @@ page {
 /* ---- 标签页：gap 管间距，子项等分带截断（第 6 条） ---- */
 .tabs { display: flex; gap: var(--sp-3); }
 .tabs__item { flex: 1; min-width: 0; }
+
+/* ---- 卡片消息外层：chat 主页面与卡片画廊测试页共用。
+       调卡片间距只改这里，两边自动同步（约定见 DESIGN.md「卡片画廊」节） ---- */
+.msg-card {
+  width: 100%;
+}

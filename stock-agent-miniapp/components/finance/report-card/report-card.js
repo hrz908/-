@@ -34,8 +34,25 @@ Component({
     epsText: '--',
     consensusText: '--'
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发：首帧手动算一次
+    attached() {
+      this.refresh();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.refresh();
+    }
+  },
   observers: {
     'revenue, netProfit, cashFlow, grossMargin, netMargin, roe, eps, consensus'() {
+      this.refresh();
+    }
+  },
+  methods: {
+    refresh() {
       const d = this.data;
       const rows = [
         { key: 'revenueBar', src: d.revenue },

@@ -474,7 +474,9 @@ Page({
 
   goBack() {
     // 立即出栈，不做任何自绘前置动画：
-    // 任何「先动画后出栈」的写法都会把等待时间直接变成点击响应延迟
-    wx.navigateBack({ fail: () => wx.switchTab && wx.switchTab({ url: '/pages/chat/chat' }) });
+    // 任何「先动画后出栈」的写法都会把等待时间直接变成点击响应延迟。
+    // 兜底：navigateBack 失败时（无上一页）用 reLaunch 回到主页。
+    // 注意：chat 不是 tabBar 页，switchTab 会失败，故用 reLaunch。
+    wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/chat/chat' }) });
   }
 });

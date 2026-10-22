@@ -82,6 +82,35 @@ canvas 侧 5 个 JS 文件的配色都要同步，只改一半会出现「页面
 - **tabbar**：本项目 `app.json` 未配置 tabBar（页面切换不走 tabbar），
   原手册阶段 4 的 tabbar 改色条目对本项目**不适用**
 
+## 导航与返回（子页面退回主页）
+
+- **主页**：`pages/chat/chat`（唯一根页，含抽屉导航）。
+- **页面切换方式**：子页面一律由主页 `wx.navigateTo` 进入（抽屉项 / 行情卡 /
+  自选股行点击），**不**走 tabBar、不 `redirectTo`，故每个子页都有「上一页」可出栈。
+- **返回入口（统一交互）**：所有子页顶部用 `base-navbar` 的 `left-arrow`
+  + `bind:back`，点击触发本页 `goBack`（kline 为 `onBack`）出栈返回。
+- **返回逻辑（统一写法，四处一致）**：
+
+  ```js
+  wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/chat/chat' }) });
+  ```
+
+  优先 `navigateBack` 出栈回上一页；若栈为空（被单独拉起 / 栈被清）则
+  `reLaunch` 兜底回主页。**禁止** `switchTab` 兜底——`chat` 不是 tabBar 页，
+  `switchTab` 必然失败，会让兜底也失效。
+
+- **各子页返回路径**：
+
+  | 子页 | 标题 | 进入来源 | 返回目标 |
+  |---|---|---|---|
+  | `pages/watchlist/watchlist` | 自选股 | 主页抽屉 | 主页（chat） |
+  | `pages/alerts/alerts` | 提醒 | 主页抽屉 | 主页（chat） |
+  | `pages/settings/settings` | 我的 | 主页抽屉 | 主页（chat） |
+  | `pages/kline/index`（分包） | 股票名 / 卡片画廊 | 主页行情卡 **或** 自选股行 | 上一页（chat 或 watchlist）；栈空时兜底回主页 |
+
+  kline 为二级子页，`navigateBack` 回其上一页符合层级直觉；其 `reLaunch`
+  兜底保证极端情况下仍能回到主页，不会出现卡死 / 空白页。
+
 ## 排版八条（结构与居中专章）
 
 1. 垂直居中唯一写法：flex + `align-items:center`。禁止用 line-height 撑高居中

@@ -43,8 +43,25 @@ Component({
     ratingTone: 'flat',
     distText: ''
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发：首帧手动算一次
+    attached() {
+      this.refresh();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.refresh();
+    }
+  },
   observers: {
     'rating, targetPrice, upside, ratingDist'() {
+      this.refresh();
+    }
+  },
+  methods: {
+    refresh() {
       const d = this.data;
       const dist = (d.ratingDist || [])
         .filter((r) => r && r.count)
@@ -57,9 +74,7 @@ Component({
         ratingTone: RATING_TONES[d.rating] || 'flat',
         distText: dist
       });
-    }
-  },
-  methods: {
+    },
     // 原文链接：小程序不能直接打开外链，点击复制（与 chat 页链接行为一致）
     onSourceTap() {
       const url = this.data.sourceUrl;

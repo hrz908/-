@@ -39,6 +39,12 @@ Component({
   lifetimes: {
     attached() {
       this.render();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.render();
     }
   },
   methods: {

@@ -44,8 +44,26 @@ Component({
     capText: '--',
     dir: 'flat'
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发（微信官方行为）：
+    // 卡片画廊首屏、历史消息恢复这类「初始就带值」的场景必须手动算一次
+    attached() {
+      this.refresh();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.refresh();
+    }
+  },
   observers: {
     'price, change, changePct, open, high, low, amount, turnoverRate, totalCap'() {
+      this.refresh();
+    }
+  },
+  methods: {
+    refresh() {
       const d = this.data;
       this.setData({
         priceText: fmtPrice(d.price),
@@ -55,7 +73,8 @@ Component({
         highText: fmtPrice(d.high),
         lowText: fmtPrice(d.low),
         amountText: fmtAmount(d.amount),
-        turnoverText: fmtPct(d.turnoverRate),
+        // 换手率是中性指标，不跟涨跌语义，不能用 fmtPct（会带正负号）
+        turnoverText: d.turnoverRate == null ? '--' : fmtNum(d.turnoverRate, 2) + '%',
         capText: fmtAmount(d.totalCap),
         dir: direction(d.changePct)
       });

@@ -82,6 +82,8 @@
                 high="{{msg.quote.high}}"
                 low="{{msg.quote.low}}"
                 amount="{{msg.quote.amount}}"
+                turnover-rate="{{msg.quote.turnoverRate}}"
+                total-cap="{{msg.quote.totalCap}}"
                 points="{{msg.quote.points}}"
                 tags="{{msg.quote.tags}}"
                 note="{{msg.quote.note}}"
@@ -99,6 +101,7 @@
                 ma="{{msg.klineMa}}"
                 period-pct="{{msg.klinePct}}"
                 amplitude="{{msg.klineAmplitude}}"
+                volume-ratio="{{msg.klineVolumeRatio}}"
                 note="{{msg.klineNote}}"
               />
 
@@ -142,6 +145,42 @@
                 beat="{{msg.report.beat}}"
                 consensus="{{msg.report.consensus}}"
                 note="{{msg.report.note}}"
+              />
+
+              <!-- 研报观点卡片：金融卡组件（components/finance/research-card） -->
+              <finance-research-card
+                wx:elif="{{msg.card === 'research'}}"
+                card-class="msg-card"
+                org="{{msg.research.org}}"
+                rating="{{msg.research.rating}}"
+                target-price="{{msg.research.targetPrice}}"
+                publish-date="{{msg.research.publishDate}}"
+                report-type="{{msg.research.reportType}}"
+                summary="{{msg.research.summary}}"
+                forecast-dir="{{msg.research.forecastDir}}"
+                upside="{{msg.research.upside}}"
+                rating-dist="{{msg.research.ratingDist}}"
+                source-name="{{msg.research.sourceName}}"
+                source-url="{{msg.research.sourceUrl}}"
+                note="{{msg.research.note}}"
+              />
+
+              <!-- 公司事件卡片：金融卡组件（components/finance/event-card） -->
+              <finance-event-card
+                wx:elif="{{msg.card === 'event'}}"
+                card-class="msg-card"
+                events="{{msg.event.events}}"
+                range="{{msg.event.range}}"
+                note="{{msg.event.note}}"
+              />
+
+              <!-- 同业对比卡片：金融卡组件（components/finance/compare-card） -->
+              <finance-compare-card
+                wx:elif="{{msg.card === 'compare'}}"
+                card-class="msg-card"
+                items="{{msg.compare.items}}"
+                conclusion="{{msg.compare.conclusion}}"
+                note="{{msg.compare.note}}"
               />
 
               <!-- 纯文本回答：markdown 块渲染（见页面底部 md-* 模板与样式） -->

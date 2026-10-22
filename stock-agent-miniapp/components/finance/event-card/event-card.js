@@ -15,8 +15,26 @@ Component({
     rows: [],
     hasImportant: false
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发（微信官方行为），
+    // 首帧必须手动映射一次，否则「有数据但列表空白」
+    attached() {
+      this.mapEvents();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.mapEvents();
+    }
+  },
   observers: {
     events() {
+      this.mapEvents();
+    }
+  },
+  methods: {
+    mapEvents() {
       const rows = (this.data.events || [])
         .filter((e) => e && e.title)
         .map((e) => ({
@@ -31,9 +49,7 @@ Component({
         rows: rows,
         hasImportant: rows.some((r) => r.important)
       });
-    }
-  },
-  methods: {
+    },
     // 原文链接：复制到剪贴板（小程序不直接打开外链）
     onSourceTap(e) {
       const url = e.currentTarget.dataset.url;

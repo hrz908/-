@@ -73,8 +73,11 @@ Page({
 
 
   goBack() {
-    // 立即出栈，不做任何自绘前置动画
-    wx.navigateBack();
+    // 立即出栈，不做任何自绘前置动画。
+    // 兜底：navigateBack 失败时（无上一页，如被单独拉起 / 栈被清）
+    // 用 reLaunch 回到主页，避免卡在「我的」页或空白页。
+    // 注意：chat 不是 tabBar 页，switchTab 会失败，故用 reLaunch。
+    wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/chat/chat' }) });
   },
 
   // 轻提示：自研 base-toast（替代 TDesign toast / wx.showToast 默认样式）

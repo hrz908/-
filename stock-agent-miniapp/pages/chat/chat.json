@@ -8,7 +8,10 @@
     "finance-kline-card": "/components/finance/kline-card/kline-card",
     "finance-valuation-card": "/components/finance/valuation-card/valuation-card",
     "finance-fundflow-card": "/components/finance/fundflow-card/fundflow-card",
-    "finance-report-card": "/components/finance/report-card/report-card"
+    "finance-report-card": "/components/finance/report-card/report-card",
+    "finance-research-card": "/components/finance/research-card/research-card",
+    "finance-event-card": "/components/finance/event-card/event-card",
+    "finance-compare-card": "/components/finance/compare-card/compare-card"
   },
   "backgroundColor": "#ffffff",
   "backgroundColorTop": "#ffffff",

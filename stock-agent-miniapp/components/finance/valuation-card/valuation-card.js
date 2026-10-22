@@ -42,8 +42,25 @@ Component({
     barLevel: 'flat',
     barLabel: ''
   },
+  lifetimes: {
+    // observer 不会在 attached 时对初始值触发：首帧手动算一次
+    attached() {
+      this.refresh();
+    },
+
+    // ready 再兜一次：wx:if 首帧创建时 properties 可能尚未就绪，
+    // attached 读到的是初始值（observer 对首值也不触发），ready 时必然已就绪
+    ready() {
+      this.refresh();
+    }
+  },
   observers: {
     'peTTM, peStatic, pb, ps, peg, dividendYield, totalCap, percentile3y, percentile5y, industryAvgPe, industryAvgPb, industryAvgYield'() {
+      this.refresh();
+    }
+  },
+  methods: {
+    refresh() {
       const d = this.data;
       this.setData({
         peTTMText: fmtNum(d.peTTM),
@@ -62,9 +79,7 @@ Component({
         barLevel: this.barLevelOf(d.percentile3y),
         barLabel: this.barLabelOf(d.percentile3y)
       });
-    }
-  },
-  methods: {
+    },
     // <30% 偏低（绿）、>70% 偏高（红）、中间中性（灰）
     barLevelOf(p) {
       if (p == null || isNaN(p)) return 'flat';
