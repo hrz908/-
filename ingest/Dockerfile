@@ -6,8 +6,11 @@ WORKDIR /app
 # 无需 build-essential 现场编译；去掉 apt 步骤既避开 deb.debian.org 国内不可达，又减小镜像。
 # 若将来加入需源码编译的依赖，再补 apt（记得先把源换成国内镜像，如 mirrors.aliyun.com）。
 
+# pip 源：国内构建默认走清华源，海外可传 --build-arg 覆盖
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
 
 COPY . .
 
