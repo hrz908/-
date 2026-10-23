@@ -137,8 +137,9 @@ server/
 
 ### Agent WS 事件契约（`/api/v1/ws/agent`）
 
-网关只做透传，`data` 结构由 Python Agent（`agent/subgraphs/mcp.py` 的 `_emit_structured`）约定；
+网关只做透传，`data` 结构由 Python Agent（`agent/subgraphs/stock.py` 的 `_emit_structured`）约定；
 改卡片类型必须同步 `stock-agent-miniapp/pages/chat/chat.js` 的卡片工厂与本文本表。
+八张金融卡的数据全部由 agent 的结构化输出（`card` / `table` 事件）提供，前端不再有 mock 分支。
 
 | event | data.type | 载荷 | 前端渲染 |
 |---|---|---|---|
@@ -148,12 +149,16 @@ server/
 命中龙虎榜时并入 `lhb`（`[{seat, buy, sell}]`，仅此三个量，**万元**）与 `lhb_date` | 资金流向卡（含龙虎榜区块） |
 | `card` | `report_card` | `{indicator, income, cashflow}` 三表合并（新浪报表+财务指标，各为单行 dict，可缺表；**金额单位元**） | 财报速览卡 |
 | `card` | `compare_card` | `{items, ts_code}`；items 为 `[{name, price, changePct, pe, pb, totalMv}]`（**当日快照，元口径**，最多本股 + 2 家同行） | 同业对比卡 |
+| `card` | `research_card` | 东财研报单行（org/rating/report_type/publish_date/summary/source_name/source_url/industry/eps_forecast/pe_forecast；**数据源无目标价**，targetPrice 恒空） | 研报观点卡 |
+| `card` | `event_card` | `{events, range, note}`；events 为 `[{type, date, title, desc, important, source_url, source_name}]`（由 `get_stock_news` 当日资讯确定性归纳，不做语义推断） | 公司事件卡 |
 | `table` | `symbol_list` | 股票搜索候选行数组 | 搜索候选列表 |
-| `table` | `kline_table` | `{rows: [{date, open, high, low, close, volume}]}`（升序，最多 15 个交易日；`trade_date→date`、`vol→volume` 已映射） | K 线卡 |
+| `table` | `kline_table` | `{rows: [{date, open, high, low, close, volume}], code?, name?}`（升序，最多 15 个交易日；`trade_date→date`、`vol→volume` 已映射；本轮查过行情时补 `code`/`name` 供卡片标题用） | K 线卡 |
 
 说明：
 
-1. `valuation_card` / `fundflow_card` 按行发射（一轮问多只股票时一标的一卡，单工具上限 3 张）；
+1. **一次提问，一种卡片只发一张**（防刷屏）。估值 / 资金流的数据源按「天」返回一整段，
+   只取最新一天发一张卡（按天发会把同一只股票的连续交易日并排铺三张）；研报取最新一篇；
+   资讯整轮合成一张事件卡。多条目之间的差异由正文转述，卡片只做速览；
 2. `report_card` 来自组合工具 `get_financial_report`（并发拉新浪财务指标 + 利润表 + 现金流量表），
    任一子表取不到时对应字段为 `null`，前端渲染 `--`，不影响其它字段；
 3. `kline_table` 由 `get_history_daily` 发射（2026-10-23 复活；Go `/stock/kline` 仍保持下线），
@@ -166,6 +171,12 @@ server/
 6. **数据源（2026-10-23 起）**：卡片数据 = akshare（东财/新浪，免 token）+ baostock（历史日 K，免 token），
    原 Tushare 通道已删除（实测 token 对 moneyflow/top_list 等接口无权限 40203）；
    quote/search/compare 仍走 Go 网关腾讯快照。
+7. `research_card` 由 `get_research_reports`（东财个股研报）提供，取最新一篇（多家机构的
+   观点差异由正文转述）。东财研报不提供目标价，`targetPrice` / `upside` / `forecastDir` 恒空，
+   卡片降级显示 `--`，工具层不编造。
+8. `event_card` 由 `get_stock_news`（东财个股资讯，只保留当日）整轮合成一张卡（不再一条一卡）。
+   事件类型按标题关键词确定性归纳（解禁 / 增减持 / 分红 / 回购 / 停复牌 / 诉讼 / 订单 / 财报），
+   归纳不出归「资讯」；`important` 只标解禁 / 停复牌 / 诉讼三类。
 
 ---
 
