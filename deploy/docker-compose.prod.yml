@@ -1,0 +1,131 @@
+# 生产部署编排（服务器上用这个，别用 server/docker-compose.yml——那是本地开发版）
+#
+#   cd deploy
+#   cp .env.production.example .env   # 填好密钥
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f server
+#
+# 与本地开发版的差异：
+#   - Go server 也进 compose 网络（容器名 server），agent 回调地址为 http://server:8080，
+#     不再是 host.docker.internal；
+#   - postgres / redis 不映射宿主端口，只有同网络的容器能访问；
+#   - server 的 8080 只绑 127.0.0.1，对外的 HTTPS/WSS 统一走宿主机 nginx（deploy/nginx.prod.conf）；
+#   - 全部服务 restart: unless-stopped，开机自愈。
+#
+# .env 变量说明见 .env.production.example。
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: stock-agent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: stock_agent
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 仅数据目录为空时执行一次初始化；之后改表请加新的迁移文件
+      - ../server/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d stock_agent']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: stock-agent-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    container_name: stock-agent-server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # env_file 已注入全部密钥，这里只放「随部署环境变化」的连接项。
+      # 环境变量名 = 配置键大写 + 点转下划线（见 server/internal/config/config.go）
+      ENV: prod
+      ADDR: ":8080"
+      DSN: "postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stock_agent?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      # agent 容器名（compose 网络内 DNS）
+      AGENT_BASE_URL: "http://agent:8000"
+      UPLOAD_DIR: "/app/uploads"
+    ports:
+      # 只绑回环：宿主机 nginx 反代用，不对公网暴露
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: ../agent
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    container_name: stock-agent-python
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: "postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stock_agent?sslmode=disable"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      # 回调 Go 网关：compose 网络内用容器名；token 从 .env 的 GO_SERVER_TOKEN 来
+      GO_SERVER_URL: "http://server:8080"
+    # 不映射宿主端口：agent 只被 server 容器访问，调试用
+    #   docker compose -f docker-compose.prod.yml exec agent curl -s localhost:8000/docs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 可选：文档 ingest watcher。需要时加 --profile ingest 启动
+  ingest:
+    build:
+      context: ../ingest
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    container_name: stock-agent-ingest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: "postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stock_agent?sslmode=disable"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      WATCH_DIR: /data/docs
+    volumes:
+      - ingestdata:/data/docs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - ingest
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  ingestdata:
