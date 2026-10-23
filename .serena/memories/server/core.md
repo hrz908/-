@@ -10,6 +10,11 @@ Gin + GORM + PostgreSQL + go-redis/v9 + gorilla/websocket。与小程序工程�
 - `internal/module/` 一个页面一个包（auth / watchlist / alert / ...），自带 model/handler/route
 - `migrations/` 001 建表、002 用户表、003 alert_rule 升级、004 唯一索引、005 agent（documents/chunks/agent_runs + pgvector hnsw 索引）
 
+## 配置层（2026-10-23 Viper 化）
+- `internal/config/config.go` 三层优先级：进程环境变量 > config.yaml（可选）> 内置默认值；键名扁平 snake_case + AutomaticEnv，兼容旧变量名。
+- `internal/config/dotenv.go`：`Load()` 开头先读 `./.env` 注入环境（真实环境变量优先、文件缺失不算错误）。背景：Viper 化后曾丢失 .env 加载，`go run .` 会静默丢掉 OPENAI_API_KEY 等只在 .env 里的配置。
+- 启动阻塞 bug：`errors.As` 曾用 `*viper.ConfigFileNotFoundError` 匹配不到 viper v1.x 返回的值类型 → 无 config.yaml 直接 Fatal，已改为值类型。
+
 ## 关键行为
 - AutoMigrate 自动建表；SQL 迁移只在数据卷为空时执行一次
 - 接口前缀 `/api/v1`；JWT 鉴权；`AuthAllowQueryToken` 允许 query 带 token；限流 middleware（Redis 故障 fail-open）
