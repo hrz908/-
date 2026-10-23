@@ -57,8 +57,6 @@ _MAX_TOOL_ROUNDS = 3
 _MAX_MSG_CHARS = 2000
 # synthesize 里塞进提示词的工具结果上限（字符）
 _MAX_TOOL_CHARS = 6000
-# 单个工具的卡片事件上限：一轮问多只股票时一标的一卡，封顶防刷屏
-_MAX_CARDS_PER_TOOL = 3
 
 # 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）。
 # Tushare 增强工具也要给标签，否则前端只能显示原始工具名
@@ -73,8 +71,40 @@ _TOOL_LABELS = {
     "get_history_daily": "历史行情",
     "get_top_list": "龙虎榜席位",
     "get_peer_compare": "同业对比",
+    "get_research_reports": "机构研报",
     "search_knowledge_base": "知识库检索",
 }
+
+# 事件类型：从资讯标题归纳（数据源只有标题/内容/来源，没有事件分类字段）。
+# 顺序敏感：越具体的关键词排越前（「减持」与「增持」互不重叠，「诉讼」在「处罚」之前）
+_EVENT_TYPE_RULES = (
+    ("解禁", "解禁"),
+    ("减持", "增减持"),
+    ("增持", "增减持"),
+    ("回购", "回购"),
+    ("停牌", "停复牌"),
+    ("复牌", "停复牌"),
+    ("分红", "分红"),
+    ("派息", "分红"),
+    ("诉讼", "诉讼"),
+    ("仲裁", "诉讼"),
+    ("违规", "诉讼"),
+    ("处罚", "诉讼"),
+    ("中标", "订单"),
+    ("签约", "订单"),
+    ("订单", "订单"),
+    ("业绩", "财报"),
+    ("预告", "财报"),
+    ("年报", "财报"),
+    ("中报", "财报"),
+    ("季报", "财报"),
+)
+
+# 需要用户在时间轴上重点关注的事件类型（前端圆点标金）
+_EVENT_IMPORTANT_TYPES = ("解禁", "停复牌", "诉讼")
+
+# 事件卡摘要的最大字数：资讯正文可能很长，卡内只放一句
+_EVENT_DESC_CHARS = 60
 
 # 工具集进程级缓存：首轮 tool_call 前经 _ensure_tools 懒加载
 _TOOLS = None
@@ -511,20 +541,27 @@ def _emit_structured(tool_results: list) -> None:
     （不进入 token 流）。
 
     事件契约（与小程序 chat.js 的卡片工厂一一对应，改这里必须同步那边
-    与 server/README.md 第三节）：
+    与 server/README.md 第三节）。八张金融卡全部由此下发：
     - get_quote            -> card: quote_card（行情速览卡）
     - symbol_search        -> table: symbol_list（股票搜索候选）
-    - get_valuation        -> card: valuation_card（估值卡，daily_basic 行）
-    - get_money_flow       -> card: fundflow_card（资金流向卡，moneyflow 行，
+    - get_valuation        -> card: valuation_card（估值卡，最新交易日一行）
+    - get_money_flow       -> card: fundflow_card（资金流向卡，最新交易日一行，
                               命中 get_top_list 时并入 lhb 席位区块）
     - get_financial_report -> card: report_card（财报速览卡，三表合并行）
     - get_history_daily    -> table: kline_table（K 线卡，最近 15 个交易日）
     - get_peer_compare     -> card: compare_card（同业对比卡，当日快照）
+    - get_research_reports -> card: research_card（研报观点卡，最新一篇）
+    - get_stock_news       -> card: event_card（公司事件卡，当日资讯折成时间轴）
 
-    行载荷按行发射：数据源返回的是数组，一轮问多只股票时一标的一卡，
-    前端每张卡是一条独立消息。单工具最多发 _MAX_CARDS_PER_TOOL 张，防刷屏。
+    一次提问，一种卡片只发一张（防刷屏，前端每张卡是一条独立消息）：
+    - 数据源按「天」返回的（估值 / 资金流）只取最新一天——按天发会把同一只
+      股票的连续交易日并排铺三张（实测问一句估值出三张卡）；
+    - 数据源按「条」返回的（研报 / 资讯）取最新一篇、或整轮合成一张时间轴，
+      多条目之间的差异交给正文转述；
+    - 行情 / 财报 / 对比 / K 线本来就是单对象或整表，天然一张。
     """
     lhb = _lhb_payload(tool_results)
+    quote = _quote_payload(tool_results)
     has_moneyflow = False
     for item in tool_results:
         name = item.get("tool")
@@ -537,25 +574,47 @@ def _emit_structured(tool_results: list) -> None:
         elif name == "symbol_search" and data:
             _emit_validated_table("symbol_list", data)
         elif name == "get_valuation" and data:
-            for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
-                _emit_validated_card("valuation_card", row)
+            # 估值卡是「当日估值快照」：工具按天返回一整段（默认 30 个交易日），
+            # 只取最新一天。按天发多张会把同只股票的连续交易日并排刷屏
+            # （实测问一句估值出三张卡），且与 compare_card 的当日快照口径不一致
+            rows = _rows_of(data)
+            if rows:
+                _emit_validated_card("valuation_card", rows[0])
         elif name == "get_money_flow" and data:
+            # 资金流卡同为当日快照，同上只取最新一天；
+            # 一段历史资金流由正文回答，卡片不重复铺三张
             rows = _rows_of(data)
             has_moneyflow = bool(rows)
-            for row in rows[:_MAX_CARDS_PER_TOOL]:
-                extra = {}
-                # 龙虎榜并入第一张卡：同一标的的资金流 + 上榜席位一屏看完
-                if lhb and row is rows[0]:
-                    extra = {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]}
-                _emit_validated_card("fundflow_card", _fundflow_card_payload(row, extra))
+            if rows:
+                # 龙虎榜并入这一张卡：同一标的的资金流 + 上榜席位一屏看完
+                extra = {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]} if lhb else {}
+                _emit_validated_card("fundflow_card", _fundflow_card_payload(rows[0], extra))
         elif name == "get_history_daily" and data:
             rows = _kline_rows(data)
             if rows:
-                _emit_validated_table("kline_table", {"rows": rows})
+                payload = {"rows": rows}
+                # 表事件只带行，卡片标题缺标的名：本轮查过行情时补上代码与名称
+                if quote:
+                    payload["code"] = quote.get("code")
+                    payload["name"] = quote.get("name")
+                _emit_validated_table("kline_table", payload)
         elif name == "get_financial_report" and data:
             _emit_validated_card("report_card", data)
         elif name == "get_peer_compare" and data:
             _emit_validated_card("compare_card", data)
+        elif name == "get_research_reports" and data:
+            # 研报卡取最新一篇：多家机构的观点差异由正文转述，
+            # 卡片只承担「最新机构观点速览」，一次提问一张
+            rows = _rows_of(data.get("rows") if isinstance(data, dict) else data)
+            if rows:
+                _emit_validated_card("research_card", rows[0])
+        elif name == "get_stock_news" and data:
+            # 个股资讯整轮合成一张事件卡：时间轴本身就是多条，不需要一张一条
+            payload = _event_card_payload(
+                _rows_of(data.get("rows") if isinstance(data, dict) else data)
+            )
+            if payload:
+                _emit_validated_card("event_card", payload)
     # 龙虎榜单独命中、本轮没有资金流数据时：发一张仅龙虎榜的资金流向卡
     if lhb and not has_moneyflow:
         _emit_validated_card(
@@ -572,6 +631,58 @@ def _lhb_payload(tool_results: list):
         if result.get("ok") and isinstance(result.get("data"), dict) and result["data"].get("rows"):
             return result["data"]
     return None
+
+
+def _quote_payload(tool_results: list):
+    """取第一个成功的 get_quote 结果（K 线卡的标的名从这里借）；没有返回 None。"""
+    for item in tool_results:
+        if item.get("tool") != "get_quote":
+            continue
+        result = item.get("result") or {}
+        if result.get("ok") and isinstance(result.get("data"), dict) and result["data"]:
+            return result["data"]
+    return None
+
+
+def _event_type(title: str) -> str:
+    """资讯标题 -> 事件类型；归纳不出时归到「资讯」（不猜、不编分类）。"""
+    for kw, label in _EVENT_TYPE_RULES:
+        if kw in title:
+            return label
+    return "资讯"
+
+
+def _event_card_payload(news_rows: list):
+    """个股资讯行 -> 前端 event_card 载荷（时间轴）。
+
+    数据源只有标题 / 正文 / 来源 / 链接，事件类型按标题关键词确定性归纳，
+    不做任何语义推断（与项目「数值与分类都来自工具数据」的约定一致）。
+    """
+    events = []
+    for row in news_rows:
+        title = str(row.get("title") or "").strip()
+        if not title:
+            continue
+        when = str(row.get("datetime") or "")
+        desc = " ".join(str(row.get("content") or "").split())
+        etype = _event_type(title)
+        events.append({
+            "type": etype,
+            "date": when[:10],
+            "title": title,
+            "desc": desc[:_EVENT_DESC_CHARS],
+            "important": etype in _EVENT_IMPORTANT_TYPES,
+            "source_url": row.get("url") or "",
+            "source_name": row.get("channels") or row.get("src") or "",
+        })
+    if not events:
+        return None
+    return {
+        "events": events,
+        # 资讯工具只返回当日新闻（见 tools/news.py 的时间过滤），如实标注口径
+        "range": f"当日 · {len(events)} 条",
+        "note": "事件来源：个股资讯（当日）",
+    }
 
 
 def _kline_rows(data: list) -> list:

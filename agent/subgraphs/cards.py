@@ -95,6 +95,35 @@ class CompareCard(_Base):
         return self
 
 
+class ResearchCard(_Base):
+    """研报观点卡（get_research_reports 单行：机构 / 评级 / 报告名称 / 原文链接）。
+
+    东财研报没有目标价与盈利预测调整方向：这两个字段留空由前端降级显示「--」，
+    因此校验只拦「机构与摘要全空」这类无法成卡的行。
+    """
+
+    org: Any | None = None
+    summary: Any | None = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not _filled(self.org) and not _filled(self.summary):
+            raise ValueError("研报卡缺少机构与摘要")
+        return self
+
+
+class EventCard(_Base):
+    """公司事件卡（get_stock_news 折成的事件行，一条一条进时间轴）。"""
+
+    events: Any | None = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not isinstance(self.events, list) or not self.events:
+            raise ValueError("事件卡 events 为空")
+        return self
+
+
 def _validate_symbol_list(payload) -> None:
     """股票搜索候选表：非空列表，每行有 code。"""
     if not isinstance(payload, list) or not payload:
@@ -120,6 +149,8 @@ _CARD_VALIDATORS = {
     "fundflow_card": FundflowCard,
     "report_card": ReportCard,
     "compare_card": CompareCard,
+    "research_card": ResearchCard,
+    "event_card": EventCard,
 }
 
 _TABLE_VALIDATORS = {

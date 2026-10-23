@@ -6,7 +6,7 @@ go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive），自行解 Go
 
 数据源结构（2026-10-23 起）：
 - Go 网关（实时行情/搜索）：get_quote / symbol_search / get_peer_compare
-- akshare（东财/新浪）：估值 / 资金流 / 财报 / 资讯 / 龙虎榜
+- akshare（东财/新浪）：估值 / 资金流 / 财报 / 资讯 / 龙虎榜 / 机构研报
 - baostock：历史日 K（15 个交易日窗口）
 三者都不需要 token，工具全部无条件注册（原 Tushare 的积分门控已删除）。
 2026-10-23 起本函数同时是 MCP 工具源（mcp_servers/stock_server.py 经
@@ -161,9 +161,11 @@ def get_tools() -> list:
     from tools.news import get_stock_news
     from tools.history import get_history_daily
     from tools.lhb import get_top_list
+    from tools.research import get_research_reports
 
     return [
         get_quote, symbol_search, get_peer_compare,
         get_valuation, get_financial_indicator, get_financial_report,
         get_money_flow, get_stock_news, get_history_daily, get_top_list,
+        get_research_reports,
     ]
