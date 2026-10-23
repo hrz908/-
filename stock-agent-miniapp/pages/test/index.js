@@ -96,7 +96,7 @@ Page({
         content: [],
         valuation: {
           peStatic: 28.6,
-          peTTM: 24.18,
+          peTtm: 24.18,
           pb: 8.42,
           ps: 11.6,
           peg: 1.47,

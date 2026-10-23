@@ -55,7 +55,7 @@
       <finance-valuation-card
         wx:elif="{{msg.card === 'valuation'}}"
         card-class="msg-card"
-        pe-ttm="{{msg.valuation.peTTM}}"
+        pe-ttm="{{msg.valuation.peTtm}}"
         pe-static="{{msg.valuation.peStatic}}"
         pb="{{msg.valuation.pb}}"
         ps="{{msg.valuation.ps}}"

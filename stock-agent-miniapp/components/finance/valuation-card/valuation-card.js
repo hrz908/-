@@ -7,7 +7,11 @@ const { fmtNum, fmtPct, fmtAmount } = require('../../../utils/format');
 Component({
   externalClasses: ['card-class'],
   properties: {
-    peTTM: { type: Number, value: null },
+    // 属性名不能用全大写缩略词：微信把 wxml 的 dash-case 转 camelCase 时
+    // 只把连字符后的「首字母」大写——pe-ttm 映射成 peTtm，不是 peTTM。
+    // 写成 peTTM 会让 wxml 传进来的值落空（PE(TTM) 恒显示「--」），
+    // 且组件读不到任何报错。同类命名一律用 peTtm / psTtm 这种首字母大写形式
+    peTtm: { type: Number, value: null },
     peStatic: { type: Number, value: null },
     pb: { type: Number, value: null },
     ps: { type: Number, value: null },
@@ -18,7 +22,7 @@ Component({
     note: { type: String, value: '' }
   },
   data: {
-    peTTMText: '--',
+    peTtmText: '--',
     peStaticText: '--',
     pbText: '--',
     psText: '--',
@@ -39,7 +43,7 @@ Component({
     }
   },
   observers: {
-    'peTTM, peStatic, pb, ps, peg, dividendYield, totalCap'() {
+    'peTtm, peStatic, pb, ps, peg, dividendYield, totalCap'() {
       this.refresh();
     }
   },
@@ -47,7 +51,7 @@ Component({
     refresh() {
       const d = this.data;
       this.setData({
-        peTTMText: fmtNum(d.peTTM),
+        peTtmText: fmtNum(d.peTtm),
         peStaticText: fmtNum(d.peStatic),
         pbText: fmtNum(d.pb),
         psText: fmtNum(d.ps),
