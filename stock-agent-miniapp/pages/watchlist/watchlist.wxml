@@ -9,6 +9,7 @@
     <view class="overview-card">
       <view class="overview-head">
         <text class="overview-title">自选总浮动（今日）</text>
+        <!-- 上涨/下跌标签放回标题行右侧 -->
         <view class="overview-tags">
           <view class="mini-tag mini-tag--up"><text class="num">上涨 {{upCount}}</text></view>
           <view class="mini-tag mini-tag--down"><text class="num">下跌 {{downCount}}</text></view>
@@ -16,10 +17,12 @@
       </view>
       <!-- 盈亏红涨绿跌（A 股习惯），profitClass 由 JS 按符号推导 -->
       <view class="hero-amount num {{profitClass}}">¥ {{totalProfitText}}</view>
-      <view class="hero-desc num">{{totalRateText}} · 已同步 {{syncedAt}}</view>
-      <view class="overview-refresh {{refreshing ? 'overview-refresh--spinning' : ''}}" hover-class="overview-refresh--hover" bindtap="onRefresh">
-        <base-icon icon-class="refresh-icon" name="refresh" size="32rpx" color="var(--ink-2)" />
-        <text class="overview-refresh-text">刷新行情</text>
+      <view class="hero-desc num">
+        <text>{{totalRateText}} · 已同步 {{syncedAt}}</text>
+        <view class="refresh-btn {{refreshing ? 'refresh-btn--spinning' : ''}}" bindtap="onRefresh">
+          <ant-icon class-name="refresh-icon" type="LoopOutline" style="font-size:28rpx;color:var(--ink);" />
+          <text class="refresh-btn-text">刷新</text>
+        </view>
       </view>
     </view>
 
@@ -44,7 +47,7 @@
       <view class="stock-inner">
         <view class="stock-list" wx:if="{{filtered.length > 0}}">
           <view
-            class="stock-row {{swipeDragging ? 'stock-row--dragging' : ''}}"
+            class="stock-row {{swipeDragging ? 'stock-row--dragging' : ''}} {{(index === swipeOpen || (swipeDragging && index === swipeIndex)) ? 'stock-row--action-on' : ''}}"
             wx:for="{{filtered}}"
             wx:for-item="item"
             wx:for-index="index"
@@ -55,12 +58,8 @@
                  后端 NormalizeCode 会统一格式 -->
             <view
               class="stock-row-main {{item.sep ? 'stock-row-main--sep' : ''}}"
-              style="transform: translateX({{index === swipeIndex ? swipeDx : (index === swipeOpen ? -128 : 0)}}px);"
-              hover-class="stock-row-main--hover"
+              style="transform: translateX({{index === swipeIndex ? swipeDx : (index === swipeOpen ? -64 : 0)}}px);"
               data-index="{{index}}"
-              data-code="{{item.code}}"
-              data-name="{{item.name}}"
-              bindtap="onRowMainTap"
               bindtouchstart="onRowTouchStart"
               bindtouchmove="onRowTouchMove"
               bindtouchend="onRowTouchEnd"
@@ -78,22 +77,22 @@
             </view>
             <!-- 左滑露出的删除操作 -->
             <view class="stock-row-action" data-index="{{index}}" bindtap="onDelete">
-              <base-icon name="delete" size="36rpx" color="#FFFFFF" />
+              <ant-icon type="DeleteOutline" style="font-size:36rpx;color:#FFFFFF;" />
               <text class="stock-row-action-text">删除</text>
             </view>
           </view>
         </view>
 
         <!-- 空态 -->
-        <base-empty wx:else text="暂无符合条件的自选股" />
+        <base-empty wx:else icon="StarOutline" text="暂无符合条件的自选股" />
       </view>
     </scroll-view>
   </view>
 
   <!-- 底部主操作：主行动蓝（唯一强调色的合法用途） -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
-    <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
-      <base-icon name="add" size="36rpx" color="#FFFFFF" />
+    <view class="add-btn" bindtap="onAdd">
+      <ant-icon type="AddOutline" style="font-size:36rpx;color:#FFFFFF;" />
       <text class="add-btn-text">添加股票</text>
     </view>
   </view>

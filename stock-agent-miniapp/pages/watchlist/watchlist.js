@@ -63,7 +63,7 @@ function nowHM() {
 // ===== 左滑删除（自绘，替代 t-swipe-cell） =====
 // 操作区宽度（px）：与 .stock-row-action 的 width 保持一致。
 // 触摸坐标是 px，这里必须用 px 而不是 rpx
-const SWIPE_ACTION_W = 128;
+const SWIPE_ACTION_W = 64;
 // 松手时位移超过一半操作区宽度即视为「打开」
 const SWIPE_OPEN_RATIO = 0.5;
 
@@ -132,13 +132,24 @@ Page({
     this.setData({ bottomGap });
   },
 
-  // 进入页面时加载一次。只在首次进入时拉数据，
-  // 从子页面返回时不再重复请求，列表滚动位置也不会被冲掉
+  // 每次进入页面（含从子页返回）都先刷新一次行情。
+  // 静默执行、不弹 toast，避免首次进入与返回都打断用户
   onShow() {
-    if (!this._loaded) {
-      this._loaded = true;
-      this.loadList();
-    }
+    this.refreshOnEnter();
+  },
+
+  refreshOnEnter() {
+    if (this.data.refreshing) return;
+    this.setData({ refreshing: true, errorMsg: '' });
+    api
+      .refresh()
+      .then((data) => {
+        this.setData({ refreshing: false });
+        this.applyData(data);
+      })
+      .catch((err) => {
+        this.setData({ refreshing: false, errorMsg: (err && err.message) || '刷新失败' });
+      });
   },
 
   /* ================= 筛选（段式单选 radio） ================= */
@@ -224,8 +235,10 @@ Page({
     });
   },
 
+  // 关闭时保留 pendingName：弹窗 desc 由它拼出，关闭瞬间清空会让
+  // 面板高度在淡出动画中变矮，出现「缩小残影」；下次打开时会重新赋值
   cancelDelete() {
-    this.setData({ confirmVisible: false, pendingIndex: -1, pendingName: '' });
+    this.setData({ confirmVisible: false, pendingIndex: -1 });
   },
 
   confirmDelete() {
@@ -235,7 +248,7 @@ Page({
     const item = this.data.filtered[index];
     if (!item) return;
 
-    this.setData({ confirmVisible: false, pendingIndex: -1, pendingName: '', loading: true });
+    this.setData({ confirmVisible: false, pendingIndex: -1, loading: true });
     api
       .remove(item.stockCode)
       .then(() => this.loadList())

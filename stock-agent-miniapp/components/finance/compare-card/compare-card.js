@@ -1,13 +1,18 @@
 // 同业对比卡：回答「茅台和五粮液哪个好」「白酒板块谁估值低」
-// 字段口径见设计文档第 2 节⑦。统一口径对比维度 + 差异高亮（标注谁更优），
-// 高亮规则：区间涨幅/ROE/股息率「更高者优」（红），PE「更低者优」（绿）——
-// 与 HTML 视觉稿一致。结论只能陈述事实，不得写成买卖推荐（合规红线）。
-const { fmtNum, fmtPct, fmtPrice } = require('../../../utils/format');
+// 字段口径见设计文档第 2 节⑦。只对比两家同行（本股 + 2 家，共 3 列），
+// 标题形如「A vs B vs C」。着色规则：近1月按正负（加号红 / 减号绿），
+// ROE / 股息率「更高者优」（红），PE「更低者优」（绿）——与 HTML 视觉稿一致。
+// 卡内只陈述客观事实，不写买卖推荐（合规红线）。
+const { fmtNum, fmtPct, fmtPrice, direction } = require('../../../utils/format');
 
-// 对比维度配置：better = 'high' 越高越优 / 'low' 越低越优 / 'none' 不比较高低
+// 最多三个标的：本股 + 两家同行（需求：只对比两家同行，标题 A vs B vs C）
+const MAX_ITEMS = 3;
+
+// 对比维度配置：better = 'high' 越高越优 / 'low' 越低越优 / 'none' 不比较高低；
+// sign = true 的指标（近1月）不比高低，按正负着色：加号红 / 减号绿
 const METRICS = [
   { key: 'price', label: '最新价', better: 'none', fmt: fmtPrice },
-  { key: 'periodPct', label: '近1月', better: 'high', fmt: (v) => fmtPct(v) },
+  { key: 'periodPct', label: '近1月', better: 'none', sign: true, fmt: (v) => fmtPct(v) },
   { key: 'pe', label: 'PE(TTM)', better: 'low', fmt: (v) => fmtNum(v) },
   { key: 'roe', label: 'ROE', better: 'high', fmt: (v) => fmtPct(v) },
   { key: 'dividendYield', label: '股息率', better: 'high', fmt: (v) => fmtPct(v) }
@@ -19,17 +24,17 @@ const WINNER_TONE = { high: 'up', low: 'down' };
 Component({
   externalClasses: ['card-class'],
   properties: {
-    // 2-4 个对比标的 [{ name, price, periodPct, pe, roe, dividendYield }]
+    // 对比标的 [{ name, price, periodPct, pe, roe, dividendYield }]，
+    // 只取前 3 个（本股 + 两家同行）
     items: { type: Array, value: [] },
-    // 一句话事实性结论（调用方给出，只陈述客观事实）
-    conclusion: { type: String, value: '' },
     note: { type: String, value: '' }
   },
   data: {
     title: '',
     subtitle: '',
-    rows: [],
-    tag: ''
+    // 表头列：与 rows 同一批标的（已截断），避免表头列数多于数据列
+    cols: [],
+    rows: []
   },
   observers: {
     items() {
@@ -49,9 +54,10 @@ Component({
   },
   methods: {
     render() {
-      const items = (this.data.items || []).filter((it) => it && it.name);
+      // 只对比两家同行：本股 + 两家同行 = 3 列
+      const items = (this.data.items || []).filter((it) => it && it.name).slice(0, MAX_ITEMS);
       if (items.length < 2) {
-        this.setData({ title: '', subtitle: '', rows: [], tag: '' });
+        this.setData({ title: '', subtitle: '', cols: [], rows: [] });
         return;
       }
 
@@ -72,32 +78,21 @@ Component({
           label: m.label,
           cells: items.map((it, i) => ({
             text: m.fmt(it[m.key]),
-            tone: i === winner ? WINNER_TONE[m.better] : ''
+            // 近1月这类带方向的指标按正负着色：加号红 / 减号绿；其余指标标赢家
+            tone: m.sign ? direction(it[m.key]) : i === winner ? WINNER_TONE[m.better] : ''
           }))
         };
       });
 
-      // 标题：A vs B（超过两个标的时取前两个 + 等 N 个）
-      const names = items.map((it) => it.name);
-      const title = names.slice(0, 2).join(' vs ') + (names.length > 2 ? ' 等' + names.length + '个' : '');
-
-      // 头部标签：PE 更低者（事实陈述，不带建议）
-      const peIdx = this.winnerIndexOf(items, 'pe', 'low');
-      const tag = peIdx >= 0 ? items[peIdx].name + ' PE 更低' : '';
+      // 标题：A vs B vs C（最多三个标的）
+      const title = items.map((it) => it.name).join(' vs ');
 
       this.setData({
         title: title,
         subtitle: '同业对比',
-        rows: rows,
-        tag: tag
+        cols: items,
+        rows: rows
       });
-    },
-    winnerIndexOf(items, key, better) {
-      const valid = items
-        .map((it, i) => ({ v: parseFloat(it[key]), i: i }))
-        .filter((x) => !isNaN(x.v));
-      if (valid.length !== items.length || !valid.length) return -1;
-      return valid.reduce((acc, cur) => (better === 'low' ? (cur.v < acc.v ? cur : acc) : cur.v > acc.v ? cur : acc)).i;
     }
   }
 });

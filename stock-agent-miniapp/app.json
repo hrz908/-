@@ -3,14 +3,8 @@
     "pages/chat/chat",
     "pages/watchlist/watchlist",
     "pages/alerts/alerts",
-    "pages/settings/settings"
-  ],
-  "subPackages": [
-    {
-      "root": "pages/kline",
-      "name": "kline",
-      "pages": ["index"]
-    }
+    "pages/settings/settings",
+    "pages/test/index"
   ],
   "window": {
     "navigationStyle": "custom",

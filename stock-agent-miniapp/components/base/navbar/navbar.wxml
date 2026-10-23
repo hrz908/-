@@ -3,15 +3,14 @@
     <!-- 左侧：返回箭头（leftArrow）或菜单插槽（slot left），二选一。
          插槽不能挂 wx:else（slot 不支持条件渲染指令），改成常驻渲染：
          用返回箭头的子页面不传 left 插槽内容，这里自然为空 -->
+    <!-- 不挂 hover-class：需求取消所有「点一下变暗」的按压特效 -->
     <view
       wx:if="{{leftArrow}}"
       class="nav-btn"
-      hover-class="nav-btn--hover"
-      hover-stay-time="{{60}}"
       aria-label="{{leftAriaLabel}}"
       bindtap="onLeftTap"
     >
-      <base-icon name="arrow-left" size="44rpx" color="var(--ink)" />
+      <ant-icon type="LeftOutline" style="font-size:44rpx;color:var(--ink);" />
     </view>
     <slot name="left" />
 

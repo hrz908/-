@@ -7,7 +7,6 @@
       wx:key="key"
       id="tab-chip-{{i}}"
       class="chip {{i === activeIndex ? 'chip--on' : ''}}"
-      hover-class="chip--hover"
       hover-stay-time="{{60}}"
       data-index="{{i}}"
       bindtap="onChipTap"

@@ -8,7 +8,7 @@
   text-align: left;
 }
 
-/* 底部口径说明（支撑压力 / 行情口径等）左对齐 */
+/* 底部说明（数据日期等）左对齐 */
 .fnote {
   text-align: left;
 }
@@ -50,10 +50,6 @@
   font-weight: 600;
 }
 
-.chip--hover {
-  opacity: 0.85;
-}
-
 /* K 线图：≥180rpx（设计稿②布局要点），SVG 拉伸铺满 */
 .chart {
   margin-top: var(--sp-3);
@@ -64,15 +60,25 @@
   background-size: 100% 100%;
 }
 
-/* ===== 区间指标行 + 底部两行：等距居中（本卡覆盖，共享 _card.wxss 不动） =====
-   等距：四个指标格由共享样式的 flex:1 + gap 均分；底部两行各自等高的行盒，
-   间距由 .fnote 的 line-height 统一给，天然等距。
-   居中：指标标签/数值在各自列里居中；支撑压力与口径说明整行居中。 */
-.fcell-k,
-.fcell-v {
-  text-align: center;            /* 区间涨幅 / 振幅 / MA5 / 量比 居中 */
+/* ===== 区间指标行：等距居中；支撑压力行：整行靠左 =====
+   等距居中：区间涨幅 / 振幅 / MA5 / 量比 四格居中（规则在 _card.wxss）。
+   支撑·压力：标题下方这类「整行文案」按需求靠左，两项依次向左排。
+   K 线图本身（.chart）是唯一的整幅图形，不参与对齐。 */
+.sr-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: var(--gap-grid);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-aux);
+  color: var(--ink-2);
+}
+
+.sr-item {
+  flex: none;
+  text-align: left;
 }
 
 .fnote {
-  text-align: center;            /* 支撑·压力 与 口径说明 两行居中 */
+  text-align: left;              /* 底部说明左对齐 */
 }

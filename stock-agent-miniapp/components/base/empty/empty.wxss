@@ -6,13 +6,10 @@
   padding: var(--sp-6) var(--sp-4);
   gap: var(--sp-1);}
 
-.empty-img {
-  width: 96rpx;
-  height: 96rpx;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  opacity: 0.9;
+/* 空态图标：ant-icon 渲染成 <text>，显式 block 化，避免行内基线留白 */
+.empty-icon {
+  display: block;
+  line-height: 1;
 }
 
 .empty-text {

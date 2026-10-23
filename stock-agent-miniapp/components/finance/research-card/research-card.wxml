@@ -31,8 +31,6 @@
 
   <view class="fnote">
     <view wx:if="{{forecastDir}}">盈利预测：{{forecastDir}}</view>
-    <view wx:if="{{distText}}">近90天评级分布：{{distText}}</view>
-    <view wx:if="{{note}}">{{note}}</view>
     <!-- 来源可追溯：机构名 + 可复制原文链接 -->
     <view wx:if="{{sourceName || sourceUrl}}" class="fnote-src">
       <text wx:if="{{sourceName}}">来源：{{sourceName}}</text>

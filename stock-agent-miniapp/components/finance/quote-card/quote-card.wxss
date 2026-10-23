@@ -1,6 +1,6 @@
 @import "../_card.wxss";
 
-/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+/* 卡片标题左对齐：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
    避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
 .fcard-title-col,
 .fcard-name,
@@ -8,27 +8,26 @@
   text-align: left;
 }
 
-/* 底部口径说明（行情时间 / 数据日期 / 分位口径等）左对齐 */
+/* 底部说明（行情时间 / 数据日期）左对齐 */
 .fnote {
   text-align: left;
 }
 
-/* 价格行：大号价格 + 涨跌幅，基线对齐。
-   题目下方这一行按卡内其他行的同一套规则做「等距居中」：
-   两项各占等宽一列（flex:1），列内文字居中；基线对齐保留。 */
+/* 价格行（标题下方这一行）：整行靠左，价格与涨跌幅依次向左排。
+   基线对齐保留（第1条例外）：价格与百分比按文字基线排是有意选择。 */
 .price-row {
   display: flex;
-  align-items: baseline; /* 第1条例外：价格与百分比按文字基线排是有意选择 */
-  justify-content: center;
+  align-items: baseline;
+  justify-content: flex-start;
   gap: var(--gap-grid);
   margin-top: var(--sp-3);
 }
 
-/* 价格与涨跌幅等宽分列 + 各自居中 */
+/* 价格与涨跌幅都靠左（栅格那两行才是等距居中） */
 .price,
 .chg {
-  flex: 1;
-  text-align: center;
+  flex: none;
+  text-align: left;
 }
 
 /* 价格 32px 级（--fs-price = 64rpx） */
@@ -52,16 +51,12 @@
   height: 88rpx;
 }
 
-/* ===== 两行数据栅格：等距 + 居中（本卡覆盖，共享 _card.wxss 不动） =====
+/* ===== 两行数据栅格：等距 + 居中 =====
    等距：行间距统一由 .fgrid 的 gap 给，关掉第二行自带的 margin-top 防叠加；
-   居中：每格的标签与数值都在自己那一列里水平居中。 */
+   居中：每格标签与数值居中（规则在 _card.wxss，本卡不另写对齐）。 */
 .fgrid {
   gap: var(--gap-grid);          /* 两行之间垂直等距 */
 }
 .fgrid-row--gap {
   margin-top: 0;                 /* 行间距交给 .fgrid 的 gap，避免与 gap 叠加 */
-}
-.fcell-k,
-.fcell-v {
-  text-align: center;            /* 每格标签 / 数值居中 */
 }

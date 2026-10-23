@@ -49,8 +49,5 @@
     </view>
   </view>
 
-  <view class="fnote">
-    <view wx:if="{{marginText !== '--'}}">融资融券余额 {{marginText}}</view>
-    <view wx:if="{{note}}">{{note}}</view>
-  </view>
+  <view wx:if="{{note}}" class="fnote">{{note}}</view>
 </view>

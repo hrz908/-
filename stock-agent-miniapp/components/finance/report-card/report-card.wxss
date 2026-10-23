@@ -1,6 +1,6 @@
 @import "../_card.wxss";
 
-/* 卡片标题居中：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
+/* 卡片标题左对齐：与 _card.wxss 的共享规则同源；写在组件自身 wxss 里，
    避免修改 @import 进来的文件时开发者工具不热更新导致不生效 */
 .fcard-title-col,
 .fcard-name,
@@ -8,78 +8,53 @@
   text-align: left;
 }
 
-/* 底部口径说明（一致预期 / 报告期口径）左对齐 */
+/* 底部说明（数据日期 / 股票代码）左对齐 */
 .fnote {
   text-align: left;
 }
 
-/* 条形数据行：标签 + 槽 + 值（值列固定宽度，右对齐） */
-.bar-row {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-grid);
-  margin-top: var(--sp-2);
-}
-
-.bar-row:first-of-type {
+/* ===== 三项主数据：与资金流向卡「龙虎榜」数据行完全同规格 =====
+   列宽：名称 .rep-k 占 1/2，右侧 .rep-v 占 1/2（内部金额 / 同比各 1/4）；
+   对齐：名称靠左，金额与同比右对齐（数位竖向对齐，金融表格习惯）；
+   行间发丝线、末行不画线；没有「龙虎榜」那样的小标题。
+   原横向条形图（.bar-track / .bar-fill）按需求移除。 */
+.rep-list {
   margin-top: var(--sp-3);
 }
 
-.bar-lb {
-  flex: none;
-  width: 128rpx;
+.rep-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-grid);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--hairline);
+}
+
+.rep-row:last-child {
+  border-bottom: none;
+}
+
+.rep-k {
+  flex: 1;                       /* 名称：整行 1/2 */
+  min-width: 0;
   font-size: var(--fs-aux);
   color: var(--ink-2);
+  text-align: left;
   word-break: break-word;        /* 不裁剪：超长标签换行完整显示 */
 }
 
-.bar-track {
-  flex: 1;
-  height: 12rpx;
-  border-radius: var(--r-tag);
-  background: var(--surface-2);
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: var(--r-tag);
-}
-
-/* 三条主数据配色（视觉稿规格；原先写 linear-gradient 既违反 DESIGN.md 禁止清单，
-   两个端点变量又都未定义导致填充透明；收敛为纯色 + token 收口） */
-.bar-fill--revenue {
-  background: var(--accent-deep);
-}
-
-.bar-fill--profit {
-  background: var(--warn);
-}
-
-.bar-fill--cash {
-  background: var(--flat);
-}
-
-.bar-v {
-  flex: none;
-  /* 加宽数值列：原 220rpx 放不下「1302.46亿 +16.85%」导致换行跳行。
-     数值列变宽后，中间的 .bar-track（flex:1）会自动变短，符合预期。 */
-  width: 280rpx;
-  white-space: nowrap;          /* 兜底：数值与同比始终同一行，绝不跳行 */
-  text-align: right;
+.rep-v {
+  flex: 1;                       /* 金额 + 同比：合计整行 1/2 */
+  display: flex;
+  gap: var(--gap-grid);
   font-size: var(--fs-aux);
   color: var(--ink);
 }
 
-.bar-yoy {
-  margin-left: var(--sp-1);
-}
-
-/* 信息居中：条形行标签与数值列（数值列原右对齐改居中） */
-.bar-lb {
-  text-align: center;
-}
-
-.bar-v {
-  text-align: center;
+/* 金额与同比各占整行 1/4，统一右对齐 */
+.rep-amt,
+.rep-yoy {
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;           /* 兜底：数值不跳行 */
 }

@@ -2,7 +2,7 @@
 // 字段口径见设计文档第 2 节①；props 收展示数据，组件内只做
 // 显示格式化（utils/format.js），不做业务判断。
 // 涨跌方向由 changePct 正负自动推导（执行指南第 6 节：不手写 class）。
-const { fmtPrice, fmtSign, fmtPct, fmtAmount, direction } = require('../../../utils/format');
+const { fmtPrice, fmtSign, fmtPct, fmtAmount, fmtNum, direction } = require('../../../utils/format');
 
 Component({
   externalClasses: ['card-class'],
@@ -29,7 +29,7 @@ Component({
     points: { type: Array, value: [] },
     // 悬浮标签 [{ text, theme }]，theme: '' | 'hot' | 'gold'
     tags: { type: Array, value: [] },
-    // 口径说明（时间 / 数据来源）
+    // 底部说明（行情时间 / 数据日期）
     note: { type: String, value: '' }
   },
   data: {

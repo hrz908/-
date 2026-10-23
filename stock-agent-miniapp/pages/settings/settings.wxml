@@ -6,54 +6,24 @@
   <view class="content">
     <!-- 个人信息：整块可点，打开编辑资料弹窗。
          不用头像组件：没图时就是一块次级面底色 + user 图标，比组件内置小圆干净 -->
-    <view class="profile-card" hover-class="profile-card--hover" bindtap="onProfileTap">
+    <view class="profile-card" bindtap="onProfileTap">
       <image wx:if="{{avatar}}" class="profile-avatar" src="{{avatar}}" mode="aspectFill" />
       <view wx:else class="profile-avatar profile-avatar--empty">
-        <base-icon name="user" size="56rpx" color="var(--ink-3)" />
+        <ant-icon type="UserOutline" style="font-size:56rpx;color:var(--ink-3);" />
       </view>
       <view class="profile-info">
         <view class="profile-nickname">{{nickname}}</view>
         <view class="profile-desc">点击编辑头像与昵称</view>
       </view>
-      <base-icon name="chevron-right" size="36rpx" color="var(--ink-3)" />
     </view>
 
-    <!-- 偏好设置：自绘分组卡片 + 原生 switch（仅可改 color） -->
-    <view class="pref-group">
-      <view class="group-title">偏好设置</view>
-      <view class="pref-card">
-        <view class="pref-row">
-          <view class="pref-icon-wrap {{pushEnabled ? 'pref-icon-wrap--on' : ''}}">
-            <base-icon
-              name="notification"
-              size="40rpx"
-              color="{{pushEnabled ? 'var(--primary-fg)' : 'var(--ink-3)'}}"
-            />
-          </view>
-          <view class="pref-text">
-            <view class="pref-title">消息推送</view>
-            <view class="pref-desc">接收订单状态与活动提醒</view>
-          </view>
-          <!-- 原生 switch 的 color 只接受具体色值、不解析 var()，
-               这里与设计 token --ink (#09090b，shadcn 选中态近黑) 保持一致 -->
-          <switch
-            class="pref-switch"
-            color="#09090b"
-            checked="{{pushEnabled}}"
-            bindchange="onTogglePush"
-          />
-        </view>
-      </view>
-    </view>
+    <!-- 消息推送卡片按需求整块移除（偏好设置组随之消失，pushEnabled 相关
+         逻辑在 settings.js 同步删掉），页面只留「个人资料 + 退出登录」 -->
   </view>
 
   <!-- 底部操作区：absolute 定位随页面转场移动，bottom 由安全区算出 -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
-    <view
-      class="footer-btn footer-btn--danger"
-      hover-class="footer-btn--danger-hover"
-      bindtap="onLogout"
-    >退出登录</view>
+    <view class="footer-btn footer-btn--danger" bindtap="onLogout">退出登录</view>
     <view class="footer-hint">退出后下次打开小程序会自动登录</view>
   </view>
 
@@ -78,7 +48,7 @@
       >
         <image wx:if="{{editAvatar}}" class="edit-avatar" src="{{editAvatar}}" mode="aspectFill" />
         <view wx:else class="edit-avatar edit-avatar--empty">
-          <base-icon name="user" size="64rpx" color="var(--ink-3)" />
+          <ant-icon type="UserOutline" style="font-size:64rpx;color:var(--ink-3);" />
         </view>
       </button>
 
@@ -106,7 +76,7 @@
         <view wx:if="{{nicknameTip}}" class="edit-tip">{{nicknameTip}}</view>
 
         <view class="nickname-action">
-          <view class="nickname-link" hover-class="nickname-link--hover" bindtap="fillWechatNickname">
+          <view class="nickname-link" bindtap="fillWechatNickname">
             使用微信昵称
           </view>
         </view>

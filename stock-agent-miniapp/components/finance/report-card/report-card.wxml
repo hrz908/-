@@ -1,47 +1,39 @@
-<!-- 财报速览卡：营收/净利/现金流横向条形对比（条长按三者最大值归一），
-     底部四列比率栅格；一致预期对比只出「超预期/不及预期」事实标签 -->
+<!-- 财报速览卡：营收 / 归母净利 / 经营现金流按「龙虎榜行」格式排——
+     名称占 1/2 靠左，金额与同比合计占 1/2 且右对齐，行间发丝线，无小标题；
+     底部四列比率栅格等距居中；最下方补数据日期（与其它卡片同一写法） -->
 <view class="fcard card-class">
   <view class="fcard-hd">
     <view class="fcard-title-col">
       <view class="fcard-name">{{periodLabel}} · 业绩速览</view>
-      <view class="fcard-code num">报告期 {{period}}</view>
     </view>
 
   </view>
 
-  <!-- 营业收入 -->
-  <view class="bar-row">
-    <text class="bar-lb">营业收入</text>
-    <view class="bar-track">
-      <view class="bar-fill bar-fill--revenue" style="width: {{revenueBar.width}};"></view>
+  <!-- 三项主数据：与龙虎榜数据行同规格——名称占 1/2 靠左，
+       后面金额与同比合计占 1/2（各 1/4）且右对齐，行间发丝线 -->
+  <view class="rep-list">
+    <view class="rep-row">
+      <text class="rep-k">营业收入</text>
+      <view class="rep-v">
+        <text class="num rep-amt">{{revenueRow.value}}</text>
+        <text class="num rep-yoy {{revenueRow.yoyDir}}">{{revenueRow.yoy}}</text>
+      </view>
     </view>
-    <view class="bar-v">
-      <text class="num">{{revenueBar.value}}</text>
-      <text class="num bar-yoy {{revenueBar.yoyDir}}">{{revenueBar.yoy}}</text>
-    </view>
-  </view>
 
-  <!-- 归母净利润 -->
-  <view class="bar-row">
-    <text class="bar-lb">归母净利</text>
-    <view class="bar-track">
-      <view class="bar-fill bar-fill--profit" style="width: {{profitBar.width}};"></view>
+    <view class="rep-row">
+      <text class="rep-k">归母净利</text>
+      <view class="rep-v">
+        <text class="num rep-amt">{{profitRow.value}}</text>
+        <text class="num rep-yoy {{profitRow.yoyDir}}">{{profitRow.yoy}}</text>
+      </view>
     </view>
-    <view class="bar-v">
-      <text class="num">{{profitBar.value}}</text>
-      <text class="num bar-yoy {{profitBar.yoyDir}}">{{profitBar.yoy}}</text>
-    </view>
-  </view>
 
-  <!-- 经营活动现金流 -->
-  <view class="bar-row">
-    <text class="bar-lb">经营现金流</text>
-    <view class="bar-track">
-      <view class="bar-fill bar-fill--cash" style="width: {{cashBar.width}};"></view>
-    </view>
-    <view class="bar-v">
-      <text class="num">{{cashBar.value}}</text>
-      <text class="num bar-yoy {{cashBar.yoyDir}}">{{cashBar.yoy}}</text>
+    <view class="rep-row">
+      <text class="rep-k">经营现金流</text>
+      <view class="rep-v">
+        <text class="num rep-amt">{{cashRow.value}}</text>
+        <text class="num rep-yoy {{cashRow.yoyDir}}">{{cashRow.yoy}}</text>
+      </view>
     </view>
   </view>
 
@@ -66,8 +58,5 @@
     </view>
   </view>
 
-  <view class="fnote">
-    <view>同比为报告期对同期口径；一致预期值 {{consensusText}}</view>
-    <view wx:if="{{note}}">{{note}}</view>
-  </view>
+  <view wx:if="{{note}}" class="fnote">{{note}}</view>
 </view>

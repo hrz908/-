@@ -23,8 +23,13 @@
   gap: var(--gap-grid);
 }
 
+/* 单格内部左右对齐：文字靠左、数字靠右 */
 .overview-cell {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
   padding: var(--sp-3) var(--pad-card);
   background: var(--surface);
   border: var(--hairline);
@@ -32,16 +37,23 @@
 }
 
 .g-num {
+  flex: none;
   font-size: var(--fs-hero);
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.1;
   color: var(--ink);
+  text-align: right;
 }
 
+/* 标签文字：加大一档（caption -> body），不加粗 */
 .g-label {
-  margin-top: var(--sp-1);
-  font-size: var(--fs-aux);
-  color: var(--ink-3);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 400;
+  color: var(--ink);
+  text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* ===== 分组标题 ===== */
@@ -73,11 +85,11 @@
 
 /* ===== 提醒卡 ===== */
 .alert-card {
-  padding: var(--pad-card);
+  padding: var(--sp-3);
   background: var(--surface);
   border: var(--hairline);
   border-radius: var(--r-card);
-  min-height: 96rpx;
+  min-height: 80rpx;
 }
 
 .alert-card-head {
@@ -101,27 +113,29 @@
   color: var(--ink-3);
 }
 
-/* 删除入口：次级文字 + 图标，弱化处理（不是主操作） */
-.alert-card-edit {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
+/* 编辑入口：价格行内右对齐的纯文字按键（打开编辑弹窗） */
+.alert-card-editbtn {
   flex: none;
-  min-height: 88rpx;
-}
-
-.alert-card-edit-text {
+  margin-left: auto;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-3);
   font-size: var(--fs-aux);
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
-/* 大号阈值：价格级字号，等宽 + 涨跌色 */
+/* 大号阈值：价格级字号，等宽 + 涨跌色；行尾放删除按键 */
 .alert-card-price {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+/* 删除入口：头部右上角纯文字（已移除垃圾桶图标），危险红 */
+.alert-card-delbtn {
+  flex: none;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-3);
+  font-size: var(--fs-aux);
+  color: var(--danger);
 }
 
 .alert-card-price-text {
@@ -131,69 +145,11 @@
 }
 
 .alert-card-desc {
-  margin-top: var(--sp-2);
+  margin-top: var(--sp-1);
   font-size: var(--fs-aux);
   color: var(--ink-2);
-  line-height: 1.6;
+  line-height: 1.4;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-}
-
-.alert-card-divider {
-  height: 0;
-  margin: var(--sp-3) 0;
-  border-top: var(--hairline);
-}
-
-.alert-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-
-.alert-card-time {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: var(--fs-min);
-  color: var(--ink-3);
-}
-
-/* 状态标签：小药丸（设计稿 .tag 规格） */
-.a-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  padding: 4rpx 12rpx;
-  border-radius: var(--r-pill);
-  border: var(--hairline);
-  background: var(--surface-2);
-  font-size: var(--fs-min);
-  white-space: nowrap;
-}
-
-.a-tag-text {
-  color: var(--ink-2);
-}
-
-/* 已触发：未触发=中性；触发后跟随涨跌语义（跌=绿、涨=红）。
-   浅底上用淡色底 + 同色系淡描边，深底那套深描边在白卡上会发脏 */
-.a-tag--danger {
-  border-color: var(--up-border);
-  background: var(--up-tint);
-}
-
-.a-tag--danger .a-tag-text {
-  color: var(--up);
-}
-
-.a-tag--success {
-  border-color: var(--down-border);
-  background: var(--down-tint);
-}
-
-.a-tag--success .a-tag-text {
-  color: var(--down);
 }
 
 /* ===== 底部「新增提醒」 ===== */
@@ -221,10 +177,6 @@
   font-weight: 600;
   /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
   color: var(--primary-fg); /* 深色底上的浅色文字 */
-}
-
-.add-btn--hover {
-  opacity: 0.88;
 }
 
 /* ===== 新增提醒表单 ===== */
@@ -279,10 +231,6 @@
   border-radius: 50%;
 }
 
-.input-clear--hover {
-  background: var(--surface-2);
-}
-
 .form-input-placeholder {
   color: var(--ink-3);
   font-size: var(--fs-body);
@@ -320,12 +268,7 @@
   border-radius: var(--r-tag);
 }
 
-.option-row--hover {
-  border-color: var(--line);
-}
-
-/* 原生 picker 触发区：hover-class 加在 picker 根节点上，
-   需要透传一层改内部行的边框色（WXSS 没有 :has，只能这样写） */
+/* 原生 picker 触发区（按压态按需求取消，不再有 --hover 变暗） */
 .option-picker {
   display: block;
   width: 100%;

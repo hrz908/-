@@ -194,6 +194,7 @@ base/toast/toast.wxss:4-16      | .toast                      | 第2条 | P2 | l
 ```
 
 **完全合规**：`base/icon`（inline-flex 双轴居中，按压态由父级 hover-class 提供）。
+（2026-10-23：图标已整体换成 antd-mini 的 `ant-icon`，该组件已删除，本条仅存档。）
 
 ---
 

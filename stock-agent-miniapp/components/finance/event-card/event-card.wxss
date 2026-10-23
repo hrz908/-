@@ -8,7 +8,7 @@
   text-align: left;
 }
 
-/* 底部口径说明（影响口径 / 事件来源）左对齐 */
+/* 底部说明（事件来源）左对齐 */
 .fnote {
   text-align: left;
 }
@@ -99,11 +99,11 @@
   display: inline-flex; align-items: center; min-height: 88rpx;
 }
 
-/* 时间轴内容居中（正文居中，日期与原文链接居中成组） */
+/* 时间轴内容全部左对齐（标题 / 描述 / 正文），日期与原文链接靠左成组 */
 .evt-body {
-  text-align: center;
+  text-align: left;
 }
 
 .evt-foot {
-  justify-content: center;
+  justify-content: flex-start;
 }

@@ -7,9 +7,10 @@
   <view class="content">
     <!-- 概览宫格：两格（全部提醒 / 今日触发），自绘替代 t-grid -->
     <view class="overview">
+      <!-- 文字在左、数字在右（左右对齐），文字加大加粗 -->
       <view class="overview-cell" wx:for="{{stats}}" wx:for-item="s" wx:key="key">
-        <view class="g-num num">{{s.num}}</view>
         <view class="g-label">{{s.label}}</view>
+        <view class="g-num num">{{s.num}}</view>
       </view>
     </view>
 
@@ -19,49 +20,34 @@
     <!-- 提醒列表：只有这一个容器内部滚动，底边停在「新增提醒」按钮上方 -->
     <scroll-view class="list-scroll" scroll-y enhanced="{{true}}" show-scrollbar="{{false}}">
       <view wx:if="{{alerts.length > 0}}" class="alert-list">
-        <!-- 每条提醒一张卡片：头部（股票）→ 大号阈值 → 条件描述 → 分割线 → 底部（时间 + 状态标签） -->
+        <!-- 每条提醒一张卡片：头部（股票 + 编辑）→ 大号阈值（+ 删除）→ 条件描述 -->
         <view class="alert-card" wx:for="{{alerts}}" wx:for-item="item" wx:key="id">
           <view class="alert-card-head">
             <view class="alert-card-name">{{item.name}}<text class="alert-card-code num">{{item.code}}</text></view>
-            <!-- 删除：二次确认后直接删除该提醒。catchtap 可用——本节点没有可点击的子元素 -->
-            <view class="alert-card-edit" data-id="{{item.id}}" catchtap="onDelete">
-              <base-icon name="delete" size="32rpx" color="var(--ink-3)" />
-              <text class="alert-card-edit-text">删除</text>
-            </view>
+            <!-- 删除：头部右上角纯文字（已移除垃圾桶图标），二次确认后删除 -->
+            <view class="alert-card-delbtn" data-id="{{item.id}}" catchtap="onDelete">删除</view>
           </view>
 
           <view class="alert-card-price">
-            <base-icon name="{{item.trendIcon}}" size="56rpx" color="{{item.trendColor}}" />
+            <ant-icon type="{{item.trendIcon}}" style="font-size:56rpx;color:{{item.trendColor}};" />
             <text class="alert-card-price-text num" style="color: {{item.trendColor}};">{{item.priceText}}</text>
+            <!-- 编辑：价格行内右对齐，打开编辑弹窗 -->
+            <view class="alert-card-editbtn" data-id="{{item.id}}" catchtap="onEdit">编辑</view>
           </view>
 
           <view class="alert-card-desc">{{item.desc}}</view>
-
-          <view class="alert-card-divider" />
-
-          <view class="alert-card-foot">
-            <view class="alert-card-time">
-              <base-icon name="time" size="28rpx" color="var(--ink-3)" />
-              <text class="num">{{item.time}}</text>
-            </view>
-            <!-- 状态标签：自绘小药丸，triggerTheme 决定配色 -->
-            <view class="a-tag a-tag--{{item.triggerTheme}}">
-              <base-icon name="{{item.trendIcon}}" size="24rpx" color="{{item.trendColor}}" />
-              <text class="a-tag-text">{{item.triggerText}}</text>
-            </view>
-          </view>
         </view>
       </view>
 
       <!-- 空态 -->
-      <base-empty wx:else text="暂无提醒" />
+      <base-empty wx:else icon="BellOutline" text="暂无提醒" />
     </scroll-view>
   </view>
 
   <!-- 底部操作区 -->
   <view class="bottom-btn" style="bottom: {{bottomGap}}px;">
-    <view class="add-btn" hover-class="add-btn--hover" bindtap="onAdd">
-      <base-icon name="add" size="36rpx" color="#FFFFFF" />
+    <view class="add-btn" bindtap="onAdd">
+      <ant-icon type="AddOutline" style="font-size:36rpx;color:#FFFFFF;" />
       <text class="add-btn-text">新增提醒</text>
     </view>
   </view>
@@ -82,21 +68,22 @@
     bind:mask="cancelDelete"
   />
 
-  <!-- ========== 新增提醒弹窗（base-popup center 承载表单） ========== -->
+  <!-- ========== 新增/编辑提醒弹窗（base-popup center 承载表单） ========== -->
   <base-popup
     visible="{{popupVisible}}"
     mode="center"
-    title="新增提醒"
-    confirm-text="确认添加"
+    title="{{editingId ? '编辑提醒' : '新增提醒'}}"
+    confirm-text="{{editingId ? '保存修改' : '确认添加'}}"
     cancel-text="取消"
     bind:confirm="onPopupConfirm"
     bind:cancel="onPopupCancel"
     bind:mask="onPopupCancel"
   >
     <view slot="content" class="alert-form">
-      <!-- ===== 区域 1：选股（搜索框 + 结果下拉） =====
-           本页只有新增没有编辑（后端不支持改股票的提醒代码），
-           因此不存在「已带股票且不可更换」的态，搜索框始终可用 -->
+      <!-- ===== 区域 1：选股 =====
+           编辑模式股票固定不可换（后端不支持改提醒的股票代码），
+           只显示只读已选行；新增模式才有搜索框与可清除的已选行 -->
+      <block wx:if="{{!editingId}}">
       <view class="search-field">
         <view class="form-label">选择股票</view>
         <view class="input-wrap">
@@ -108,8 +95,8 @@
             bindinput="onSearchInput"
           />
           <!-- 清除按钮：原生 input 没有内建清除，自绘一个 -->
-          <view wx:if="{{searchKeyword}}" class="input-clear" hover-class="input-clear--hover" bindtap="onSearchClear">
-            <base-icon name="close" size="24rpx" color="var(--ink-3)" />
+          <view wx:if="{{searchKeyword}}" class="input-clear" bindtap="onSearchClear">
+            <ant-icon type="CloseOutline" style="font-size:24rpx;color:var(--ink-3);" />
           </view>
         </view>
         <!-- 下拉联想结果 -->
@@ -133,7 +120,13 @@
       <!-- 已选中股票：点右侧 x 清除重新选 -->
       <view wx:if="{{selectedStock}}" class="selected-stock" bindtap="onClearStock">
         <text class="selected-stock-text num">{{selectedStock.name}} ({{selectedStock.market}}{{selectedStock.code}})</text>
-        <base-icon name="close" size="32rpx" color="var(--ink-3)" />
+        <ant-icon type="CloseOutline" style="font-size:32rpx;color:var(--ink-3);" />
+      </view>
+      </block>
+
+      <!-- 编辑模式：股票只读展示，不可更换 -->
+      <view wx:if="{{editingId}}" class="selected-stock">
+        <text class="selected-stock-text num">{{selectedStock.name}} ({{selectedStock.code}})</text>
       </view>
 
       <!-- ===== 区域 2：触发条件 =====
@@ -148,14 +141,13 @@
           range="{{conditionOptions}}"
           range-key="label"
           value="{{conditionIndex}}"
-          hover-class="option-row--hover"
           bindchange="onConditionChange"
         >
           <view class="option-row">
             <text class="option-label">触发条件</text>
             <view class="option-value">
               <text class="option-value-text">{{conditionText}}</text>
-              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+              <ant-icon type="RightOutline" style="font-size:28rpx;color:var(--ink-3);" />
             </view>
           </view>
         </picker>
@@ -189,14 +181,13 @@
           range="{{volumeBaseOptions}}"
           range-key="label"
           value="{{volumeBaseIndex}}"
-          hover-class="option-row--hover"
           bindchange="onVolumeBaseChange"
         >
           <view class="option-row">
             <text class="option-label">基准周期</text>
             <view class="option-value">
               <text class="option-value-text">{{volumeBaseText}}</text>
-              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+              <ant-icon type="RightOutline" style="font-size:28rpx;color:var(--ink-3);" />
             </view>
           </view>
         </picker>
@@ -210,14 +201,13 @@
           range="{{frequencyOptions}}"
           range-key="label"
           value="{{frequencyIndex}}"
-          hover-class="option-row--hover"
           bindchange="onFrequencyChange"
         >
           <view class="option-row">
             <text class="option-label">检查频率</text>
             <view class="option-value">
               <text class="option-value-text">{{frequencyText}}</text>
-              <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+              <ant-icon type="RightOutline" style="font-size:28rpx;color:var(--ink-3);" />
             </view>
           </view>
         </picker>

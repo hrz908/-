@@ -99,53 +99,28 @@ function priceTextOf(a) {
   return `${a.threshold} 倍`;
 }
 
+// 趋势图标：直接给 ant-icon 的 type（antd-mini 图标集）
 function trendIconOf(a) {
-  if (a.conditionType === 'priceUp' || a.conditionType === 'pctUp') return 'arrow-up';
-  if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'arrow-down';
-  return 'chart-bar';
+  if (a.conditionType === 'priceUp' || a.conditionType === 'pctUp') return 'UpOutline';
+  if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'DownOutline';
+  return 'HistogramOutline';
 }
 
 // 趋势颜色跟随涨跌：突破 / 涨幅用红，跌破 / 跌幅用绿，成交量保持红。
-// 颜色名走新 token（--up/--down），由 base-icon 的 COLOR_VARS 映射成具体色值
+// 颜色名走新 token（--up/--down），内联到 ant-icon 的 style 里由页面解析
 function trendColorOf(a) {
   if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'var(--down)';
   return 'var(--up)';
 }
 
-// 状态标签配色：已触发时跟随涨跌（跌 = 绿、涨 = 红），未触发用中性灰
-function triggerThemeOf(a) {
-  if (!a.triggered) return 'default';
-  if (a.conditionType === 'priceDown' || a.conditionType === 'pctDown') return 'success';
-  return 'danger';
-}
-
-// 触发时间文案：今天 ->「今日 HH:mm 触发」，昨天 ->「昨日 HH:mm 触发」，
-// 一个月内 ->「N 天前触发」，更早 ->「M月D日 HH:mm 触发」；没触发过 ->「未触发」
-function timeTextOf(a) {
-  const d = parseDate(a.lastTriggeredAt);
-  if (!d) return '未触发';
-  const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  // 只按日期算天数差：「昨天 23:50」和「今天 00:10」隔了一天，不能按时间戳整除
-  const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.floor((startOfDay(new Date()) - startOfDay(d)) / 86400000);
-  if (days === 0) return `今日 ${hm} 触发`;
-  if (days === 1) return `昨日 ${hm} 触发`;
-  if (days < 30) return `${days} 天前触发`;
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hm} 触发`;
-}
-
-// 接口返回的提醒 -> 卡片渲染结构，各段文案在这里算好，WXML 直接取
+// 接口返回的提醒 -> 卡片渲染结构，各段文案在这里算好，WXML 直接取。
+// 触发状态标签与触发时间已按需求移除，不再派生 triggerText/time 字段
 function decorate(a) {
-  const item = Object.assign({}, a, { triggered: !!a.lastTriggeredAt });
-  return Object.assign(item, {
-    desc: describeAlert(item),
-    priceText: priceTextOf(item),
-    trendIcon: trendIconOf(item),
-    trendColor: trendColorOf(item),
-    triggerText: item.triggered ? '已触发' : '未触发',
-    triggerTheme: triggerThemeOf(item),
-    time: timeTextOf(item)
+  return Object.assign({}, a, {
+    desc: describeAlert(a),
+    priceText: priceTextOf(a),
+    trendIcon: trendIconOf(a),
+    trendColor: trendColorOf(a)
   });
 }
 
@@ -160,8 +135,10 @@ Page({
     deleteVisible: false,
     deleteDesc: '',
 
-    // ===== 新增提醒弹窗状态 =====
+    // ===== 新增/编辑提醒弹窗状态 =====
+    // editingId > 0 表示编辑模式：复用同一张表单回填，股票不可换
     popupVisible: false,
+    editingId: 0,
     searchKeyword: '',
     searchResults: [],
     selectedStock: null,        // { name, code }
@@ -225,9 +202,66 @@ Page({
 
   /* ================= 新增提醒弹窗 ================= */
 
-  // 打开「新增」弹窗（表单不再滚动，高度由 dialog 自己撑）
+  // 打开「新增」弹窗（表单不再滚动，高度由 dialog 自己撑）。
+  // 表单在此重置为空，而不是在关闭时重置——关闭时若清零，淡出动画期间
+  // 输入框 / 已选股票会瞬间变空，出现「闪一下」
   onAdd() {
-    this.setData({ popupVisible: true });
+    this.setData({
+      popupVisible: true,
+      editingId: 0,
+      searchKeyword: '',
+      searchResults: [],
+      selectedStock: null,
+      conditionType: 'priceUp',
+      conditionText: CONDITION_OPTIONS[0].label,
+      conditionIndex: CONDITION_OPTIONS.findIndex((o) => o.value === 'priceUp'),
+      threshold: '',
+      thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
+      thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,
+      volumeBase: 20,
+      volumeBaseText: '20日均量',
+      volumeBaseIndex: VOLUME_BASE_OPTIONS.findIndex((o) => o.value === 20),
+      checkFrequency: 'realtime',
+      frequencyText: FREQUENCY_OPTIONS[0].label,
+      frequencyIndex: FREQUENCY_OPTIONS.findIndex((o) => o.value === 'realtime')
+    });
+  },
+
+  // 卡片右上「编辑」：复用新增表单回填当前值，股票只读不可换
+  // （后端 PUT /api/v1/alerts/:id 只支持改条件/阈值/基准周期/频率）
+  onEdit(e) {
+    const id = Number((e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || 0);
+    if (!id) return;
+    const target = this.data.alerts.filter((a) => a.id === id)[0];
+    if (!target) return;
+
+    const cfg = THRESHOLD_CONFIG[target.conditionType] || THRESHOLD_CONFIG.priceUp;
+    const condOpt = CONDITION_OPTIONS.filter((o) => o.value === target.conditionType)[0];
+    const condIdx = CONDITION_OPTIONS.findIndex((o) => o.value === target.conditionType);
+    const vb = target.volumeBase || 20;
+    const vbOpt = VOLUME_BASE_OPTIONS.filter((o) => o.value === vb)[0];
+    const vbIdx = VOLUME_BASE_OPTIONS.findIndex((o) => o.value === vb);
+    const freq = target.checkFrequency || 'realtime';
+    const freqOpt = FREQUENCY_OPTIONS.filter((o) => o.value === freq)[0];
+    const freqIdx = FREQUENCY_OPTIONS.findIndex((o) => o.value === freq);
+
+    this.setData({
+      popupVisible: true,
+      editingId: id,
+      selectedStock: { name: target.name, code: target.code },
+      conditionType: target.conditionType,
+      conditionText: condOpt ? condOpt.label : CONDITION_OPTIONS[0].label,
+      conditionIndex: condIdx >= 0 ? condIdx : 0,
+      threshold: String(target.threshold),
+      thresholdPlaceholder: cfg.placeholder,
+      thresholdUnit: cfg.unit,
+      volumeBase: vb,
+      volumeBaseText: vbOpt ? vbOpt.label : '20日均量',
+      volumeBaseIndex: vbIdx >= 0 ? vbIdx : 2,
+      checkFrequency: freq,
+      frequencyText: freqOpt ? freqOpt.label : FREQUENCY_OPTIONS[0].label,
+      frequencyIndex: freqIdx >= 0 ? freqIdx : 0
+    });
   },
 
   // 卡片右上「删除」：二次确认后直接删除该提醒（不再进编辑弹窗）。
@@ -244,16 +278,18 @@ Page({
     });
   },
 
+  // 关闭时保留 deleteDesc：desc 被清空会让面板高度在淡出动画中变矮，
+  // 出现「缩小残影」；下次 onDelete 打开时会重新赋值
   cancelDelete() {
     this._pendingDeleteId = 0;
-    this.setData({ deleteVisible: false, deleteDesc: '' });
+    this.setData({ deleteVisible: false });
   },
 
   confirmDelete() {
     const id = this._pendingDeleteId;
     if (!id || this._submitting) return;
     this._submitting = true;
-    this.setData({ deleteVisible: false, deleteDesc: '' });
+    this.setData({ deleteVisible: false });
     alertApi
       .remove(id)
       .then(() => {
@@ -280,27 +316,12 @@ Page({
     this._closePopup();
   },
 
-  // 关闭弹窗并重置表单
+  // 关闭弹窗：只隐藏，不重置表单字段，也不清零 editingId。
+  // 表单在 onAdd 打开时重置、在 onEdit 打开时回填；editingId 同理由下次打开决定。
+  // 这里若把 editingId 置 0，编辑态的只读股票行会在淡出动画期间被 wx:if 切回
+  // 新增态的搜索框，内容当场互换，造成「闪一下」
   _closePopup() {
-    this.setData({
-      popupVisible: false,
-      searchKeyword: '',
-      searchResults: [],
-      selectedStock: null,
-      conditionType: 'priceUp',
-      conditionText: CONDITION_OPTIONS[0].label,
-      // 回显反查下标：原生 picker 只认索引，不给就永远显示第一项（坑 1 的回显侧）
-      conditionIndex: CONDITION_OPTIONS.findIndex((o) => o.value === 'priceUp'),
-      threshold: '',
-      thresholdPlaceholder: THRESHOLD_CONFIG.priceUp.placeholder,
-      thresholdUnit: THRESHOLD_CONFIG.priceUp.unit,
-      volumeBase: 20,
-      volumeBaseText: '20日均量',
-      volumeBaseIndex: VOLUME_BASE_OPTIONS.findIndex((o) => o.value === 20),
-      checkFrequency: 'realtime',
-      frequencyText: FREQUENCY_OPTIONS[0].label,
-      frequencyIndex: FREQUENCY_OPTIONS.findIndex((o) => o.value === 'realtime')
-    });
+    this.setData({ popupVisible: false });
   },
 
   // ----- 选股搜索（复用自选股的搜索接口，带 300ms 防抖） -----
@@ -404,8 +425,9 @@ Page({
 
   // ----- 表单校验 -----
   _validateForm() {
-    const { selectedStock, threshold, conditionType } = this.data;
-    if (!selectedStock) {
+    const { selectedStock, threshold, conditionType, editingId } = this.data;
+    // 编辑模式股票固定，无需校验
+    if (!editingId && !selectedStock) {
       return '请先选择一只股票';
     }
     const numVal = parseFloat(threshold);
@@ -426,7 +448,7 @@ Page({
     return null;
   },
 
-  // ----- 确认按钮（新增提醒）-----
+  // ----- 确认按钮（新增 / 编辑）-----
   onPopupConfirm() {
     // 校验
     const errMsg = this._validateForm();
@@ -435,22 +457,37 @@ Page({
       return;
     }
 
-    const payload = this._payload();
-
     // 连点保护：请求回来之前不再发第二次
     if (this._submitting) return;
     this._submitting = true;
 
-    alertApi
-      .create(payload)
-      .then(() => {
+    // 编辑模式：只提交可改字段（条件/阈值/基准周期/频率），股票不可换
+    let req;
+    if (this.data.editingId) {
+      req = alertApi
+        .update(this.data.editingId, {
+          conditionType: this.data.conditionType,
+          threshold: parseFloat(this.data.threshold),
+          volumeBase: this.data.conditionType === 'volume' ? this.data.volumeBase : 0,
+          checkFrequency: this.data.checkFrequency
+        })
+        .then(() => {
+          this.toast('提醒已更新');
+          this._closePopup();
+          this.loadList();
+        });
+    } else {
+      req = alertApi.create(this._payload()).then(() => {
         this.toast('提醒添加成功');
         this._closePopup();
         this.loadList();
-      })
+      });
+    }
+
+    req
       .catch((err) => {
         // 409「该股票的该条件提醒已存在」这类文案后端已写好，直接用它的
-        this.toast((err && err.message) || '添加提醒失败');
+        this.toast((err && err.message) || '保存失败');
       })
       .then(() => {
         this._submitting = false;

@@ -12,10 +12,10 @@
   "type": "commonjs",
   "dependencies": {
     "@qiun/ucharts": "^2.5.0-20230101",
+    "antd-mini": "^3.4.3",
     "marked": "^4.0.0"
   },
   "devDependencies": {
-    "@babel/parser": "^8.0.7",
-    "lucide-static": "^1.61.0"
+    "@babel/parser": "^8.0.7"
   }
 }

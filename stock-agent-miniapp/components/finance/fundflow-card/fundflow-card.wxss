@@ -8,7 +8,7 @@
   text-align: left;
 }
 
-/* 底部口径说明（融资融券余额 / 数据日期）左对齐 */
+/* 底部说明（数据日期）左对齐 */
 .fnote {
   text-align: left;
 }
@@ -124,8 +124,9 @@
   text-align: right;             /* 对应金额靠右 */
 }
 
+/* 「龙虎榜」三个字与其余行首一致：靠左 */
 .lhb-title {
-  text-align: center;
+  text-align: left;
 }
 
 /* 龙虎榜行（表格格式）：席位占 1/2，买 / 卖 合计占另外 1/2（各 1/4），各列文字居中。

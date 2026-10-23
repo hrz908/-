@@ -21,8 +21,6 @@ Component({
     days5: { type: Array, value: [] },
     // 龙虎榜 [{ seat, buy, sell }]（元）
     lhb: { type: Array, value: [] },
-    // 融资融券余额（元）
-    marginBalance: { type: Number, value: null },
     note: { type: String, value: '' }
   },
   data: {
@@ -33,8 +31,7 @@ Component({
     northText: '',
     streakText: '',
     days5Dir: 'flat',
-    lhbRows: [],
-    marginText: '--'
+    lhbRows: []
   },
   lifetimes: {
     // observer 不会在 attached 时对初始值触发：首帧手动算一次
@@ -49,7 +46,7 @@ Component({
     }
   },
   observers: {
-    'mainNet, mainNetPct, tiers, northPct, northChangePct, streakDays, days5, lhb, marginBalance'() {
+    'mainNet, mainNetPct, tiers, northPct, northChangePct, streakDays, days5, lhb'() {
       this.refresh();
     }
   },
@@ -77,8 +74,7 @@ Component({
           seat: r.seat,
           buy: fmtAmount(r.buy),
           sell: fmtAmount(r.sell)
-        })),
-        marginText: fmtAmount(d.marginBalance)
+        }))
       });
     }
   }

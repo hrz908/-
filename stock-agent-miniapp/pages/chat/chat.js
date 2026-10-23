@@ -8,13 +8,13 @@ import { parseMarkdown } from '../../utils/markdown';
 
 // 侧边抽屉导航项（自绘列表）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去。
-// 纯文字条目（无图标，视觉更收敛）；sep 由 JS 按行号算（WXSS 禁兄弟选择器）
+// 每行 = 左侧图标 + 文字 + 右侧 ant-icon 箭头；sep 由 JS 按行号算（WXSS 禁兄弟选择器）
 const MENUS = [
-  { key: 'watchlist', label: '自选股' },
-  { key: 'alerts', label: '提醒' },
-  { key: 'settings', label: '我的' },
-  // K 线卡片画廊（静态测试页，不接后端）：从抽屉进可随时查看八张金融卡样式
-  { key: 'kline', label: 'K线测试' }
+  { key: 'watchlist', label: '自选股', icon: 'StarOutline' },
+  { key: 'alerts', label: '提醒', icon: 'BellOutline' },
+  { key: 'settings', label: '我的', icon: 'UserOutline' },
+  // 卡片画廊（静态测试页，不接后端）：从抽屉进可随时查看八张金融卡样式
+  { key: 'kline', label: 'K线测试', icon: 'HistogramOutline' }
 ].map((m, i) => Object.assign({}, m, { sep: i > 0 }));
 
 // 抽屉导航项 → 子页面路由，key 与 MENUS 一一对应
@@ -22,7 +22,7 @@ const ROUTES = {
   watchlist: '/pages/watchlist/watchlist',
   alerts: '/pages/alerts/alerts',
   settings: '/pages/settings/settings',
-  kline: '/pages/kline/index'
+  kline: '/pages/test/index'
 };
 
 // 今日大盘指数：代码 -> 展示名。实时行情在 onLoad 与抽屉打开时从后端 /stock/quote 拉取。
@@ -198,7 +198,7 @@ function klineCard(rows) {
     ma20: movingAverage(closes, 20)
   };
 
-  // 区间涨跌幅 / 振幅：按区间首末收盘价计算（口径写进卡内注释，合规要求）
+  // 区间涨跌幅 / 振幅：按区间首末收盘价计算（卡内不再出计算口径注释）
   const first = klines[0];
   const last = klines[klines.length - 1];
   let periodPct = null;
@@ -225,7 +225,8 @@ function klineCard(rows) {
     klineAmplitude: amplitude,
     // 副标题按实际渲染的根数走：被截断时如实标出
     klineSub: '最近 ' + klines.length + ' 个交易日 · 前复权' + (all.length > klines.length ? '（共 ' + all.length + ' 根）' : ''),
-    klineNote: '均线为简单移动平均；区间涨跌幅与振幅按区间首末收盘价计算'
+    // 口径类说明按需求全部移除，卡内不再出注释行
+    klineNote: ''
   };
 }
 
@@ -319,7 +320,6 @@ function reportCard(payload) {
     content: [],
     report: {
       periodLabel: periodLabelOf(endDate),
-      period: date,
       revenue: { value: numOrNull(inc.revenue), yoy: numOrNull(ind.or_yoy) },
       netProfit: { value: numOrNull(inc.n_income_attr_p), yoy: numOrNull(ind.netprofit_yoy) },
       cashFlow: { value: numOrNull(cf.n_cashflow_act), yoy: null },
@@ -327,10 +327,10 @@ function reportCard(payload) {
       netMargin: numOrNull(ind.netprofit_margin),
       roe: numOrNull(ind.roe),
       eps: numOrNull(ind.eps),
-      // 一致预期数据源没有，beat/consensus 留空（卡片不出「超预期」标签）
+      // 一致预期数据源没有，beat 留空（卡片不出「超预期」标签）
       beat: '',
-      consensus: null,
-      note: [inc.ts_code || ind.ts_code || cf.ts_code, date ? '报告期 ' + date : '', '单位：元']
+      // 数据日期：与其它卡片同一写法（估值 / 资金流向的「数据日期 YYYY-MM-DD」）
+      note: [inc.ts_code || ind.ts_code || cf.ts_code, date ? '数据日期 ' + date : '']
         .filter(Boolean).join(' · ')
     }
   };

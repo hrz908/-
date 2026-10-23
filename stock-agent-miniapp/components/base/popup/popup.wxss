@@ -11,6 +11,8 @@
 
 .popup--leaving {
   animation: popup-fade-out 240ms ease both;
+  /* 淡出期间整层不再接收点击，也防止残影层误触 */
+  pointer-events: none;
 }
 
 .popup-mask {
@@ -156,11 +158,6 @@
   border-color: var(--danger);
 }
 
-/* 按压反馈：用 opacity 而非背景色，避免盖掉各自的填充色 */
-.popup-btn--hover {
-  opacity: 0.88;
-}
-
 /* ===== 动画（WXSS 禁写 rem/vh，位移用 translate 百分比） ===== */
 @keyframes popup-fade-in {
   from {
@@ -177,6 +174,9 @@
   }
   to {
     opacity: 0;
+    /* 最后一帧强制不可见：即使 wx:if 移除晚于动画一帧，
+       WebView 合成层也不会留下静止的弹窗残影 */
+    visibility: hidden;
   }
 }
 

@@ -3,7 +3,8 @@
    WXSS 是 CSS 受限子集，本文件遵守以下禁令：
    - 不用 * 通配符，逐一列举实际用到的原生标签
    - 不用 div/p 等 HTML 标签选择器，只用 view/text
-   - 不用 :hover/:active/:focus，按压态一律走 hover-class
+   - 不用 :hover/:active/:focus；按压态已按需求全站取消（2026-10-23），
+     不要再给任何节点挂 hover-class / 写 --hover 变暗规则
    - 不用 @media / rem / vh / vw，统一 rpx（750rpx = 屏宽）
    ============================================================= */
 

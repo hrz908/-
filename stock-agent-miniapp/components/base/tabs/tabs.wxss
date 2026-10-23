@@ -44,6 +44,3 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.chip--hover {
-  opacity: 0.85;
-}

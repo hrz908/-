@@ -1,6 +1,8 @@
 /* 浅色专业金融主题的设计变量与全局基线（styles/token.wxss + styles/base.wxss） */
 @import "styles/token.wxss";
 @import "styles/base.wxss";
+/* antd-mini 图标字体：本地 base64 内联 + 覆盖组件的网络字体（原因见文件内注释） */
+@import "styles/antd-icon.wxss";
 
 /* ===== 间距规格：已上收至 styles/token.wxss 的「间距五档」 =====
    TODO-restyle：下列 page{} 内的 --sp-1~--sp-6 / --pad-card / --pad-page 与

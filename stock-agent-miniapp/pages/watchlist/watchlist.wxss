@@ -38,8 +38,11 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* 上涨 / 下跌两枚标签：横向并排，上涨在左、下跌在右（在 overview-head 行内） */
 .overview-tags {
   display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: var(--sp-1);
 }
 
@@ -90,33 +93,37 @@
 }
 
 .hero-desc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
   margin-top: var(--sp-1);
   font-size: var(--fs-aux);
   color: var(--ink-3);
 }
 
-/* 刷新入口：顶部分隔线 + 次级面 */
-.overview-refresh {
-  display: flex;
+/* 刷新入口：无底色（与背景一致），图标与文字用主色（黑），置于 hero-desc 行右侧 */
+.refresh-btn {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--sp-1);
-  margin-top: var(--sp-3);
-  padding-top: var(--sp-2);
-  border-top: var(--hairline);
-  min-height: 88rpx;
+  flex: none;
 }
 
-.overview-refresh-text {
+.refresh-btn-text {
   font-size: var(--fs-aux);
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
-.overview-refresh--hover {
-  opacity: 0.75;
+/* ant-icon 渲染成 <text>（行内元素），transform 对行内元素不生效，
+   要旋转必须先把图标变成 inline-block */
+.refresh-icon {
+  display: inline-block;
 }
 
 /* 刷新中：图标旋转（WXSS 动画可用，禁用的是 hover/active 伪类） */
-.overview-refresh--spinning .refresh-icon {
+.refresh-btn--spinning .refresh-icon {
   animation: refresh-spin 800ms linear infinite;
 }
 
@@ -215,10 +222,6 @@
   transition: none;
 }
 
-.stock-row-main--hover {
-  background: var(--surface-2);
-}
-
 /* 行与行之间的分隔线：sep 由 JS 按行号算好（WXSS 禁用兄弟选择器）。
    最后一条的分隔线由 .stock-list 的 overflow:hidden + 圆角裁掉 */
 .stock-row-main--sep {
@@ -271,19 +274,26 @@
   color: var(--down);
 }
 
-/* 左滑露出的删除区：绝对定位贴在主行之下，宽 128px（与 JS 的 SWIPE_ACTION_W 一致） */
+/* 左滑露出的删除区：绝对定位贴在主行之下，宽 64px（与 JS 的 SWIPE_ACTION_W 一致）。
+   默认隐藏（opacity:0）：行未滑开时若常驻渲染，transform 取整会让红色
+   从卡片边缘漏出 1px 红边；只在滑开/拖动中显示 */
 .stock-row-action {
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 128px;
+  width: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2rpx;
   background: var(--up);
+  opacity: 0;
+}
+
+.stock-row--action-on .stock-row-action {
+  opacity: 1;
 }
 
 .stock-row-action-text {
@@ -316,10 +326,6 @@
   font-weight: 600;
   /* 蓝底按钮上的文字反白（原金色底用深色字，主题切蓝后必须跟着换） */
   color: var(--primary-fg); /* 深色底上的浅色文字 */
-}
-
-.add-btn--hover {
-  opacity: 0.88;
 }
 
 /* ===== 添加自选表单 ===== */

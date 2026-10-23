@@ -29,18 +29,15 @@
 
     <!-- 底部按钮：任一侧文案为空则不渲染该按钮 -->
     <view wx:if="{{hasFooter}}" class="popup-footer">
+      <!-- 不挂 hover-class：需求取消所有「点一下变暗」的按压特效 -->
       <view
         wx:if="{{cancelText}}"
         class="popup-btn popup-btn--cancel"
-        hover-class="popup-btn--hover"
-        hover-stay-time="{{60}}"
         bindtap="onCancel"
       >{{cancelText}}</view>
       <view
         wx:if="{{confirmText}}"
         class="popup-btn popup-btn--confirm {{confirmDanger ? 'popup-btn--danger' : ''}}"
-        hover-class="popup-btn--hover"
-        hover-stay-time="{{60}}"
         bindtap="onConfirm"
       >{{confirmText}}</view>
     </view>

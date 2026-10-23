@@ -1,3 +1,0 @@
-<view class="icon icon-class" style="width: {{size}}; height: {{size}};">
-  <view class="icon__glyph" style="background-image: url({{src}});"></view>
-</view>

@@ -1,5 +1,5 @@
 <!-- 公司事件卡：时间轴样式，圆点按重要度变色（金=需关注，蓝=常规）；
-     每条事件可附原文链接（复制）。文案只陈述事件事实与影响口径 -->
+     每条事件可附原文链接（复制）。文案只陈述事件事实，卡内信息全部左对齐 -->
 <view class="fcard card-class">
   <view class="fcard-hd">
     <view class="fcard-title-col">
@@ -24,8 +24,5 @@
     </view>
   </view>
 
-  <view class="fnote">
-    <view>影响口径：以上为公告事实梳理，未含市场解读</view>
-    <view wx:if="{{note}}">{{note}}</view>
-  </view>
+  <view wx:if="{{note}}" class="fnote">{{note}}</view>
 </view>

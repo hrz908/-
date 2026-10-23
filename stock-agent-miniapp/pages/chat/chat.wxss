@@ -28,6 +28,20 @@
   overflow: hidden;
 }
 
+/* 顶栏左侧：打开侧边抽屉的菜单图标。
+   尺寸 / 圆角与 navbar 的 .nav-btn 对齐（同一条竖线、88rpx 触摸目标）；
+   点按不再有原生「闪一下」的高亮 */
+.nav-menu-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: var(--r-nav-btn);
+  -webkit-tap-highlight-color: transparent;
+}
+
 .chat-scroll {
   height: 100%;
 }
@@ -266,8 +280,12 @@
 
 /* ===== 气泡内的金融卡（components/finance/*） ===== */
 /* 卡片消息：气泡退让成透明容器，卡片自带 surface 底 / 描边 / 内边距，
-   避免「卡中卡」的双层底；宽度拉满一行 */
+   避免「卡中卡」的双层底；宽度拉满一行。
+   width:100% 必须显式写：.msg--assistant 是 flex 行容器，flex 子项默认按
+   内容收缩（fit-content），卡片的 width:100% 只能参照这个收缩宽，
+   结果卡片只有内容宽；显式 100% 才会占满整个消息行 */
 .bubble--bare {
+  width: 100%;
   max-width: 100%;
   padding: 0;
   background: transparent;
@@ -461,6 +479,7 @@
 
 /* 胶囊本体：一条圆角条，左端模式键、右端发送键，中间是输入区或「按住说话」 */
 .sender-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -474,25 +493,89 @@
   background: var(--surface);
   border: var(--hairline);
   border-radius: var(--r-pill);
+  /* 裁剪深色扫入层：scaleX 过程中 ::after 的圆角会被横向压扁、
+     不再贴合胶囊弧线，不加这条黑块会从右端圆角外溢出 */
+  overflow: hidden;
   box-shadow: var(--shadow-pop);
+  /* 深色底不再走整条 background 渐变：发送键被 wx:if 移除的瞬间，
+     均匀渐变会让右侧露白「闪一下」。改由 ::after 深色层从右往左扫入 */
+  transition: border-color 0.22s ease;
 }
 
-/* 模式键（语音 / 键盘）：比组件自带的 64rpx 放大到 88rpx，更好点按 */
+/* 语音态深色底：从右侧（发送键原位置）向左扫入填充；
+   切回键盘态时向右收回。z-index 0 垫底，内容元素都抬到它之上 */
+.sender-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.28s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sender-bar--voice::after {
+  transform: scaleX(1);
+}
+
+/* 模式键（语音 / 键盘）：深色圆钮（与发送键同款 --ink），图标反白。
+   比组件自带的 64rpx 放大到 88rpx，更好点按；
+   点按不再有原生「闪一下」的高亮（去掉 webview tap 高亮） */
 .bar-btn {
   flex: none;
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: var(--surface-2);
+  background: var(--ink);
   color: var(--ink-2);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  /* 背景切换不做渐变：从语音退回键盘时深色层还在向右撤，
+     若慢慢渐变回黑底，白图标会先露在浅底上闪一下，必须瞬时恢复 */
+  transition: background 0s;
 }
 
-.bar-btn--hover {
-  background: var(--line);
+/* 语音态：胶囊描边随深色底同步 */
+.sender-bar--voice {
+  border-color: var(--ink);
+}
+
+.sender-bar--voice .bar-btn {
+  /* 语音态「按住说话」层绝对铺满胶囊，需把模式键抬到它之上，
+     否则键盘图标被覆盖、点不中，切不回键盘态 */
+  position: relative;
+  z-index: 2;
+  /* 键盘切换键背景透明：胶囊已整体扫成深色，反白图标观感不变，
+     去掉圆钮自绘黑底，圆弧不再与胶囊弧线叠出接缝。
+     只改语音态：键盘态胶囊是白底，透明会让白图标隐入背景 */
+  background: transparent;
+  /* 变透明要等深色扫入层铺满再发生（0.28s，与 ::after 同步）：
+     扫入从右往左，最后才盖到左端的模式键，提前透明会露白闪一下。
+     切回键盘态走上面 .bar-btn 的 0s 无延迟规则，立即恢复黑底 */
+  transition: background 0s linear 0.28s;
+}
+
+/* 语音态「按住说话」：绝对铺满整个胶囊，文字精确居中于胶囊正中央 */
+.sender-bar--voice .bar-hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--primary-fg);
+  z-index: 1;
 }
 
 /* 输入区：紧贴模式键右侧，多行时随内容长高（textarea auto-height） */
@@ -503,6 +586,9 @@
   align-items: center;
   /* 上下留白把单行文字垂直居中；多行时 auto-height 会把胶囊一起撑高 */
   padding: var(--sp-2) 0;
+  /* 抬到胶囊深色扫入层（::after）之上 */
+  position: relative;
+  z-index: 1;
 }
 
 .bar-input {
@@ -529,6 +615,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  -webkit-tap-highlight-color: transparent;
   /* 语音没有光标，靠底色 + 轻微缩放告诉用户已经按住了 */
   transition: background 0.15s ease, transform 0.15s ease;
 }
@@ -539,25 +626,26 @@
   transform: scale(0.99);
 }
 
-/* 发送键：无内容时是次级面，有内容才点亮成主按钮近黑 */
+/* 语音态的按住反馈：主色底上用反白淡底，深色 --press 在黑底上看不出来 */
+.sender-bar--voice .bar-hold--active {
+  background: rgba(250, 250, 250, 0.16);
+}
+
+/* 发送键：恒为主按钮近黑底（无输入内容、正在等回复都不切色，只有按压态的
+   hover-class 已被全站取消，所以这里也不再写 --active / --hover） */
 .bar-send {
   flex: none;
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: var(--surface-2);
+  background: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, opacity 0.2s ease;
-}
-
-.bar-send--active {
-  background: var(--ink);
-}
-
-.bar-send--hover {
-  opacity: 0.85;
+  -webkit-tap-highlight-color: transparent;
+  /* 抬到胶囊深色扫入层（::after）之上 */
+  position: relative;
+  z-index: 1;
 }
 
 /* 加载态：方块代替发送图标（沿用 chat-sender 的「停止」观感）。
@@ -567,6 +655,24 @@
   height: 26rpx;
   border-radius: var(--r-tag);
   background: var(--surface);
+}
+
+/* 键盘 / 语音切换时，进场子元素淡入 + 轻微上移，过渡更顺滑 */
+.bar-field,
+.bar-hold,
+.bar-send {
+  animation: bar-fade-in 220ms ease both;
+}
+
+@keyframes bar-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6rpx);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ===== 侧边抽屉 ===== */
@@ -653,14 +759,13 @@
   border-top: var(--hairline);
 }
 
-.drawer-item--hover {
-  background: var(--surface);
-}
-
+/* 文字吃满剩余宽度，右侧箭头自然贴边。
+   按压态「暗一下」按需求取消，故不再有 --hover 规则 */
 .drawer-item-text {
   flex: 1;
   font-size: var(--fs-body);
   color: var(--ink);
+  text-align: left;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -686,27 +791,30 @@
   border-top: var(--hairline);
 }
 
+/* 指数名：吃掉前一半宽度（后面两个数据占另外 1/2） */
 .market-name {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-aux);
   color: var(--ink-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* 指数值与涨跌幅拆成两段，gap 留距离；涨红跌绿由 up/down 类着色 */
+/* 指数值与涨跌幅：合计占整行 1/2（各 1/4），整块靠右，涨红跌绿由 up/down 着色 */
 .market-note {
+  flex: none;
+  width: 50%;
   display: flex;
   align-items: baseline;
+  justify-content: flex-end;
   gap: var(--sp-2);
   font-size: var(--fs-aux);
   font-weight: 500;
 }
 
-/* 指数值定宽右对齐，与涨跌幅列竖向成线 */
-.market-val { width: 160rpx; text-align: right; white-space: nowrap; }
-
-/* 涨跌幅固定宽度并右对齐，让四行的百分比纵向对齐成列 */
+.market-val,
 .market-pct {
-  width: 140rpx;
+  flex: 1;
   text-align: right;
   white-space: nowrap;
 }

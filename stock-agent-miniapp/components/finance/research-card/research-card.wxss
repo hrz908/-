@@ -8,7 +8,7 @@
   text-align: left;
 }
 
-/* 底部口径说明（盈利预测 / 评级分布 / 来源）左对齐 */
+/* 底部说明（盈利预测 / 来源）左对齐 */
 .fnote {
   text-align: left;
 }
@@ -53,7 +53,7 @@
   display: inline-flex; align-items: center; min-height: 88rpx;
 }
 
-/* 核心观点居中 */
+/* 核心观点：标题下方这一整块信息左对齐（取消居中） */
 .quote {
-  text-align: center;
+  text-align: left;
 }

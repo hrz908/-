@@ -8,7 +8,7 @@
   text-align: left;
 }
 
-/* 底部口径说明（对比口径 / 数据日期）左对齐 */
+/* 底部说明（数据日期）左对齐 */
 .fnote {
   text-align: left;
 }
@@ -72,23 +72,15 @@
   word-break: break-word;        /* 不裁剪：表头指标名换行完整显示 */
 }
 
-/* 一句话结论：次级文字，仅陈述事实 */
-.cmp-conclusion {
-  margin-top: var(--sp-3);
-  font-size: var(--fs-aux);
-  line-height: 1.7;
-  color: var(--ink-2);
-}
-
-/* 表格与结论居中（数值列原右对齐、指标列原左对齐，统一居中） */
+/* 表格排版：指标列靠左（行首），数值列等分居中，末列靠右——与其余卡片同一套左右对齐 */
 .cmp-cell {
   text-align: center;
 }
 
 .cmp-cell--label {
-  text-align: center;
+  text-align: left;
 }
 
-.cmp-conclusion {
-  text-align: center;
+.cmp-cell:last-child {
+  text-align: right;
 }

@@ -5,11 +5,13 @@
   bindtouchend="onSwipeEnd"
   bindtouchcancel="onSwipeEnd"
 >
-  <!-- 顶部导航栏：自研 navbar（含胶囊安全区），左侧菜单按钮走 left 插槽。
+  <!-- 顶部导航栏：自研 navbar（含胶囊安全区）。
        高度 = 状态栏 + 44px 内容区，完全确定，页面直接算无需实测 -->
   <base-navbar title="溜来">
-    <view slot="left" class="nav-left" aria-label="菜单" bindtap="onMenuTap">
-      <base-icon name="menu" size="44rpx" color="var(--ink)" />
+    <!-- 左侧：打开侧边抽屉的菜单图标（汉堡）。
+         原本顶栏应有此键，缺失后抽屉只能靠右滑开，这里补回 -->
+    <view slot="left" class="nav-menu-btn" aria-label="打开导航抽屉" bindtap="onMenuTap">
+      <ant-icon type="UnorderedListOutline" style="font-size:44rpx;color:var(--ink);" />
     </view>
   </base-navbar>
 
@@ -40,10 +42,10 @@
               data-index="{{index}}"
               bindtap="playVoice"
             >
-              <base-icon
-                name="{{msg.voice.playing ? 'pause' : 'play'}}"
-                size="40rpx"
-                color="var(--ink)"
+              <!-- antd 图标集没有 pause：播放中改用实心麦克风（配合波形动画），停着是播放三角 -->
+              <ant-icon
+                type="{{msg.voice.playing ? 'AudioFill' : 'PlayOutline'}}"
+                style="font-size:40rpx;color:var(--ink);"
               />
               <view class="voice-wave">
                 <view
@@ -134,7 +136,6 @@
                 wx:elif="{{msg.card === 'report'}}"
                 card-class="msg-card"
                 period-label="{{msg.report.periodLabel}}"
-                period="{{msg.report.period}}"
                 revenue="{{msg.report.revenue}}"
                 net-profit="{{msg.report.netProfit}}"
                 cash-flow="{{msg.report.cashFlow}}"
@@ -143,7 +144,6 @@
                 roe="{{msg.report.roe}}"
                 eps="{{msg.report.eps}}"
                 beat="{{msg.report.beat}}"
-                consensus="{{msg.report.consensus}}"
                 note="{{msg.report.note}}"
               />
 
@@ -159,10 +159,8 @@
                 summary="{{msg.research.summary}}"
                 forecast-dir="{{msg.research.forecastDir}}"
                 upside="{{msg.research.upside}}"
-                rating-dist="{{msg.research.ratingDist}}"
                 source-name="{{msg.research.sourceName}}"
                 source-url="{{msg.research.sourceUrl}}"
-                note="{{msg.research.note}}"
               />
 
               <!-- 公司事件卡片：金融卡组件（components/finance/event-card） -->
@@ -179,7 +177,6 @@
                 wx:elif="{{msg.card === 'compare'}}"
                 card-class="msg-card"
                 items="{{msg.compare.items}}"
-                conclusion="{{msg.compare.conclusion}}"
                 note="{{msg.compare.note}}"
               />
 
@@ -263,15 +260,19 @@
     style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
     bindtouchstart="onSenderTouchStart"
   >
-    <view class="sender-bar">
-      <!-- 模式键：键盘态显示语音图标，语音态显示键盘图标 -->
+    <view class="sender-bar {{voiceMode ? 'sender-bar--voice' : ''}}">
+      <!-- 模式键：键盘态显示语音图标，语音态显示键盘图标。
+           无 hover-class：需求要求点它不要有「暗一下」的按压特效 -->
       <view
         class="bar-btn"
-        hover-class="bar-btn--hover"
         aria-label="{{voiceMode ? '切换到键盘输入' : '切换到语音输入'}}"
         bindtap="onToggleInputMode"
       >
-        <base-icon name="{{voiceMode ? 'keyboard' : 'voice'}}" size="44rpx" color="var(--ink-2)" />
+        <!-- antd 图标集没有键盘图标：键盘态用「编辑/输入」图标，语音态用「麦克风」图标 -->
+        <ant-icon
+          type="{{voiceMode ? 'EditSOutline' : 'AudioOutline'}}"
+          style="font-size:44rpx;color:#FFFFFF;"
+        />
       </view>
 
       <!-- 键盘态：输入区紧贴模式键右侧，整块可点（主动聚焦） -->
@@ -307,15 +308,11 @@
         catchtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
 
-      <!-- 发送键：无内容时是次级面，有内容才点亮成主行动蓝 -->
-      <view
-        class="bar-send {{input ? 'bar-send--active' : ''}}"
-        hover-class="bar-send--hover"
-        aria-label="发送"
-        bindtap="onSend"
-      >
+      <!-- 发送键：恒为主按钮近黑底白字（无内容、等待回复时都不切色）；
+           语音态整块不渲染（胶囊此时是「按住说话」的主色长条） -->
+      <view wx:if="{{!voiceMode}}" class="bar-send" aria-label="发送" bindtap="onSend">
         <view wx:if="{{sending}}" class="bar-send-stop"></view>
-        <base-icon wx:else name="send" size="44rpx" color="{{input ? '#FFFFFF' : 'var(--ink-3)'}}" />
+        <ant-icon wx:else type="SendOutline" style="font-size:44rpx;color:#FFFFFF;" />
       </view>
     </view>
   </view>
@@ -347,12 +344,12 @@
             wx:for="{{menus}}"
             wx:for-item="m"
             wx:key="key"
-            hover-class="drawer-item--hover"
             data-menu="{{m.key}}"
             bindtap="onMenuSelect"
           >
+            <ant-icon type="{{m.icon}}" style="font-size:32rpx;color:var(--ink-2);" />
             <text class="drawer-item-text">{{m.label}}</text>
-            <base-icon name="chevron-right" size="28rpx" color="var(--ink-3)" />
+            <ant-icon type="RightOutline" style="font-size:28rpx;color:var(--ink-3);" />
           </view>
         </view>
       </view>

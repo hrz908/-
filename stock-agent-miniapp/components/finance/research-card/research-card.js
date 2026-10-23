@@ -29,19 +29,15 @@ Component({
     forecastDir: { type: String, value: '' },
     // 上行空间（% 数值，调用方按现价算好）
     upside: { type: Number, value: null },
-    // 近 90 天评级分布 [{ rating, count }]
-    ratingDist: { type: Array, value: [] },
     // 来源（合规必填）：机构名 + 原文链接
     sourceName: { type: String, value: '' },
-    sourceUrl: { type: String, value: '' },
-    note: { type: String, value: '' }
+    sourceUrl: { type: String, value: '' }
   },
   data: {
     targetPriceText: '--',
     upsideText: '--',
     upsideDir: 'flat',
-    ratingTone: 'flat',
-    distText: ''
+    ratingTone: 'flat'
   },
   lifetimes: {
     // observer 不会在 attached 时对初始值触发：首帧手动算一次
@@ -56,23 +52,18 @@ Component({
     }
   },
   observers: {
-    'rating, targetPrice, upside, ratingDist'() {
+    'rating, targetPrice, upside'() {
       this.refresh();
     }
   },
   methods: {
     refresh() {
       const d = this.data;
-      const dist = (d.ratingDist || [])
-        .filter((r) => r && r.count)
-        .map((r) => r.rating + ' ' + r.count)
-        .join(' / ');
       this.setData({
         targetPriceText: fmtPrice(d.targetPrice),
         upsideText: d.upside == null ? '--' : fmtPct(d.upside),
         upsideDir: direction(d.upside),
-        ratingTone: RATING_TONES[d.rating] || 'flat',
-        distText: dist
+        ratingTone: RATING_TONES[d.rating] || 'flat'
       });
     },
     // 原文链接：小程序不能直接打开外链，点击复制（与 chat 页链接行为一致）

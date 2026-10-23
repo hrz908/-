@@ -1,5 +1,6 @@
-<!-- 估值卡：四列估值指标 + PE 分位进度条；分位低于 30% 标绿「偏低」，
-     高于 70% 标红「偏高」（设计文档④的展示规则，只陈述客观事实） -->
+<!-- 估值卡：两行估值指标，四列 + 三列，全部等距居中。
+     分位类信息（PE 分位进度条 / 近5年分位）按需求移除——分位需要标注
+     历史区间口径，卡内不再出现口径文案，故整块不出。 -->
 <view class="fcard card-class">
   <view class="fcard-hd">
     <view class="fcard-title-col">
@@ -30,15 +31,6 @@
     </view>
   </view>
 
-  <!-- PE 分位进度条：填充色随档位（偏低=绿 / 偏高=红 / 中位=灰） -->
-  <view class="pct-row">
-    <text class="pct-label">PE分位</text>
-    <view class="pct-track">
-      <view class="pct-fill pct-fill--{{barLevel}}" style="width: {{barWidth}};"></view>
-    </view>
-    <text class="pct-value num {{barLevel}}">{{barLabel}}</text>
-  </view>
-
   <view class="fgrid fgrid-row--gap">
     <view class="fgrid-row">
       <view class="fcell">
@@ -53,16 +45,8 @@
         <view class="fcell-k">总市值</view>
         <view class="fcell-v num">{{capText}}</view>
       </view>
-      <view class="fcell">
-        <view class="fcell-k">近5年分位</view>
-        <view class="fcell-v num">{{pct5yText}}</view>
-      </view>
     </view>
   </view>
 
-  <!-- 口径标注（合规要求）：分位区间 + 行业均值对比 -->
-  <view class="fnote">
-    <view>分位口径：PE(TTM) 近3年 / 近5年 历史分位；行业均值 PE {{industryPeText}} · PB {{industryPbText}} · 股息率 {{industryYieldText}}</view>
-    <view wx:if="{{note}}">{{note}}</view>
-  </view>
+  <view wx:if="{{note}}" class="fnote">{{note}}</view>
 </view>

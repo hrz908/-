@@ -15,8 +15,6 @@ function isRemoteUrl(path) {
 
 Page({
   data: {
-    pushEnabled: true,
-
     // 个人信息
     nickname: '',
     avatar: '',
@@ -59,11 +57,7 @@ Page({
     } catch (e) {
       // 拿不到就用默认值
     }
-    this.setData({
-      bottomGap: 20 + safeBottom,
-      // 没存过就默认开：设计稿里推送开关是开着的
-      pushEnabled: wx.getStorageSync('sa_push_enabled') !== false
-    });
+    this.setData({ bottomGap: 20 + safeBottom });
 
     // 打开页面时确保有 token（App.onLaunch 已经静默登录过，
     // 这里只是兑底：万一 token 被清，自动重新静默登录一次）。
@@ -105,15 +99,6 @@ Page({
       .catch(() => {
         // 拉不到不弹错打扰用户，页面保持登录时的值
       });
-  },
-
-  // TDesign switch 的 change 事件恒为 { value: boolean }（组件内部用 customValue
-  // 取值，默认 [true, false]），所以直接取 e.detail.value，不用再做类型兜底
-  onTogglePush(e) {
-    const pushEnabled = e.detail.value;
-    this.setData({ pushEnabled });
-    wx.setStorageSync('sa_push_enabled', pushEnabled);
-    this.toast(pushEnabled ? '消息推送已开启' : '消息推送已关闭');
   },
 
   /* ===== 编辑资料弹窗 ===== */
