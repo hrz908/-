@@ -65,11 +65,23 @@
             <!-- 卡片消息（quote/kline）时气泡退让成透明容器，视觉交给金融卡组件，
                  避免出现「卡中卡」的双层底 -->
             <view class="bubble bubble--assistant {{msg.card ? 'bubble--bare' : ''}}">
+              <!-- 占位卡：加载中 / 取数失败。必须排在所有真卡分支之前——
+                   占位消息同样带 card 字段（气泡要退让成透明容器），
+                   放在后面会被同名的真卡分支抢先匹配，渲染出一张空数据卡。
+                   生命周期见 chat.js 的 _pushCardSlot / _placeCard / _failCardSlot -->
+              <base-card-status
+                wx:if="{{msg.loadState}}"
+                card-class="msg-card"
+                state="{{msg.loadState}}"
+                label="{{msg.loadLabel}}"
+                detail="{{msg.loadDetail}}"
+              />
+
               <!-- 行情卡片：金融卡组件（components/finance/quote-card），
                    数据字段在 chat.js 的 quoteCard() 里映射；
                    点卡进卡片画廊（pages/test，静态八卡样式页） -->
               <finance-quote-card
-                wx:if="{{msg.card === 'quote'}}"
+                wx:elif="{{msg.card === 'quote'}}"
                 card-class="msg-card"
                 bindtap="onQuoteCardTap"
                 data-code="{{msg.quote.code}}"
@@ -95,7 +107,8 @@
               <finance-kline-card
                 wx:elif="{{msg.card === 'kline'}}"
                 card-class="msg-card"
-                name=""
+                name="{{msg.klineName}}"
+                code="{{msg.klineCode}}"
                 subtitle="{{msg.klineSub}}"
                 periods="{{msg.klinePeriods}}"
                 active-period="{{msg.klineActivePeriod}}"
@@ -104,6 +117,8 @@
                 period-pct="{{msg.klinePct}}"
                 amplitude="{{msg.klineAmplitude}}"
                 volume-ratio="{{msg.klineVolumeRatio}}"
+                support="{{msg.klineSupport}}"
+                resistance="{{msg.klineResistance}}"
                 note="{{msg.klineNote}}"
               />
 
@@ -112,21 +127,29 @@
               <finance-valuation-card
                 wx:elif="{{msg.card === 'valuation'}}"
                 card-class="msg-card"
-                pe-ttm="{{msg.valuation.peTTM}}"
+                pe-ttm="{{msg.valuation.peTtm}}"
                 pe-static="{{msg.valuation.peStatic}}"
                 pb="{{msg.valuation.pb}}"
                 ps="{{msg.valuation.ps}}"
+                peg="{{msg.valuation.peg}}"
                 dividend-yield="{{msg.valuation.dividendYield}}"
                 total-cap="{{msg.valuation.totalCap}}"
                 note="{{msg.valuation.note}}"
               />
 
-              <!-- 资金流向卡片：金融卡组件（components/finance/fundflow-card） -->
+              <!-- 资金流向卡片：金融卡组件（components/finance/fundflow-card）。
+                   命中龙虎榜时 payload 带 lhb 席位区块，chat.js 已换算成元口径 -->
               <finance-fundflow-card
                 wx:elif="{{msg.card === 'fundflow'}}"
                 card-class="msg-card"
                 main-net="{{msg.fundflow.mainNet}}"
+                main-net-pct="{{msg.fundflow.mainNetPct}}"
                 tiers="{{msg.fundflow.tiers}}"
+                north-pct="{{msg.fundflow.northPct}}"
+                north-change-pct="{{msg.fundflow.northChangePct}}"
+                streak-days="{{msg.fundflow.streakDays}}"
+                days5="{{msg.fundflow.days5}}"
+                lhb="{{msg.fundflow.lhb}}"
                 note="{{msg.fundflow.note}}"
               />
 
@@ -358,12 +381,17 @@
         </view>
       </view>
 
-      <!-- 新对话：导航栏下方的主行动点（品牌蓝底白字，与深色导航键区分）。
-           先注册一条新 session（立即进入历史列表），再压栈全新的对话页实例；
-           旧对话留在栈里可返回 -->
-      <view class="drawer-new" aria-label="开始新对话" bindtap="onNewChat">
-        <ant-icon type="ChatAddOutline" style="font-size:32rpx;color:var(--primary-fg);" />
-        <text class="drawer-new-text">新对话</text>
+      <!-- 新对话：导航栏下方的主行动点（shadcn 近黑主按钮 + 白色前景）。
+           先注册一条新 session（立即进入历史列表），注册期间按钮转圈并挡住连点，
+           成功后再压栈全新的对话页实例；旧对话留在栈里可返回 -->
+      <view
+        class="drawer-new {{newChatting ? 'drawer-new--loading' : ''}}"
+        aria-label="开始新对话"
+        bindtap="onNewChat"
+      >
+        <ant-icon wx:if="{{!newChatting}}" type="ChatAddOutline" style="font-size:32rpx;color:var(--primary-fg);" />
+        <view wx:else class="drawer-new-spinner" />
+        <text class="drawer-new-text">{{newChatting ? '创建中…' : '新对话'}}</text>
       </view>
 
       <!-- 历史对话：可滚动容器。当前会话高亮（选中效果），

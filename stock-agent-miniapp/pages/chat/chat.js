@@ -102,8 +102,9 @@ function userMsg(data) {
   };
 }
 
-// 结构化卡片消息：卡片本体由 components/finance/* 组件渲染（阶段四），
-// 页面只负责把后端字段映射成组件 props（组件内不做业务计算）
+// 结构化卡片消息：八张卡（quote / kline / valuation / fundflow / report /
+// research / event / compare）的本体全部由 components/finance/* 组件渲染，
+// 页面只负责把后端 card / table 事件的字段映射成组件 props（组件内不做业务计算）
 
 // 后端 decimal 字段可能是数字也可能是字符串，统一转 number；空值给 null
 function numOrNull(v) {
@@ -165,12 +166,18 @@ function quoteCard(q) {
       amount: isNaN(amount) ? null : amount,
       turnoverRate: numOrNull(q.turnover),
       totalCap: numOrNull(q.total_mv),
+      // 分时走势与悬浮标签：数据源没有，显式给空数组——
+      // 组件内按「点数不足 2 个不出迷你走势」降级，不给就会拿到 undefined
+      points: [],
+      tags: [],
       note: q.time ? '行情时间 ' + q.time : ''
     }
   };
 }
 
-function klineCard(rows) {
+// meta 是 table 事件的整个 payload（可能带 code / name：本轮查过行情时后端会补上，
+// K 线卡标题因此不再是空的）
+function klineCard(rows, meta) {
   // 后端 KlineRow：date / open / high / low / close / volume / change_percent
   const all = Array.isArray(rows) ? rows : [];
   const shown = all.slice(-KLINE_CARD_ROWS);
@@ -190,15 +197,15 @@ function klineCard(rows) {
     ma20: movingAverage(closes, 20)
   };
 
-  // 区间涨跌幅 / 振幅：按区间首末收盘价计算（卡内不再出计算口径注释）
+  // 区间涨跌幅 / 振幅 / 支撑压力：全部按渲染区间内的真实高低点算，不涉及任何预测
   const first = klines[0];
   const last = klines[klines.length - 1];
+  const highs = klines.map((k) => k.h).filter((v) => v != null);
+  const lows = klines.map((k) => k.l).filter((v) => v != null);
   let periodPct = null;
   let amplitude = null;
   if (first && last && first.c) {
     periodPct = ((last.c - first.c) / first.c) * 100;
-    const highs = klines.map((k) => k.h).filter((v) => v != null);
-    const lows = klines.map((k) => k.l).filter((v) => v != null);
     if (highs.length && lows.length) {
       amplitude = ((Math.max.apply(null, highs) - Math.min.apply(null, lows)) / first.c) * 100;
     }
@@ -215,6 +222,13 @@ function klineCard(rows) {
     klineActivePeriod: 'day',
     klinePct: periodPct,
     klineAmplitude: amplitude,
+    // 量比需要当日分时成交节奏，日 K 数据源算不出来，不出这个指标（不拿日线近似）
+    klineVolumeRatio: null,
+    // 支撑 / 压力取区间内的最低 / 最高价（区间极值，不是预测位）
+    klineSupport: lows.length ? Math.min.apply(null, lows) : null,
+    klineResistance: highs.length ? Math.max.apply(null, highs) : null,
+    klineName: (meta && meta.name) || '',
+    klineCode: (meta && meta.code) || '',
     // 副标题按实际渲染的根数走：被截断时如实标出
     klineSub: '最近 ' + klines.length + ' 个交易日 · 前复权' + (all.length > klines.length ? '（共 ' + all.length + ' 根）' : ''),
     // 口径类说明按需求全部移除，卡内不再出注释行
@@ -222,8 +236,9 @@ function klineCard(rows) {
   };
 }
 
-// ===== 估值 / 资金流向 / 财报速览三张卡（数据源：Tushare 增强工具） =====
-// 由 agent 的 _emit_structured 以 card 事件下发，字段映射在此完成，
+// ===== 估值 / 资金流向 / 财报速览三张卡 =====
+// 数据源已换成 akshare（东财/新浪），字段名沿用原 Tushare 口径，映射在此完成。
+// 由 agent 的 _emit_structured 以 card 事件下发，
 // 组件（components/finance/*）只做展示。行载荷统一可能是「数组包一行」或「直接一行」
 
 // 报告期标签：end_date "20260630" -> "2026 中报"
@@ -240,7 +255,7 @@ function fmtTsDate(v) {
   return /^\d{8}$/.test(s) ? s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6) : '';
 }
 
-// 万元 -> 元（Tushare 的金额字段单位是万元，卡内亿万换算是元口径）
+// 万元 -> 元（估值 / 资金流的金额字段单位是万元，卡内亿万换算是元口径）
 function wanToYuan(v) {
   const n = numOrNull(v);
   return n == null ? null : n * 10000;
@@ -257,9 +272,12 @@ function valuationCard(payload) {
     content: [],
     valuation: {
       peStatic: numOrNull(row.pe),
-      peTTM: numOrNull(row.pe_ttm),
+      // peTtm 而非 peTTM：微信把 wxml 的 pe-ttm 映射成 peTtm，写全大写会落空
+      peTtm: numOrNull(row.pe_ttm),
       pb: numOrNull(row.pb),
       ps: numOrNull(row.ps_ttm),
+      // PEG 需要「PE ÷ 净利增速」，当前数据源不给增速，恒空（卡片显示「--」）
+      peg: numOrNull(row.peg),
       dividendYield: numOrNull(row.dv_ttm),
       totalCap: wanToYuan(row.total_mv),
       note: [row.ts_code, row.trade_date ? '数据日期 ' + fmtTsDate(row.trade_date) : '']
@@ -295,6 +313,13 @@ function fundflowCard(payload) {
     content: [],
     fundflow: {
       mainNet: wanToYuan(row.net_mf_amount),
+      // 占成交额比 / 北向持股 / 连续流入天数 / 近 5 日趋势：对应数据源已下线（
+      // 见 server/README 的降级说明），恒空，卡片不出这几块，不编造数值
+      mainNetPct: null,
+      northPct: null,
+      northChangePct: null,
+      streakDays: null,
+      days5: [],
       tiers: [
         { label: '超大单', value: net(row.buy_elg_amount, row.sell_elg_amount) },
         { label: '大单', value: net(row.buy_lg_amount, row.sell_lg_amount) },
@@ -357,6 +382,117 @@ function reportCard(payload) {
   };
 }
 
+// 研报观点卡：get_research_reports 的单行（机构 / 评级 / 报告名称 / 原文链接）。
+// 东财研报没有目标价与盈利预测调整方向，targetPrice / upside / forecastDir 传 null，
+// 卡片按缺失降级显示「--」（工具层与前端都不编造数值）
+function researchCard(payload) {
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!row) return null;
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'research',
+    content: [],
+    research: {
+      org: row.org || '',
+      rating: row.rating || '',
+      targetPrice: numOrNull(row.target_price),
+      publishDate: row.publish_date || '',
+      reportType: row.report_type || '',
+      summary: row.summary || '',
+      forecastDir: row.forecast_dir || '',
+      upside: numOrNull(row.upside),
+      sourceName: row.source_name || row.org || '',
+      sourceUrl: row.source_url || ''
+    }
+  };
+}
+
+// 公司事件卡：get_stock_news 的当日资讯由后端折成时间轴事件（类型也是后端
+// 按标题关键词归纳的，前端不做二次推断）。整轮合成一张卡
+function eventCard(payload) {
+  const data = payload || {};
+  const events = (Array.isArray(data.events) ? data.events : [])
+    .filter((e) => e && e.title)
+    .map((e) => ({
+      type: e.type || '',
+      date: e.date || '',
+      title: e.title,
+      desc: e.desc || '',
+      important: !!e.important,
+      sourceUrl: e.source_url || e.sourceUrl || ''
+    }));
+  if (!events.length) return null;
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'event',
+    content: [],
+    event: {
+      events: events,
+      range: data.range || '',
+      note: data.note || ''
+    }
+  };
+}
+
+// ===== 卡片加载态 =====
+// 八张卡都走「先占位、后换真卡」：tool_start 插一张 loading 占位卡，
+// card / table 事件到了就地替换（卡片位置不跳），取数失败转 error 态留在列表里。
+// 这样长耗时取数期间用户看到的是「这张卡在出数据」，而不是一段空白。
+
+// 后端工具名 -> 它最终会产出哪张卡（与 agent/subgraphs/stock.py 的 _emit_structured 一一对应）
+const CARD_KIND_BY_TOOL = {
+  get_quote: 'quote',
+  get_history_daily: 'kline',
+  get_valuation: 'valuation',
+  get_money_flow: 'fundflow',
+  get_top_list: 'fundflow',
+  get_financial_report: 'report',
+  get_peer_compare: 'compare',
+  get_research_reports: 'research',
+  get_stock_news: 'event'
+};
+
+// 占位卡的加载提示（口径与后端 _TOOL_LABELS 的「正在获取xx」一致）
+const CARD_LOADING_TEXT = {
+  quote: '正在获取实时行情…',
+  kline: '正在获取历史行情…',
+  valuation: '正在获取估值指标…',
+  fundflow: '正在获取资金流向…',
+  report: '正在获取财报数据…',
+  compare: '正在获取同业对比…',
+  research: '正在获取机构研报…',
+  event: '正在获取公司动态…'
+};
+
+// 占位卡失败时的主文案
+const CARD_ERROR_TEXT = {
+  quote: '行情数据获取失败',
+  kline: '历史行情获取失败',
+  valuation: '估值指标获取失败',
+  fundflow: '资金流向获取失败',
+  report: '财报数据获取失败',
+  compare: '同业对比获取失败',
+  research: '机构研报获取失败',
+  event: '公司动态获取失败'
+};
+
+// 占位卡消息：与卡片消息同构（都有 card 字段，好让气泡退让成透明容器），
+// 多出的 pending / loadState 只用来驱动占位组件，真卡到达时整条消息被替换掉
+function cardSlotMsg(kind) {
+  return {
+    role: 'assistant',
+    status: 'loading',
+    card: kind,
+    content: [],
+    pending: true,
+    loadState: 'loading',
+    loadLabel: CARD_LOADING_TEXT[kind] || '正在获取卡片数据…',
+    loadDetail: ''
+  };
+}
+
 // ===== 语音消息 =====
 // 录音时长的两条边界：短于下限当作误触、不发；触及上限自动结束
 const REC_MIN_MS = 1000;
@@ -396,6 +532,9 @@ Page({
     keyboardOffset: 0,
     chatHeight: 0,
     drawerOpen: false,
+    // 「新对话」按钮的创建中状态：注册会话期间按钮转圈 + 文案换成「创建中…」，
+    // 同时兼作连点闸门（一次点击 = 一条会话，见 onNewChat）
+    newChatting: false,
     // 对话区滚动位置：用数值 scroll-top 控制。
     // 旧写法 scroll-into-view 每次都要「先清空锚点再置位」，流式期间
     // 会不停重启滚动动画，看起来就是画面上下抽动。
@@ -435,10 +574,16 @@ Page({
     const resumeSid = options && options.session
       ? decodeURIComponent(options.session)
       : '';
+    // ?new=1 表示这是「新对话」刚压栈出来的空会话：会话是这一刻才注册的，
+    // 消息必为空，不需要回拉（回拉还要多等一个请求，且空结果会覆盖首屏）
+    const isNewChat = !!(options && String(options.new) === '1');
     this._sessionId = resumeSid || agentSocket.freshSessionId();
     // 本页发起的最新一轮 rid：agent 单例的请求级事件全带 __rid，
     // 只渲染自己发起的那轮，旧页在途流的 token 不会串进本页
     this._myReqId = 0;
+    // 抽屉收起动画是否已完成：新对话跳转要等它，否则新页面会盖掉动画。
+    // 初始为 true（页面刚进、抽屉本来就是关的，没有动画要等）
+    this._drawerClosed = true;
     // 本页挂在 agent 单例上的监听（event -> callback），onUnload 按引用精确摘除
     this._agentHandlers = {};
 
@@ -507,8 +652,9 @@ Page({
       chatHeight
     });
     this.scrollToBottom({ force: true });
-    // 恢复历史会话的消息（新对话为空，走默认问候语）
-    if (resumeSid) this.loadSessionMessages(resumeSid);
+    // 恢复历史会话的消息（新对话为空，走默认问候语）。
+    // 新对话（?new=1）跳过：会话刚注册、必为空，首屏直接用问候语即可
+    if (resumeSid && !isNewChat) this.loadSessionMessages(resumeSid);
 
     if (wx.onWindowResize) {
       this._onResize = (res) => {
@@ -552,9 +698,8 @@ Page({
       this._appendToken(delta);
     });
 
-    // 结构化卡片：quote / valuation / fundflow / report 四类（事件契约见
-    // agent 的 _emit_structured 与 server/README.md）。
-    // 插入卡片后要把当前流式消息收尾（_finishStreaming）：
+    // 结构化卡片：八类（事件契约见 agent 的 _emit_structured 与 server/README.md）。
+    // 插入卡片前要把当前流式消息收尾（_finishStreaming）：
     // 后端常见的节奏是「文字 → 卡片 → 文字」，不断流的话
     // 卡片之后的 token 会被追加到卡片上方的旧消息里，顺序就乱了
     on('card', (data) => {
@@ -565,22 +710,25 @@ Page({
       else if (data.type === 'fundflow_card') msg = fundflowCard(data.payload);
       else if (data.type === 'report_card') msg = reportCard(data.payload);
       else if (data.type === 'compare_card') msg = compareCard(data.payload);
+      else if (data.type === 'research_card') msg = researchCard(data.payload);
+      else if (data.type === 'event_card') msg = eventCard(data.payload);
       if (!msg) return;
       this._flushStream({ force: true });
       this._finishStreaming();
-      this.setData({ messages: this.data.messages.concat([msg]) });
-      this.scrollToBottom({ force: true });
+      this._placeCard(msg);
     });
 
-    // K 线表格：payload 约定为 { rows: [...] }，兼容直接给数组
+    // K 线表格：payload 约定为 { rows: [...] }，兼容直接给数组；
+    // 同轮查过行情时后端会补上 code / name，一并交给卡片当标题
     on('table', (data) => {
       if (!data || data.type !== 'kline_table' || !data.payload) return;
       const rows = data.payload.rows || data.payload;
       if (!Array.isArray(rows) || !rows.length) return;
+      const msg = klineCard(rows, data.payload);
+      if (!msg) return;
       this._flushStream({ force: true });
       this._finishStreaming();
-      this.setData({ messages: this.data.messages.concat([klineCard(rows)]) });
-      this.scrollToBottom({ force: true });
+      this._placeCard(msg);
     });
 
     // 后端主动推的状态提示
@@ -588,28 +736,41 @@ Page({
       this.setData({ statusText: (data && data.label) || '' });
     });
 
-    // 工具调用：开始查行情/研报时给个可读的提示，结束后清掉
+    // 工具调用：开始查行情/研报时给个可读的提示，会产出卡片的工具同时插一张
+    // loading 占位卡（用户看得到「这张卡正在出数据」，而不是等一段空白）
     on('tool_start', (data) => {
       this.setData({ statusText: (data && data.label) || '正在查询...' });
+      const kind = data && CARD_KIND_BY_TOOL[data.tool];
+      if (kind) this._pushCardSlot(kind);
     });
 
-    on('tool_end', () => {
+    // 工具结束：清掉顶部状态条；失败的那个工具对应的占位卡就地转失败态，
+    // 让用户知道是「没取到」而不是「这张卡本来就空」
+    on('tool_end', (data) => {
       this.setData({ statusText: '' });
+      if (!data || data.ok !== false) return;
+      const kind = CARD_KIND_BY_TOOL[data.tool];
+      if (kind) this._failCardSlot(kind);
     });
 
-    // 错误：复位发送态并提示，不往消息列表里塞错误气泡
+    // 错误：复位发送态并提示，不往消息列表里塞错误气泡；
+    // 但仍在加载中的占位卡要转成失败态——否则用户只看到卡片凭空消失
     on('error', (data) => {
       this._flushStream({ force: true });
       this._finishStreaming();
+      this._failPendingCards((data && data.msg) || '服务异常');
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '', thinking: false });
       this.toast((data && data.msg) || '服务异常');
     });
 
-    // 本轮回答结束：流式消息转 complete，解锁发送按钮
+    // 本轮回答结束：流式消息转 complete，解锁发送按钮。
+    // 还停在 loading 的占位卡说明「工具取到了数据但没产出卡片」（数据源为空 /
+    // 卡片校验丢弃），此时正文已经作答，占位卡静默撤掉，不留一张永远转圈的卡
     on('done', () => {
       this._flushStream({ force: true });
       this._finishStreaming();
+      this._dropPendingCards();
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '', thinking: false });
     });
@@ -726,6 +887,76 @@ Page({
     this.setData(patch);
   },
 
+  // ===== 卡片加载态三段：插占位 -> 换真卡 -> 收尾（失败态 / 撤掉） =====
+
+  // 插一张 loading 占位卡：追加在末尾，不动在途的流式消息
+  // （_streamIndex 指向的下标不变，后面的 token 照常追加到它那里）
+  _pushCardSlot(kind) {
+    this._flushStream({ force: true });
+    this.setData({ messages: this.data.messages.concat([cardSlotMsg(kind)]) });
+    this.scrollToBottom({ force: true });
+  },
+
+  // 真卡落位：优先替换同类型还在 loading 的占位卡（就地替换，卡片位置不跳、
+  // 用户视线不丢）；没有占位卡（后端没发 tool_start / 卡片先到）才追加到末尾
+  _placeCard(msg) {
+    const messages = this.data.messages;
+    for (let i = 0; i < messages.length; i++) {
+      if (!messages[i] || !messages[i].pending || messages[i].card !== msg.card) continue;
+      const patch = {};
+      patch['messages[' + i + ']'] = msg;
+      this.setData(patch, () => this.scrollToBottom({ force: true }));
+      return;
+    }
+    this.setData({ messages: messages.concat([msg]) }, () => this.scrollToBottom({ force: true }));
+  },
+
+  // 单个工具取数失败：把它那张占位卡就地转成失败态，留在列表里
+  _failCardSlot(kind) {
+    const messages = this.data.messages;
+    for (let i = 0; i < messages.length; i++) {
+      if (!messages[i] || !messages[i].pending || messages[i].card !== kind) continue;
+      const patch = {};
+      patch['messages[' + i + '].pending'] = false;
+      patch['messages[' + i + '].status'] = 'error';
+      patch['messages[' + i + '].loadState'] = 'error';
+      patch['messages[' + i + '].loadLabel'] = CARD_ERROR_TEXT[kind] || '卡片数据获取失败';
+      this.setData(patch);
+      return;
+    }
+  },
+
+  // 整轮失败（连接异常 / 上游报错）：所有还在 loading 的占位卡转失败态，
+  // 并把失败原因写进副文案
+  _failPendingCards(detail) {
+    const messages = this.data.messages;
+    const patch = {};
+    let hit = false;
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m || !m.pending) continue;
+      patch['messages[' + i + '].pending'] = false;
+      patch['messages[' + i + '].status'] = 'error';
+      patch['messages[' + i + '].loadState'] = 'error';
+      patch['messages[' + i + '].loadLabel'] = CARD_ERROR_TEXT[m.card] || '卡片数据获取失败';
+      patch['messages[' + i + '].loadDetail'] = detail || '';
+      hit = true;
+    }
+    if (hit) this.setData(patch);
+  },
+
+  // 本轮正常结束：撤掉仍未兑现的占位卡。过滤后下标会位移，
+  // 流式追踪状态一并复位（此时 done 已经收过尾，这里只是保持一致）
+  _dropPendingCards() {
+    const messages = this.data.messages;
+    const kept = messages.filter((m) => !m || !m.pending);
+    if (kept.length === messages.length) return;
+    this.setData({ messages: kept });
+    this._streamIndex = -1;
+    this._streamText = '';
+    this._streamFlushed = '';
+  },
+
   onReady() {
     // 输入栏高度按实测修正（多行输入会长高，首帧估的是两行高度）；
     // 导航栏高度确定（状态栏 + 44），无需测量
@@ -840,9 +1071,11 @@ Page({
     const text = (raw || '').trim();
     if (!text || this.data.sending) return;
 
-    // 上一轮流式状态先复位（正常情况下 done 已经收过尾，这里是兜底）
+    // 上一轮流式状态先复位（正常情况下 done 已经收过尾，这里是兜底）；
+    // 兜底同样撤掉上一轮没兑现的占位卡（超时 / 看门狗复位这类非正常收尾）
     this._flushStream({ force: true });
     this._finishStreaming();
+    this._dropPendingCards();
 
     this.setData({
       messages: this.data.messages.concat([userMsg(text)]),
@@ -869,6 +1102,8 @@ Page({
     this._sendWatchdog = setTimeout(() => {
       this._sendWatchdog = 0;
       if (!this.data.sending) return;
+      // 超时收尾同 error：在途的占位卡转失败态，不能让它继续转圈
+      this._failPendingCards('服务暂时没有响应，请重试');
       this.setData({ sending: false, statusText: '', thinking: false });
       this.toast('服务暂时没有响应，请重试');
     }, SEND_TIMEOUT_MS);
@@ -1169,43 +1404,83 @@ Page({
     this.setData({ drawerOpen: false });
   },
 
-  // 新对话：与菜单项同一套「先收抽屉、动画结束再跳转」的节奏。
-  // 跳转前先注册一条新 session（标题占位「新对话」），让它立即出现在
-  // 历史列表里；注册失败不阻断——首条消息到达时网关会补注册
+  // 新对话：与菜单项同一套「先收抽屉、动画结束再跳转」的节奏，
+  // 但多一步「先注册、再跳转」——注册成功才压栈新对话页。
+  //
+  // 状态机（加载中 / 成功 / 失败），三态都反馈到按钮上（wxml 按 newChatting 切换）：
+  // - 加载中：newChatting 置 true，按钮转圈 + 文案换「创建中…」，同时挡住连点。
+  //   抽屉不等网络，照旧立即开始收起，点击手感不受注册耗时影响
+  // - 成功（createSession resolve）：等抽屉收起动画结束（onDrawerLeaved）再压栈
+  // - 失败（reject：网关 502 / 网络异常 / 登录失效）：toast 提示并留在原会话，
+  //   不跳转——宁可让用户再点一次，也不要跳进一条没注册的会话
+  // 兜底：注册失败也不影响对话本身，首条消息发出时 Go 网关仍会补注册
+  // （registerSession），这条路径只影响「空会话是否立刻出现在历史列表」
   onNewChat() {
+    if (this.data.newChatting) return; // 连点闸门：一次点击 = 一条会话
     const sid = agentSocket.freshSessionId();
-    createSession(sid, '').catch(() => {});
+    this.setData({ newChatting: true });
     this._pendingMenu = 'new';
     this._pendingSession = sid;
-    if (!this.data.drawerOpen) {
-      this.flushPendingNav();
+    this._newChatReady = false;
+    // 抽屉开着时先记「动画未完成」，等 onDrawerLeaved 才允许跳转
+    this._drawerClosed = !this.data.drawerOpen;
+
+    createSession(sid, '').then(() => {
+      // 抽屉可能正在收动画、也可能压根没开过，两种情况都交给 _flushNewChat 判定
+      this._newChatReady = true;
+      this._flushNewChat();
+    }).catch(() => {
+      this._pendingMenu = '';
+      this._pendingSession = '';
+      this._newChatReady = false;
+      this.setData({ newChatting: false });
+      this.toast('新建对话失败，请重试');
+    });
+
+    if (this._drawerClosed) {
+      // 抽屉本来就是关的：没有动画要等，注册回来后由 then 里的 _flushNewChat 跳
+      this._flushNewChat();
       return;
     }
     this.setData({ drawerOpen: false });
   },
 
-  // popup 收起动画结束（transition mixin 的 leaved 事件）：此刻再跳转，动画已完整播完
+  // 新对话的跳转闸门：「注册成功」与「抽屉收起动画结束」两个条件都满足才压栈。
+  // 只满足其一时不跳——否则要么跳进一条没注册的会话，要么掐断抽屉的收起动画
+  _flushNewChat() {
+    if (this._pendingMenu !== 'new' || !this._newChatReady || !this._drawerClosed) return;
+    this._pendingMenu = '';
+    this._newChatReady = false;
+    // 压栈新对话页：旧对话原样留在栈里（可返回继续），新页是独立实例、
+    // 独立会话（?session= 带上刚注册的 id，新页 onLoad 据此沿用），
+    // 从它进子页返回照样回到它自己。
+    // 页面栈上限 10 层，满时 navigateTo 会失败，退化为 reLaunch 重置为一个新对话页
+    const sid = this._pendingSession || '';
+    this._pendingSession = '';
+    this.setData({ newChatting: false });
+    const url = NEW_CHAT_URL + (sid ? '&session=' + encodeURIComponent(sid) : '');
+    wx.navigateTo({
+      url,
+      fail: () => wx.reLaunch({ url })
+    });
+  },
+
+  // popup 收起动画结束（transition mixin 的 leaved 事件）：此刻再跳转，动画已完整播完。
+  // 新对话的跳转还要等注册回来，两个条件在 _flushNewChat 里汇合
   onDrawerLeaved() {
+    this._drawerClosed = true;
     this.flushPendingNav();
   },
 
   flushPendingNav() {
     const menu = this._pendingMenu;
-    this._pendingMenu = '';
     if (menu === 'new') {
-      // 压栈新对话页：旧对话原样留在栈里（可返回继续），新页是独立实例、
-      // 独立会话（?session= 带上刚注册的 id，新页 onLoad 据此沿用），
-      // 从它进子页返回照样回到它自己。
-      // 页面栈上限 10 层，满时 navigateTo 会失败，退化为 reLaunch 重置为一个新对话页
-      const sid = this._pendingSession || '';
-      this._pendingSession = '';
-      const url = NEW_CHAT_URL + (sid ? '&session=' + encodeURIComponent(sid) : '');
-      wx.navigateTo({
-        url,
-        fail: () => wx.reLaunch({ url })
-      });
+      // 新对话不在这里直接跳：注册没回来就压栈，会跳进一条没注册的会话。
+      // 交给 _flushNewChat 判定，注册回来后自行补跳
+      this._flushNewChat();
       return;
     }
+    this._pendingMenu = '';
     const url = menu && ROUTES[menu];
     if (url) wx.navigateTo({ url });
   },
@@ -1231,6 +1506,21 @@ Page({
     if (!sid) return;
     this.setData({ drawerOpen: false });
     if (sid === this._sessionId) return;
+
+    // 切会话前先掐断在途流：旧会话还在回来的 token / 卡片，以及 abort 触发的
+    // error 事件，都不该落进新会话的界面（否则上下文就串了）。
+    // _myReqId 先归零再断——abort 的 error 打的正是「被掐断那一轮」的戳，
+    // 归零后它会被本页的 rid 闸门过滤掉，不会误弹「连接异常」。
+    // 只在本页确实有流在跑时才断：单例可能被栈里其它对话页实例共用
+    if (this.data.sending) {
+      this._myReqId = 0;
+      agentSocket.disconnect();
+      this._clearSendWatchdog();
+      this._flushStream({ force: true });
+      this._finishStreaming();
+      this.setData({ sending: false, statusText: '', thinking: false });
+    }
+
     this._sessionId = sid;
     this.loadSessions();
     this.loadSessionMessages(sid);
@@ -1271,6 +1561,8 @@ Page({
         if (!res.confirm) return;
         deleteSession(sid).then(() => {
           if (sid === this._sessionId) {
+            // 已有新对话注册在途时沿用它的结果（同一条新会话），不再注册第二条
+            if (this._pendingMenu === 'new') return;
             this.onNewChat(); // 当前会话被删：换一条新的
             return;
           }

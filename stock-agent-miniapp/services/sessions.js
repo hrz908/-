@@ -4,6 +4,21 @@
 // 后端链路：本服务 -> Go 网关 /api/v1/agent/sessions* -> Python Agent /sessions*
 // （注册表 chat_sessions + LangGraph checkpoints，删除会连 checkpoint 一起清）。
 // 鉴权走 utils/request 的 Bearer，与 agent SSE 同一套。
+//
+// ===== 「新对话」按钮的接口契约（pages/chat/chat.wxml 的 .drawer-new）=====
+// 触发：bindtap="onNewChat"（抽屉里的主行动点）
+// 调用：createSession(sid, '') -> POST /api/v1/agent/sessions
+//   请求体：{ session_id: 'sess_<时间戳>_<随机>', title: '' }
+//           sid 由 agentSocket.freshSessionId() 现生成，只允许 [A-Za-z0-9_-]（≤64）
+//           title 传空 -> 后端落占位标题「新对话」（auto_title=true），
+//           首条真实提问到达后被替换成那个问题
+//   成功：HTTP 200 { code: 0, message: 'ok', data: { session_id } }
+//   失败：HTTP 4xx/5xx { code: 400|401|502, message: '...' } -> Promise reject
+//         页面侧三态：newChatting=true（按钮转圈 + 文案「创建中…」并挡住连点）
+//                     成功 -> 抽屉收起动画结束后压栈 /pages/chat/chat?new=1&session=<sid>
+//                     失败 -> toast「新建对话失败，请重试」，留在原会话不跳转
+// 上下文：新页面 onLoad 用 ?session= 沿用这条会话，后续发送都带同一个 session_id，
+//   后端 thread_id = default:{user_id}:{session_id}，多轮上下文因此连续。
 import { get, post, del } from '../utils/request';
 
 const API = '/api/v1';
