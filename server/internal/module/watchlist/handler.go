@@ -21,9 +21,9 @@ import (
 // noQuote 无行情占位，与小程序 pending 态的展示保持一致
 const noQuote = "--"
 
-// maxWatchlist 单用户自选股数量上限。
+// maxWatchlist 单用户自选股数量上限（默认档，由 Register 按配置覆盖）。
 // 不设上限时一个账号加几千条，refresh 会放大成几百次上游 HTTP 请求
-const maxWatchlist = 200
+var maxWatchlist = 200
 
 // 计算常量：具名之后盈亏公式读起来更直白，也免得重复 NewFromInt
 var (
@@ -154,7 +154,7 @@ func AddWatchlist(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternal, "添加自选股失败")
 		return
 	}
-	if count >= maxWatchlist {
+	if count >= int64(maxWatchlist) {
 		resp.Fail(c, resp.CodeBadRequest, "自选股数量已达上限")
 		return
 	}

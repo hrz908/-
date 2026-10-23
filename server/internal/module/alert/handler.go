@@ -440,11 +440,18 @@ func checkAlerts(userID int64, ctx context.Context) {
 
 		// 额外走企业微信应用消息（@all）：与 WebSocket 提醒并存。
 		// 异步发送，避免同步 HTTP 阻塞行情刷新循环；失败只记日志，
-		// 不影响已完成的 WebSocket 提醒
+		// 不影响已完成的 WebSocket 提醒。
+		// 独立 goroutine 不经过 gin 的 Recovery 中间件，必须自带 panic 兜底，
+		// 否则 wecom 包一个 panic 就会击穿整个进程
 		if wecom.Enabled() {
 			content := buildWecomText(snap, r, now)
 			stockCode := r.StockCode
 			go func() {
+				defer func() {
+					if p := recover(); p != nil {
+						log.Printf("wecom push panic: code=%s err=%v", stockCode, p)
+					}
+				}()
 				if err := wecom.SendTextToAll(content); err != nil {
 					log.Printf("wecom push failed: code=%s err=%v", stockCode, err)
 				}

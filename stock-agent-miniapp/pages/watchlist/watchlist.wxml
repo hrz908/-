@@ -54,8 +54,7 @@
             wx:key="code"
           >
             <!-- 主行：绝对定位于操作区之上，位移由 swipeIndex / swipeOpen 决定。
-                 点击进 K 线详情页（分包 pages/kline），code 允许带空格，
-                 后端 NormalizeCode 会统一格式 -->
+                 点击进卡片画廊（pages/test，静态样式页），code 仅随 URL 透传 -->
             <view
               class="stock-row-main {{item.sep ? 'stock-row-main--sep' : ''}}"
               style="transform: translateX({{index === swipeIndex ? swipeDx : (index === swipeOpen ? -64 : 0)}}px);"

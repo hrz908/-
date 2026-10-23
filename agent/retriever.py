@@ -96,6 +96,18 @@ class HybridRetriever(BaseRetriever):
         # 融合结果后处理：去噪、去重、控多样性（详见 _clean_docs）
         return _clean_docs(docs)
 
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        # 检索本质是异步 IO，同步入口用 asyncio 桥接
+        import asyncio
+        return asyncio.run(self._run_search(query))
+
+    async def _aget_relevant_documents(
+        self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        return await self._run_search(query)
+
 
 def _clean_docs(docs: List[Document], sim_floor: float = 0.05, per_title: int = 2) -> List[Document]:
     """对融合后的候选片段做轻量后处理，提升送入生成的质量。
@@ -122,18 +134,6 @@ def _clean_docs(docs: List[Document], sim_floor: float = 0.05, per_title: int = 
         per_title_count[title] = per_title_count.get(title, 0) + 1
         out.append(d)
     return out
-
-    def _get_relevant_documents(
-        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
-    ) -> List[Document]:
-        # 检索本质是异步 IO，同步入口用 asyncio 桥接
-        import asyncio
-        return asyncio.run(self._run_search(query))
-
-    async def _aget_relevant_documents(
-        self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun
-    ) -> List[Document]:
-        return await self._run_search(query)
 
 
 def build_retriever(k: int = 6) -> HybridRetriever:

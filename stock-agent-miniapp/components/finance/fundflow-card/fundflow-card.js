@@ -70,10 +70,12 @@ Component({
             : fmtPct(d.northPct) + (d.northChangePct == null ? '' : '（' + fmtSign(d.northChangePct) + 'pct）'),
         streakText: streakAbs ? '连续' + streakAbs + '日净' + (streak > 0 ? '流入' : '流出') : '',
         days5Dir: direction(d.days5 && d.days5.length ? d.days5[d.days5.length - 1] : null),
+        // 龙虎榜三个量：席位 / 买入 / 卖出。正负号在 JS 里拼（wxml 不再写死 +-)：
+        // 买侧行的 sell、卖侧行的 buy 没有数据，传 null 渲染 '--' 而不是 "+--"
         lhbRows: (d.lhb || []).map((r) => ({
           seat: r.seat,
-          buy: fmtAmount(r.buy),
-          sell: fmtAmount(r.sell)
+          buy: r.buy == null ? '--' : '+' + fmtAmount(r.buy),
+          sell: r.sell == null ? '--' : '-' + fmtAmount(r.sell)
         }))
       });
     }

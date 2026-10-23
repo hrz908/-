@@ -13,7 +13,8 @@ import (
 )
 
 // QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出
-// 开高低、涨跌额、量额、换手率、总市值、状态与时间，供行情详情页使用
+// 开高低、涨跌额、量额、换手率、市值、PE/PB、状态与时间，供行情详情页
+// 与 Agent 同业对比工具使用（全部来自腾讯当日快照，无需额外数据源）
 type QuoteDetail struct {
 	Code          string          `json:"code"`
 	Name          string          `json:"name"`
@@ -26,7 +27,10 @@ type QuoteDetail struct {
 	Volume        int64           `json:"volume"`   // 成交量（手）
 	Amount        decimal.Decimal `json:"amount"`   // 成交额（万元）
 	Turnover      decimal.Decimal `json:"turnover"` // 换手率（%）
+	PE            decimal.Decimal `json:"pe"`       // 市盈率（腾讯口径，TTM）
+	PB            decimal.Decimal `json:"pb"`       // 市净率
 	TotalMv       decimal.Decimal `json:"total_mv"` // 总市值（元；上游亿元×1e8）
+	FreeMv        decimal.Decimal `json:"free_mv"`  // 流通市值（元；上游亿元×1e8）
 	Status        string          `json:"status"`   // trading / closed
 	Time          string          `json:"time"`     // 行情时间（腾讯返回的原始串）
 }
@@ -74,7 +78,8 @@ func parseDecimal(s string) decimal.Decimal {
 }
 
 // 腾讯行情串中 QuoteDetail 用到的其余字段下标
-// （tecName/tecCode/tecPrice/tecPercent 已在 source.go 定义）
+// （tecName/tecCode/tecPrice/tecPercent 已在 source.go 定义；
+// 下标已用 sh600519 真实响应核对：39=PE、46=PB、44=流通市值、45=总市值）
 const (
 	tecPrevClose = 4  // 昨收
 	tecOpen      = 5  // 今开
@@ -85,7 +90,10 @@ const (
 	tecAmount    = 37 // 成交额（万元）
 	tecTime      = 30 // 行情时间，形如 20261020150003
 	tecTurnover  = 38 // 换手率（%）
-	tecTotalMv   = 44 // 总市值（亿元）
+	tecPE        = 39 // 市盈率（TTM）
+	tecFreeMv    = 44 // 流通市值（亿元）
+	tecTotalMv   = 45 // 总市值（亿元）
+	tecPB        = 46 // 市净率
 )
 
 // parseTencentDetails 解析腾讯行情文本为完整快照，字段布局同 parseTencentQuotes
@@ -130,7 +138,10 @@ func parseTencentDetails(body string) []*QuoteDetail {
 			Volume:        int64(parseDecimal(fields[tecVolume]).IntPart()),
 			Amount:        parseDecimal(fields[tecAmount]),
 			Turnover:      parseDecimal(fields[tecTurnover]),
+			PE:            parseDecimal(fields[tecPE]),
+			PB:            parseDecimal(fields[tecPB]),
 			TotalMv:       parseDecimal(fields[tecTotalMv]).Mul(decimal.NewFromInt(100000000)),
+			FreeMv:        parseDecimal(fields[tecFreeMv]).Mul(decimal.NewFromInt(100000000)),
 			Status:        marketStatus(time.Now()),
 			Time:          formatQuoteTime(strings.TrimSpace(fields[tecTime])),
 		})

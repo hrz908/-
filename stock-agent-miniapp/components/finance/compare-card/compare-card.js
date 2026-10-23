@@ -1,21 +1,22 @@
 // 同业对比卡：回答「茅台和五粮液哪个好」「白酒板块谁估值低」
-// 字段口径见设计文档第 2 节⑦。只对比两家同行（本股 + 2 家，共 3 列），
-// 标题形如「A vs B vs C」。着色规则：近1月按正负（加号红 / 减号绿），
-// ROE / 股息率「更高者优」（红），PE「更低者优」（绿）——与 HTML 视觉稿一致。
+// 只对比两家同行（本股 + 2 家，共 3 列），标题形如「A vs B vs C」。
+// 数据约定（agent 的 get_peer_compare）：全部维度取自当日行情快照，
+// 不含任何历史区间或财务接口——因此对比维度为 价/涨跌幅/PE/PB/总市值。
+// 着色规则：涨跌幅按正负（加号红 / 减号绿），PE / PB「更低者优」（绿）。
 // 卡内只陈述客观事实，不写买卖推荐（合规红线）。
-const { fmtNum, fmtPct, fmtPrice, direction } = require('../../../utils/format');
+const { fmtAmount, fmtNum, fmtPct, fmtPrice, direction } = require('../../../utils/format');
 
 // 最多三个标的：本股 + 两家同行（需求：只对比两家同行，标题 A vs B vs C）
 const MAX_ITEMS = 3;
 
 // 对比维度配置：better = 'high' 越高越优 / 'low' 越低越优 / 'none' 不比较高低；
-// sign = true 的指标（近1月）不比高低，按正负着色：加号红 / 减号绿
+// sign = true 的指标（涨跌幅）不比高低，按正负着色：加号红 / 减号绿
 const METRICS = [
   { key: 'price', label: '最新价', better: 'none', fmt: fmtPrice },
-  { key: 'periodPct', label: '近1月', better: 'none', sign: true, fmt: (v) => fmtPct(v) },
+  { key: 'changePct', label: '涨跌幅', better: 'none', sign: true, fmt: (v) => fmtPct(v) },
   { key: 'pe', label: 'PE(TTM)', better: 'low', fmt: (v) => fmtNum(v) },
-  { key: 'roe', label: 'ROE', better: 'high', fmt: (v) => fmtPct(v) },
-  { key: 'dividendYield', label: '股息率', better: 'high', fmt: (v) => fmtPct(v) }
+  { key: 'pb', label: 'PB', better: 'low', fmt: (v) => fmtNum(v) },
+  { key: 'totalMv', label: '总市值', better: 'none', fmt: (v) => fmtAmount(v) }
 ];
 
 // 赢家 tone：越高越优的指标赢家标红（up），越低越优的标绿（down）
@@ -24,7 +25,7 @@ const WINNER_TONE = { high: 'up', low: 'down' };
 Component({
   externalClasses: ['card-class'],
   properties: {
-    // 对比标的 [{ name, price, periodPct, pe, roe, dividendYield }]，
+    // 对比标的 [{ name, price, changePct, pe, pb, totalMv }]（当日快照，元口径），
     // 只取前 3 个（本股 + 两家同行）
     items: { type: Array, value: [] },
     note: { type: String, value: '' }
@@ -78,7 +79,7 @@ Component({
           label: m.label,
           cells: items.map((it, i) => ({
             text: m.fmt(it[m.key]),
-            // 近1月这类带方向的指标按正负着色：加号红 / 减号绿；其余指标标赢家
+            // 涨跌幅这类带方向的指标按正负着色：加号红 / 减号绿；其余指标标赢家
             tone: m.sign ? direction(it[m.key]) : i === winner ? WINNER_TONE[m.better] : ''
           }))
         };

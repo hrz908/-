@@ -43,8 +43,8 @@
     <view class="lhb-row" wx:for="{{lhbRows}}" wx:for-item="r" wx:key="seat">
       <text class="lhb-seat">{{r.seat}}</text>
       <view class="lhb-vals">
-        <text class="num up">+{{r.buy}}</text>
-        <text class="num down">-{{r.sell}}</text>
+        <text class="num up">{{r.buy}}</text>
+        <text class="num down">{{r.sell}}</text>
       </view>
     </view>
   </view>

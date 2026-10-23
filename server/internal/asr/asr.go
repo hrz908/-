@@ -18,33 +18,39 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"stock-agent-server/internal/httpclient"
 	"stock-agent-server/internal/resp"
 )
 
 const (
 	// 录音大小上限：60 秒 mp3 约 1MB，留四倍余量
 	maxAudioBytes = 4 << 20
-	// 上游超时：几十秒的音频识别通常 1~3 秒，20 秒足够兜住网络抖动；
-	// 用 Client.Timeout 而不是 context，避免整条请求被客户端断开后卡住连接
-	upstreamTimeout = 20 * time.Second
 	// 上游返回体的读取上限：识别结果只是一句话，512KB 足够，防止异常响应打爆内存
 	maxRespBytes = 1 << 19
 )
+
+// upstreamTimeout 上游超时：几十秒的音频识别通常 1~3 秒，20 秒足够兜住网络抖动。
+// 用 Client.Timeout 而不是 context，避免整条请求被客户端断开后卡住连接
+const upstreamTimeout = 20 * time.Second
 
 var (
 	baseURL string
 	apiKey  string
 	model   string
 	// 复用连接池：识别是高频短请求，每次新建连接会白白多一轮 TLS 握手
-	client = &http.Client{Timeout: upstreamTimeout}
+	client = httpclient.New(upstreamTimeout)
 )
 
 // Init 注入上游配置，必须在 router.New 之前调用，
-// 否则 handler 里读到的还是空值（与 agent.Init 同样的约束）
-func Init(base, key, m string) {
+// 否则 handler 里读到的还是空值（与 agent.Init 同样的约束）。
+// timeout 可选：不传用 20s 默认档（测试场景传更短值加速失败）
+func Init(base, key, m string, timeout ...time.Duration) {
 	baseURL = strings.TrimRight(base, "/")
 	apiKey = key
 	model = m
+	if len(timeout) > 0 && timeout[0] > 0 {
+		client = httpclient.New(timeout[0])
+	}
 }
 
 // Transcribe POST /api/v1/asr/transcribe

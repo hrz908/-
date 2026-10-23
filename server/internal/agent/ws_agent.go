@@ -20,6 +20,7 @@ import (
 
 // globalSem 全局连接闸门：进程内同时存活的 Agent WS 连接上限。
 // 超出直接 503，避免连接数无限膨胀耗尽 fd / 内存。取满即拒（default 分支），不排队。
+// 容量在 agent.Init 里按配置创建（config.agent.ws_max_conns，默认 512）。
 var globalSem = make(chan struct{}, 512)
 
 // upgrader 小程序端握手无法自定义请求头，也不带浏览器 Origin，故不做同源校验；
@@ -104,10 +105,14 @@ func ServeWS(c *gin.Context) {
 }
 
 // pingLoop 服务端心跳：每 25s 发一个 ping。
-// 写失败说明连接已死，主动 cancel 让读循环与运行中的请求尽快退出。
+// 写失败说明连接已死，主动 cancel 让读循环与运行中的请求尽快退出；
+// 同时必须主动 Close 连接——cancel 只能取消能感知 ctx 的调用，
+// 阻塞在 ReadMessage 里的读循环感知不到，最坏要等 60s 读超时才醒，
+// 期间这条半开连接一直占着全局闸门槽位。
 func (a *agentConn) pingLoop(ctx context.Context, cancel context.CancelFunc) {
 	ticker := time.NewTicker(wsPingInterval)
 	defer ticker.Stop()
+	defer a.close()
 	for {
 		select {
 		case <-ticker.C:

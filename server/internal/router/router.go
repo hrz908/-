@@ -8,6 +8,7 @@ import (
 
 	"stock-agent-server/internal/agent"
 	"stock-agent-server/internal/asr"
+	"stock-agent-server/internal/config"
 	"stock-agent-server/internal/middleware"
 	"stock-agent-server/internal/module/alert"
 	authapi "stock-agent-server/internal/module/auth"
@@ -26,7 +27,7 @@ import (
 //
 // 各业务模块自带 Register(g *gin.RouterGroup)，新增页面后端时：
 // 在这里 import 进来、调一次 Register 即可，不用改本文件以外的东西
-func New(allowOrigins string) *gin.Engine {
+func New(cfg config.Config) *gin.Engine {
 	r := gin.New()
 
 	// 只信任本机反代：gin 默认信任所有代理的 X-Forwarded-For，
@@ -38,10 +39,10 @@ func New(allowOrigins string) *gin.Engine {
 	// Recovery 必须最先注册，才能兜住后续中间件和 Handler 的 panic
 	r.Use(middleware.Recovery())
 	r.Use(middleware.RequestID())
-	r.Use(middleware.CORS(allowOrigins))
+	r.Use(middleware.CORS(cfg.AllowOrigins))
 	// 限流放在鉴权之前：未登录的刷接口也要被挡住
 	// （Redis 客户端由 deps 提供，与业务包保持一致）
-	r.Use(middleware.RateLimit(100, time.Minute))
+	r.Use(middleware.IPRateLimit(cfg.RateLimit.IPPerMin, time.Minute))
 	r.Use(middleware.AccessLog())
 
 	// 健康检查：给容器 / 编排探针用，不鉴权、也不该被限流误伤
@@ -57,7 +58,7 @@ func New(allowOrigins string) *gin.Engine {
 	api := r.Group("/api/v1")
 
 	// 公开路由：登录（内部对登录单独挂了更严的限流）
-	authapi.Register(api)
+	authapi.Register(api, cfg.RateLimit.LoginPerMin)
 
 	// WebSocket 长连接：握手无法带自定义头，token 只能走 query（?token=）。
 	// 必须注册在 authorized 组「之外」——该组的 Auth() 只认 Header Bearer，
@@ -70,17 +71,24 @@ func New(allowOrigins string) *gin.Engine {
 	authorized := api.Group("")
 	authorized.Use(middleware.Auth())
 	{
-		watchlist.Register(authorized)
+		watchlist.Register(authorized, cfg.WatchlistMaxItems)
 		alert.Register(authorized)
-		stock.Register(authorized)
 		user.Register(authorized)
+
+		// 行情与搜索：按登录用户单独限流。二者会把一次请求放大成
+		// 若干第三方上游请求（腾讯行情 / smartbox），不能只靠全局 IP 档
+		market := authorized.Group("")
+		market.Use(middleware.UserRateLimit(cfg.RateLimit.MarketPerMin, time.Minute))
+		stock.Register(market)
 
 		// Agent AI 对话 SSE 兜底（H5 / 不支持 WS 的环境）：走 Header 鉴权，留在组内
 		authorized.POST("/agent/stream", agent.ServeSSE)
 
 		// 语音转文字：multipart 上传录音，网关转发上游 ASR。
-		// 挂在鉴权组内——每次识别都消耗上游额度，不能匿名调用
-		authorized.POST("/asr/transcribe", asr.Transcribe)
+		// 挂在鉴权组内——每次识别都消耗上游付费额度，不能匿名调用；
+		// 再叠一层用户级限流，防止单账号刷爆上游额度
+		authorized.POST("/asr/transcribe",
+			middleware.UserRateLimit(cfg.RateLimit.ASRPerMin, time.Minute), asr.Transcribe)
 	}
 
 	return r

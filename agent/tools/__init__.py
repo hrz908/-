@@ -173,10 +173,11 @@ def take_latest(rows: Any, key: str = "trade_date", limit: int = 30) -> list:
 def get_tools() -> list:
     """返回全部可供 LLM 绑定的工具（惰性导入，避免包内循环依赖）。"""
     from tools.quote import get_quote
-    from tools.kline import get_kline
     from tools.search import symbol_search
+    from tools.compare import get_peer_compare
 
-    tools = [get_quote, get_kline, symbol_search]
+    # 同业对比只依赖 Go 网关当日快照（不碰 Tushare），始终注册
+    tools = [get_quote, symbol_search, get_peer_compare]
 
     # Tushare 增强工具：仅在配置了 token 时注册，
     # 否则 LLM 选中后必然失败（白白消耗一次工具往返与降级）
@@ -186,13 +187,13 @@ def get_tools() -> list:
             get_financial_indicator,
             get_financial_report,
         )
-        from tools.moneyflow import get_money_flow, get_top_list, get_hsgt_flow
+        from tools.moneyflow import get_money_flow
         from tools.news import get_stock_news
         from tools.history import get_history_daily
+        from tools.lhb import get_top_list
 
         tools += [
             get_valuation, get_financial_indicator, get_financial_report,
-            get_money_flow, get_top_list, get_hsgt_flow,
-            get_stock_news, get_history_daily,
+            get_money_flow, get_stock_news, get_history_daily, get_top_list,
         ]
     return tools

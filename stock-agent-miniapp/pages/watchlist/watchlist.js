@@ -317,7 +317,7 @@ Page({
     this.setData({ swipeIndex: -1, swipeDx: 0, swipeOpen: open ? s.index : -1 });
   },
 
-  // 点主行：先把打开状态的行收回去；没收起的动作（纯点击）则进 K 线详情页。
+  // 点主行：先把打开状态的行收回去；没收起的动作（纯点击）则进卡片画廊。
   // 横向滑动判定在 onRowTouchMove 里做，滑动锁定时触摸已交还列表、tap 不触发，
   // 因此滑完抬手不会误跳
   onRowMainTap(e) {
@@ -328,7 +328,7 @@ Page({
     const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
     if (!ds.code) return;
     wx.navigateTo({
-      url: '/pages/kline/index?code=' + encodeURIComponent(ds.code) +
+      url: '/pages/test/index?code=' + encodeURIComponent(ds.code) +
         (ds.name ? '&name=' + encodeURIComponent(ds.name) : '')
     });
   },

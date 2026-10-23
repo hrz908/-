@@ -57,16 +57,15 @@ _MAX_CARDS_PER_TOOL = 3
 # Tushare 增强工具也要给标签，否则前端只能显示原始工具名
 _TOOL_LABELS = {
     "get_quote": "实时行情",
-    "get_kline": "K线数据",
     "symbol_search": "股票搜索",
     "get_valuation": "估值指标",
     "get_financial_indicator": "财务指标",
     "get_financial_report": "财报数据",
     "get_money_flow": "资金流向",
-    "get_top_list": "龙虎榜",
-    "get_hsgt_flow": "北向资金",
     "get_stock_news": "财经资讯",
     "get_history_daily": "历史行情",
+    "get_top_list": "龙虎榜席位",
+    "get_peer_compare": "同业对比",
 }
 
 # 工具名 -> 结构化事件构造器
@@ -123,8 +122,16 @@ def _current_run_messages(state: dict) -> list:
     return msgs
 
 
-# 取数类工具：只有它们的结果才能支撑回答里的数字
-_DATA_TOOLS = ("get_quote", "get_kline", "get_valuation", "get_financial_report", "get_money_flow")
+# 取数类工具：只有它们的结果才能支撑回答里的数字。
+# K 线（get_history_daily）、资讯（get_stock_news）、财务指标（get_financial_indicator）、
+# 龙虎榜（get_top_list）、同业对比（get_peer_compare）同属此类——
+# 不进白名单的话，用户问「最近日K/新闻/ROE」即使取数成功，
+# 也会被 _no_data_fallback 的兜底文案整段覆盖（实测必踩）
+_DATA_TOOLS = (
+    "get_quote", "get_valuation", "get_financial_report", "get_money_flow",
+    "get_history_daily", "get_stock_news", "get_financial_indicator",
+    "get_top_list", "get_peer_compare",
+)
 
 
 def _got_data(state: dict) -> bool:
@@ -174,7 +181,7 @@ def _pending_nudge(state: dict) -> str:
                     codes.append(str(row["market"] or "") + str(row["code"]))
     if _got_data(state) or not _needs_data_fetch(state):
         return ""
-    hint = "必须用工具取真实数据（行情用 get_quote，K 线用 get_kline，参数见工具列表）"
+    hint = "必须用工具取真实数据（行情用 get_quote，参数见工具列表）"
     if codes:
         hint = "已检索到代码：" + "、".join(codes) + "。" + hint
     return (
@@ -232,7 +239,7 @@ def _parse_text_tool_call(content: str):
     两种来源都认：
     1. 正文中写了工具名（如 `function\\nget_quote\\n{...}`）；
     2. 工具名缺失或被写坏（实测会写成 `function调用`），此时按参数签名反推
-       （只带 code -> 行情，带 count/period -> K 线，带 query -> 搜索）。
+       （只带 code -> 行情，带 query -> 搜索）。
     """
     if not content or "{" not in content:
         return None, None
@@ -283,10 +290,16 @@ def _infer_tool_by_args(args: dict):
     """按参数签名反推工具名（拿不准就不猜，返回 None）。"""
     if "query" in args:
         return "symbol_search"
-    if "code" in args and ("count" in args or "period" in args):
-        return "get_kline"
-    if "code" in args and len(args) == 1:
-        return "get_quote"
+    if "peers" in args:
+        return "get_peer_compare"
+    if "start_time" in args or "end_time" in args:
+        return "get_stock_news"
+    if "code" in args:
+        rest = {k for k in args if k != "code"}
+        if not rest:
+            return "get_quote"
+        if rest <= {"days", "adj", "end_date"}:
+            return "get_history_daily"
     return None
 
 
@@ -413,21 +426,25 @@ async def tool_execute(state: dict) -> dict:
 
 
 def _emit_structured(tool_results: list) -> None:
-    """把行情/K线/估值/资金流/财报等结构化数据以独立 card/table 事件发射
+    """把行情/估值/资金流/财报等结构化数据以独立 card/table 事件发射
     （不进入 token 流）。
 
     事件契约（与小程序 chat.js 的卡片工厂一一对应，改这里必须同步那边
     与 server/README.md 第三节）：
     - get_quote            -> card: quote_card（行情速览卡）
-    - get_kline            -> table: kline_table（K 线数据）
     - symbol_search        -> table: symbol_list（股票搜索候选）
     - get_valuation        -> card: valuation_card（估值卡，daily_basic 行）
-    - get_money_flow       -> card: fundflow_card（资金流向卡，moneyflow 行）
+    - get_money_flow       -> card: fundflow_card（资金流向卡，moneyflow 行，
+                              命中 get_top_list 时并入 lhb 席位区块）
     - get_financial_report -> card: report_card（财报速览卡，三表合并行）
+    - get_history_daily    -> table: kline_table（K 线卡，最近 15 个交易日）
+    - get_peer_compare     -> card: compare_card（同业对比卡，当日快照）
 
     行载荷按行发射：Tushare 返回的是数组，一轮问多只股票时一标的一卡，
     前端每张卡是一条独立消息。单工具最多发 _MAX_CARDS_PER_TOOL 张，防刷屏。
     """
+    lhb = _lhb_payload(tool_results)
+    has_moneyflow = False
     for item in tool_results:
         name = item.get("tool")
         result = item.get("result") or {}
@@ -436,18 +453,59 @@ def _emit_structured(tool_results: list) -> None:
         data = result.get("data")
         if name == "get_quote" and data:
             emit_card("quote_card", data)
-        elif name == "get_kline" and data:
-            emit_table("kline_table", data)
         elif name == "symbol_search" and data:
             emit_table("symbol_list", data)
         elif name == "get_valuation" and data:
             for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
                 emit_card("valuation_card", row)
         elif name == "get_money_flow" and data:
-            for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
+            rows = _rows_of(data)
+            has_moneyflow = bool(rows)
+            for row in rows[:_MAX_CARDS_PER_TOOL]:
+                # 龙虎榜并入第一张卡：同一标的的资金流 + 上榜席位一屏看完
+                if lhb and row is rows[0]:
+                    row = {**row, "lhb": lhb["rows"], "lhb_date": lhb["trade_date"]}
                 emit_card("fundflow_card", row)
+        elif name == "get_history_daily" and data:
+            rows = _kline_rows(data)
+            if rows:
+                emit_table("kline_table", {"rows": rows})
         elif name == "get_financial_report" and data:
             emit_card("report_card", data)
+        elif name == "get_peer_compare" and data:
+            emit_card("compare_card", data)
+    # 龙虎榜单独命中、本轮没有资金流数据时：发一张仅龙虎榜的资金流向卡
+    if lhb and not has_moneyflow:
+        emit_card("fundflow_card", {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]})
+
+
+def _lhb_payload(tool_results: list):
+    """取第一个成功的 get_top_list 结果作为龙虎榜区块载荷；没有返回 None。"""
+    for item in tool_results:
+        if item.get("tool") != "get_top_list":
+            continue
+        result = item.get("result") or {}
+        if result.get("ok") and isinstance(result.get("data"), dict) and result["data"].get("rows"):
+            return result["data"]
+    return None
+
+
+def _kline_rows(data: list) -> list:
+    """日线数据折成前端 kline_table 契约的行结构，按日期升序。
+
+    字段映射：trade_date -> date、vol -> volume（前端 klineCard 读 volume 画量），
+    其余开高低收同名透传；行数由工具层收口在 15 个交易日内。
+    """
+    rows = [r for r in _rows_of(data) if r.get("trade_date")]
+    rows.sort(key=lambda r: str(r.get("trade_date", "")))
+    return [{
+        "date": r.get("trade_date"),
+        "open": r.get("open"),
+        "high": r.get("high"),
+        "low": r.get("low"),
+        "close": r.get("close"),
+        "volume": r.get("vol"),
+    } for r in rows]
 
 
 def _rows_of(data):
@@ -458,13 +516,16 @@ def _rows_of(data):
 
 
 # 命中这些词说明用户就是要数据；此时若一个数据都没取到，绝不能让模型自由发挥。
-# 除行情价格类外，补上估值/财报/资金三类：它们对应各自的 Tushare 工具与卡片，
-# 取不到数时同样必须走兜底文案，而不是让模型凭印象编数字
+# 除行情价格类外，补上估值/财报/资金/龙虎榜/同业对比五类：它们对应各自的
+# 工具与卡片，取不到数时同样必须走兜底文案，而不是让模型凭印象编数字。
+# 注意：北向/南向/融资融券对应的工具已下线（2026-10-22），这些词留在表里
+# 只会让问句进 MCP 后无工具可调、命中兜底文案——属死路由，已清除
 _DATA_KEYWORDS = (
     "k线", "K线", "行情", "价格", "涨跌", "走势", "收盘", "报价", "涨幅",
     "估值", "市盈率", "市净率", "市销率", "股息", "市值",
     "财报", "业绩", "营收", "净利润", "毛利", "ROE", "EPS",
-    "资金", "主力", "北向", "南向", "龙虎榜", "流入", "流出", "融资融券",
+    "资金", "主力", "龙虎榜", "流入", "流出",
+    "同业", "同行", "竞品", "对比", "新闻", "动态", "消息",
 )
 
 def _no_data_fallback(state: dict, tool_results: list) -> str:
@@ -487,7 +548,7 @@ def _no_data_fallback(state: dict, tool_results: list) -> str:
         head = "抱歉，这一轮没有取到所需的数据，我无法给出你要的数字。"
         if reason:
             head += reason + "。"
-        return head + "请稍后重试；也可以带上股票代码再问，例如「000568 最近10天日K」。"
+        return head + "请稍后重试；也可以带上股票代码再问，例如「000568 最近15个交易日的日K」。"
     # 没调取数工具：可能是知识型问题（如「解释一下 PE 和 PB 的区别」），
     # 这类问题本来就不需要真实数据，兜底文案接管会把一条能答好的回答
     # 替换成无意义的取数失败提示（实测：PE/PB/PS 通俗解释被误伤）
@@ -495,7 +556,7 @@ def _no_data_fallback(state: dict, tool_results: list) -> str:
         return ""
     if _asked_for_data(state):
         return ("抱歉，这一轮没有取到所需的数据，我无法给出你要的数字。"
-                "请稍后重试；也可以带上股票代码再问，例如「000568 最近10天日K」。")
+                "请稍后重试；也可以带上股票代码再问，例如「000568 最近15个交易日的日K」。")
     return ""
 
 
@@ -516,10 +577,12 @@ def _asked_for_data(state: dict) -> bool:
 # 概念性问题：问的是「是什么 / 怎么算 / 有什么区别」，本身不需要真实数据。
 # 这类问题不能被「没取到数据」的兜底文案接管——否则会把一条本来能答好的
 # 知识型回答（实测：PE/PB/PS 通俗解释）换成无意义的取数失败提示。
+# 注意「对比」不在表里：它已移入 _DATA_KEYWORDS——「A 和 B 对比」要取当日
+# 快照出对比卡；「区别/不同」足以覆盖「PE 和 PB 有什么不同」这类概念问法
 _CONCEPT_KEYWORDS = (
     "解释", "含义", "意思", "区别", "不同", "为什么", "怎么算", "如何算",
     "怎么用", "如何用", "是什么", "什么是", "通俗", "简单说", "怎么理解",
-    "如何理解", "讲讲", "介绍", "科普", "定义", "对比", "有什么区别",
+    "如何理解", "讲讲", "介绍", "科普", "定义", "有什么区别",
 )
 
 

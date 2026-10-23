@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,10 +29,25 @@ const (
 
 	// maxMessageSize 读上限。本连接只读不发，4KB 足够
 	maxMessageSize = 4096
-
-	// maxConnsPerUser 单用户连接数上限，防止异常客户端把连接数打满
-	maxConnsPerUser = 5
 )
+
+// 连接上限（由 Configure 按配置注入，默认档即迁移前硬编码值 + 新增全局上限）：
+// 只有每用户上限时，海量不同账号仍能把进程级连接数打满，需要全局兜底
+var (
+	maxConnsPerUser = 5
+	maxConnsTotal   = int64(2048)
+	totalConns      atomic.Int64
+)
+
+// Configure 注入连接上限，main 启动时调用一次（非法值保留默认档）。
+func Configure(perUser, maxTotal int) {
+	if perUser > 0 {
+		maxConnsPerUser = perUser
+	}
+	if maxTotal > 0 {
+		maxConnsTotal = int64(maxTotal)
+	}
+}
 
 // conn 包一层：gorilla/websocket 明确不支持并发写同一连接，
 // 推送、关闭都走这把锁，否则并发推送会写坏帧甚至 panic
@@ -63,8 +79,11 @@ type hub struct {
 
 var h = &hub{conns: make(map[int64]map[*conn]struct{})}
 
-// add 返回 false 表示已达单用户连接上限，调用方应直接拒绝
+// add 返回 false 表示已达单用户或全局连接上限，调用方应直接拒绝
 func (u *hub) add(userID int64, c *conn) bool {
+	if totalConns.Load() >= maxConnsTotal {
+		return false
+	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if len(u.conns[userID]) >= maxConnsPerUser {
@@ -74,6 +93,7 @@ func (u *hub) add(userID int64, c *conn) bool {
 		u.conns[userID] = make(map[*conn]struct{})
 	}
 	u.conns[userID][c] = struct{}{}
+	totalConns.Add(1)
 	return true
 }
 
@@ -84,7 +104,10 @@ func (u *hub) remove(userID int64, c *conn) {
 	if !ok {
 		return
 	}
-	delete(set, c)
+	if _, exists := set[c]; exists {
+		delete(set, c)
+		totalConns.Add(-1)
+	}
 	if len(set) == 0 {
 		delete(u.conns, userID)
 	}
@@ -111,6 +134,7 @@ func (u *hub) CloseAll() {
 		}
 	}
 	u.conns = make(map[int64]map[*conn]struct{})
+	totalConns.Store(0)
 }
 
 // CloseAll 关闭全部连接（优雅关闭用）

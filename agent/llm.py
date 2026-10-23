@@ -4,17 +4,23 @@
 """
 from langchain_openai import ChatOpenAI
 
-from config import OPENAI_API_BASE, OPENAI_API_KEY, LLM_MODEL, SMALL_MODEL
+from config import LLM_TIMEOUT, LLM_MODEL, OPENAI_API_BASE, OPENAI_API_KEY, SMALL_MODEL
 
 
 def get_llm(streaming: bool = True, temperature: float = 0.7) -> ChatOpenAI:
-    """主力对话模型：默认开启流式，温度略高以保证回答自然。"""
+    """主力对话模型：默认开启流式，温度略高以保证回答自然。
+
+    timeout 是单次请求的硬上限：上游卡死时工具链有 8s 兜底，
+    但 LLM 生成之前没有兜底，整个事件流会被无限期挂住（Go 网关侧
+    runTimeout 到点砍流，用户只看到断流没有解释）。
+    """
     return ChatOpenAI(
         model=LLM_MODEL,
         openai_api_base=OPENAI_API_BASE,
         openai_api_key=OPENAI_API_KEY,
         streaming=streaming,
         temperature=temperature,
+        timeout=LLM_TIMEOUT,
     )
 
 
@@ -26,6 +32,7 @@ def get_small_llm(streaming: bool = False, temperature: float = 0.0) -> ChatOpen
         openai_api_key=OPENAI_API_KEY,
         streaming=streaming,
         temperature=temperature,
+        timeout=LLM_TIMEOUT,
     )
 
 

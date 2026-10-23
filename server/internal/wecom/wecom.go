@@ -9,13 +9,17 @@ package wecom
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"stock-agent-server/internal/httpclient"
 )
 
 const (
@@ -30,15 +34,50 @@ const (
 	fallbackTokenTTL = 2 * time.Hour
 )
 
-// 企业微信自建应用凭据，由 main 启动时从配置注入（与 wechat.AppID 同一套路）。
+// 企业微信自建应用凭据，由 main 启动时通过 Init 注入（与 wechat.Init 同一套路）。
 // 三者任一为空 / 为 0 表示「未接入企业微信」，提醒只走 WebSocket，不推送
 var (
 	CorpID  string // 企业 ID（corpid）
 	Secret  string // 自建应用的 secret
 	AgentID int    // 自建应用的 agentid
+	// httpClient 复用连接：提醒推送是低频短请求，复用省掉每次 TLS 握手
+	httpClient = httpclient.New(5 * time.Second)
 )
 
-var httpClient = &http.Client{Timeout: 5 * time.Second}
+// Init 注入企业微信凭据与上游超时，main 启动时调用一次
+func Init(corpID, secret string, agentID int, timeout time.Duration) {
+	CorpID = corpID
+	Secret = secret
+	AgentID = agentID
+	if timeout > 0 {
+		httpClient = httpclient.New(timeout)
+	}
+}
+
+// maxRespBytes 企业微信响应体读取上限：gettoken / send 都只回一小段 JSON，
+// 64KB 绰绰有余，防上游异常时的超大响应打爆内存
+const maxRespBytes = 64 << 10
+
+// doJSON GET/POST 企业微信接口并把响应体限长解码到 out。
+// 每次调用带独立 5s 超时：Client.Timeout 之外再多一层兜底，
+// 推送在提醒检查的异步 goroutine 里发起，挂着不返回会占住 goroutine
+func doJSON(method, url string, body io.Reader, out any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return json.NewDecoder(io.LimitReader(resp.Body, maxRespBytes)).Decode(out)
+}
 
 // Enabled 是否已配置企业微信凭据。没配置时不要去调企业微信接口，
 // 否则每条提醒都会白白等一次网络失败
@@ -67,19 +106,13 @@ func accessToken() (string, error) {
 	q.Set("corpid", CorpID)
 	q.Set("corpsecret", Secret)
 
-	resp, err := httpClient.Get(tokenURL + "?" + q.Encode())
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
 	var out struct {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int    `json:"expires_in"`
 		ErrCode     int    `json:"errcode"`
 		ErrMsg      string `json:"errmsg"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := doJSON(http.MethodGet, tokenURL+"?"+q.Encode(), nil, &out); err != nil {
 		return "", err
 	}
 	if out.ErrCode != 0 || out.AccessToken == "" {
@@ -134,18 +167,12 @@ func SendTextToAll(content string) error {
 		return err
 	}
 
-	resp, err := httpClient.Post(sendURL+"?access_token="+url.QueryEscape(token),
-		"application/json", bytes.NewReader(buf))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
 	var out struct {
 		ErrCode int    `json:"errcode"`
 		ErrMsg  string `json:"errmsg"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := doJSON(http.MethodPost, sendURL+"?access_token="+url.QueryEscape(token),
+		bytes.NewReader(buf), &out); err != nil {
 		return err
 	}
 	if out.ErrCode != 0 {

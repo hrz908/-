@@ -276,7 +276,9 @@ function valuationCard(payload) {
   };
 }
 
-// 资金流向卡：moneyflow 行。四档净额 = 买入 - 卖出；net_mf_amount 即主力净流入
+// 资金流向卡：moneyflow 行。四档净额 = 买入 - 卖出；net_mf_amount 即主力净流入。
+// 命中龙虎榜时（agent 的 get_top_list）payload 带上 lhb 席位区块：
+// 只取席位/买入/卖出三个量，金额单位万元 -> 统一换算成元
 function fundflowCard(payload) {
   const row = Array.isArray(payload) ? payload[0] : payload;
   if (!row) return null;
@@ -285,6 +287,15 @@ function fundflowCard(payload) {
     const ns = numOrNull(s);
     return nb == null || ns == null ? null : (nb - ns) * 10000;
   };
+  const lhb = (Array.isArray(row.lhb) ? row.lhb : [])
+    .filter((r) => r && r.seat)
+    .slice(0, 10)
+    .map((r) => ({ seat: r.seat, buy: wanToYuan(r.buy), sell: wanToYuan(r.sell) }));
+  const note = [
+    row.ts_code,
+    row.trade_date ? '数据日期 ' + fmtTsDate(row.trade_date) : '',
+    row.lhb_date ? '龙虎榜 ' + fmtTsDate(row.lhb_date) : ''
+  ].filter(Boolean).join(' · ');
   return {
     role: 'assistant',
     status: 'complete',
@@ -298,8 +309,26 @@ function fundflowCard(payload) {
         { label: '中单', value: net(row.buy_md_amount, row.sell_md_amount) },
         { label: '小单', value: net(row.buy_sm_amount, row.sell_sm_amount) }
       ],
-      note: [row.ts_code, row.trade_date ? '数据日期 ' + fmtTsDate(row.trade_date) : '']
-        .filter(Boolean).join(' · ')
+      lhb: lhb,
+      note: note
+    }
+  };
+}
+
+// 同业对比卡：get_peer_compare 载荷 { items, ts_code }。
+// 维度全部为当日快照（价/涨跌幅/PE/PB/总市值），组件内做表格渲染与标优
+function compareCard(payload) {
+  const items = Array.isArray(payload && payload.items) ? payload.items : [];
+  const usable = items.filter((it) => it && it.name && !it.error);
+  if (usable.length < 2) return null; // 对比至少要有两个标的，组件按空卡降级
+  return {
+    role: 'assistant',
+    status: 'complete',
+    card: 'compare',
+    content: [],
+    compare: {
+      items: usable,
+      note: [payload.ts_code, '同业对比 · 当日行情快照'].filter(Boolean).join(' · ')
     }
   };
 }
@@ -512,6 +541,7 @@ Page({
       else if (data.type === 'valuation_card') msg = valuationCard(data.payload);
       else if (data.type === 'fundflow_card') msg = fundflowCard(data.payload);
       else if (data.type === 'report_card') msg = reportCard(data.payload);
+      else if (data.type === 'compare_card') msg = compareCard(data.payload);
       if (!msg) return;
       this._flushStream({ force: true });
       this._finishStreaming();
@@ -1071,14 +1101,14 @@ Page({
     this.loadMarkets(); // 每次打开抽屉刷新一次（后端 30s 缓存，开销可控）
   },
 
-  // 点行情卡 -> K 线详情页（分包 pages/kline）。
+  // 点行情卡 -> 卡片画廊（pages/test，静态八卡样式页）。
   // 卡片内没有可点的子元素，bindtap 绑在组件根上即可整卡响应；
   // 没有 code（理论上不会出现）时不跳
   onQuoteCardTap(e) {
     const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
     if (!ds.code) return;
     wx.navigateTo({
-      url: '/pages/kline/index?code=' + encodeURIComponent(ds.code) +
+      url: '/pages/test/index?code=' + encodeURIComponent(ds.code) +
         (ds.name ? '&name=' + encodeURIComponent(ds.name) : '')
     });
   },

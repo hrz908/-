@@ -36,10 +36,9 @@
     </view>
   </view>
 
-  <!-- 支撑 / 压力：整行靠左（指标行是等距居中，这一行按需求靠左） -->
+  <!-- 支撑 / 压力：整行靠左，两项之间用「·」隔开（同行情卡底部「代码 · 状态」口径） -->
   <view class="sr-row">
-    <text class="sr-item">支撑 <text class="num">{{supportText}}</text></text>
-    <text class="sr-item">压力 <text class="num">{{resistanceText}}</text></text>
+    <text>支撑 <text class="num">{{supportText}}</text> · 压力 <text class="num">{{resistanceText}}</text></text>
   </view>
 
   <view wx:if="{{note}}" class="fnote">{{note}}</view>

@@ -9,15 +9,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// token 有效期
-const tokenTTL = 7 * 24 * time.Hour
+// tokenTTL 登录 token 有效期（默认 7 天，由 Init 按配置覆盖）
+var tokenTTL = 7 * 24 * time.Hour
 
 var jwtSecret = []byte("please-change-me")
 
-// Init 注入密钥，main 启动时调用一次
-func Init(secret string) {
+// Init 注入密钥与有效期，main 启动时调用一次
+func Init(secret string, ttl time.Duration) {
 	if secret != "" {
 		jwtSecret = []byte(secret)
+	}
+	if ttl > 0 {
+		tokenTTL = ttl
 	}
 }
 

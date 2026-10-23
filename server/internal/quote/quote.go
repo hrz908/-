@@ -16,17 +16,18 @@ import (
 	"stock-agent-server/internal/util"
 )
 
-const (
-	// 行情缓存 30 秒，与提示词约定一致
+// 行情批量与缓存参数：包级变量由 Init 按配置覆盖（默认值即迁移前硬编码档）。
+var (
+	// ttl 行情缓存 30 秒，与提示词约定一致
 	ttl = 30 * time.Second
 
 	// limit 拉取行情的并发上限：防止瞬时并发打爆接口被封 IP
 	limit = 5
 
-	// batchSize 分批拉取时每批的股票数。
+	// batchSizeP 分批拉取时每批的股票数。
 	// 内置源支持一次查多只，50 只自选股逐只要 50 次请求（分 10 轮），
 	// 按 20 只一批只要 3 次。请求数越少，越快也越不容易触发第三方限流
-	batchSize = 20
+	batchSizeP = 20
 
 	// mgetChunkSize 批量读缓存的分片大小。
 	// 自选股上千时单次 MGET 带上千个 key 会拉高单次 RTT 与内存峰值
@@ -155,7 +156,7 @@ func FetchQuotes(ctx context.Context, codes []string) (map[string]*StockSnapshot
 	)
 	g.SetLimit(limit)
 
-	for _, batch := range chunkStrings(uniq, batchSize) {
+	for _, batch := range chunkStrings(uniq, batchSizeP) {
 		batch := batch
 		g.Go(func() error {
 			snaps := fetchStockQuotes(gctx, batch)

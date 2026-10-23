@@ -308,8 +308,8 @@ def test_text_tool_call_restore():
     check("解析出工具名", name == "get_quote", str(name))
     check("解析出参数", args == {"code": "SH600519"}, str(args))
 
-    name2, args2 = _parse_text_tool_call('function\nget_kline\n{"code":"600519","count":10}')
-    check("无 json 围栏也能解析", name2 == "get_kline" and args2.get("count") == 10, str(args2))
+    name2, args2 = _parse_text_tool_call('function\nget_money_flow\n{"code":"600519","days":30}')
+    check("无 json 围栏也能解析", name2 == "get_money_flow" and args2.get("days") == 30, str(args2))
 
     name3, _ = _parse_text_tool_call("今天天气不错，我们来聊聊市盈率")
     check("普通文本不误判", name3 is None, str(name3))
@@ -324,7 +324,7 @@ def test_text_tool_call_restore():
     check("反推时参数仍正确", a5 == {"code": "SH600519"}, str(a5))
 
     n6, a6 = _parse_text_tool_call('function调用\n```json\n{"code":"600519","count":10}\n```')
-    check("带 count 反推为 K 线", n6 == "get_kline", str(n6))
+    check("K 线工具已下线，count 不再反推", n6 is None, str(n6))
 
     n7, _ = _parse_text_tool_call('```json\n{"query":"贵州茅台"}\n```')
     check("带 query 反推为搜索", n7 == "symbol_search", str(n7))

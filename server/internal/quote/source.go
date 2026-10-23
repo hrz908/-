@@ -16,10 +16,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding/simplifiedchinese"
 
+	"stock-agent-server/internal/httpclient"
 	"stock-agent-server/internal/stock"
 )
 
-// quoteAPIBase 自建行情服务的基地址（配置项 QUOTE_API）。
+// quoteAPIBase 自建行情服务的基地址（配置项 quote_api）。
 // 为空时走内置的真实行情源（腾讯财经批量接口），开箱即用。
 //
 // 自建接口约定：GET {base}?code=SH600519
@@ -27,21 +28,43 @@ import (
 //	返回 {"code":"SH600519","name":"贵州茅台","price":"1705.30","change_percent":"1.23"}
 //	数值一律用字符串传递，避免中间环节走 float64 丢失精度
 //
-// 只由 main 启动时通过 SetQuoteAPI 注入，不直接读环境变量，
+// 只由 main 启动时通过 Init 注入，不直接读环境变量，
 // 保证配置来源唯一（测试里也不会意外读到宿主的 env）
-var quoteAPIBase string
+var (
+	quoteAPIBase string
+	// quoteHTTP 复用连接：批量刷新时通常是几十个请求打向同一个域名，
+	// 每次新建 client 会导致连接无法复用、TIME_WAIT 堆积。
+	// 行情属于旁路数据，第三方卡住时不能把刷新接口一起拖死（默认 3s 档）
+	quoteHTTP = httpclient.New(3 * time.Second)
+)
 
-// SetQuoteAPI 注入自建行情源基地址；空串表示使用内置腾讯源
-func SetQuoteAPI(base string) { quoteAPIBase = strings.TrimSpace(base) }
+// Init 注入行情源与运行参数（main 启动时调用一次；空值/非法值保留默认档）。
+func Init(base string, quoteTimeout, searchTimeout, cacheTTL time.Duration, fetchLimit, batchSize, mgetChunk int) {
+	quoteAPIBase = strings.TrimSpace(base)
+	if quoteTimeout > 0 {
+		quoteHTTP = httpclient.New(quoteTimeout)
+	}
+	if searchTimeout > 0 {
+		searchHTTP = httpclient.New(searchTimeout)
+	}
+	if cacheTTL > 0 {
+		ttl = cacheTTL
+	}
+	if fetchLimit > 0 {
+		limit = fetchLimit
+	}
+	if batchSize > 0 {
+		batchSizeP = batchSize
+	}
+	if mgetChunk > 0 {
+		mgetChunkSize = mgetChunk
+	}
+}
 
 const (
 	// tencentQuoteURL 腾讯财经批量行情接口。
 	// 支持一次查多只（q=sh600519,sz000001），返回 GBK 文本，字段以 ~ 分隔
 	tencentQuoteURL = "https://qt.gtimg.cn/q="
-
-	// quoteTimeout 单次 HTTP 超时。行情属于旁路数据，
-	// 第三方卡住时不能把刷新接口一起拖死
-	quoteTimeout = 3 * time.Second
 
 	// maxBodyBytes 第三方响应体读取上限。
 	// 不限制的话，上游故障或被污染时返回 GB 级内容会直接 OOM
@@ -59,10 +82,6 @@ const (
 // tencentVarRe 匹配腾讯响应里的 `v_sh600519="..."` 片段。
 // 原来的 Index(`="`) + LastIndex(`"`) 写法在响应里出现多余引号时会截错范围
 var tencentVarRe = regexp.MustCompile(`v_[a-z0-9]+="([^"]*)"`)
-
-// quoteHTTP 复用连接：批量刷新时通常是几十个请求打向同一个域名，
-// 每次新建 client 会导致连接无法复用、TIME_WAIT 堆积
-var quoteHTTP = &http.Client{Timeout: quoteTimeout}
 
 // fetchStockQuote 取一只股票的行情快照（提示词约定的全局函数）
 func fetchStockQuote(ctx context.Context, code string) (*StockSnapshot, error) {

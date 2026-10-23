@@ -90,6 +90,10 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             if mode == "custom":
                 # data 已是 {"event":..,"data":..}（由 subgraphs.emit 产出），直接透传
                 if isinstance(data, dict) and "event" in data:
+                    # 首个对用户可见的事件即 TTFT（首 token 或首张卡片），
+                    # 审计字段 ttft_ms 之前从未赋值（恒 NULL），这里补上
+                    if ttft_ms is None:
+                        ttft_ms = int((time.monotonic() - t0) * 1000)
                     yield json.dumps(data, ensure_ascii=False) + "\n"
 
             elif mode == "updates":

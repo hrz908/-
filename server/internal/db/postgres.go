@@ -9,18 +9,20 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// 连接池：不设上限时突发流量会把 Postgres 连接打满，
-// 取值与本地容器资源匹配（compose 未单独限流，按单实例默认档给）
-const (
-	maxOpenConns    = 25
-	maxIdleConns    = 25
-	connMaxLifetime = 5 * time.Minute
-	pingTimeout     = 3 * time.Second
-)
+// pingTimeout 启动探活超时
+const pingTimeout = 3 * time.Second
+
+// PoolParams 连接池参数（由配置注入，见 config.db.*）。
+type PoolParams struct {
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+}
 
 // NewPostgres 建立 GORM 连接：配好连接池并立即探活。
 // 探活是为了让连接串写错这类问题在启动时就暴露，而不是等第一个业务请求
-func NewPostgres(dsn string) (*gorm.DB, error) {
+func NewPostgres(dsn string, pool PoolParams) (*gorm.DB, error) {
 	gdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:         logger.Default.LogMode(logger.Warn),
 		TranslateError: true,
@@ -33,9 +35,12 @@ func NewPostgres(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxOpenConns(maxOpenConns)
-	sqlDB.SetMaxIdleConns(maxIdleConns)
-	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	// 不设上限时突发流量会把 Postgres 连接打满；IdleTime 让空闲连接
+	// 早于服务端/中间网络设备的连接老化阈值被回收，避免拿到死连接
+	sqlDB.SetMaxOpenConns(pool.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(pool.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(pool.ConnMaxIdleTime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()

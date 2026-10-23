@@ -16,10 +16,10 @@ import (
 	"stock-agent-server/internal/resp"
 )
 
-// sseWriteTimeout SSE 连接的写截止时间余量。
-// http.Server 的 WriteTimeout 只有 15s，会掐断长流；这里用 ResponseController
+// sseWriteTimeoutExtra SSE 连接的写截止时间余量。
+// http.Server 的 WriteTimeout（默认 15s）会掐断长流；这里用 ResponseController
 // 把本连接的写截止放宽到「单次运行上限 + 余量」，覆盖整个流式过程。
-const sseWriteTimeout = runTimeout + 15*time.Second
+const sseWriteTimeoutExtra = 15 * time.Second
 
 // ServeSSE 处理 POST /api/v1/agent/stream（H5 / 不支持 WS 的场景兜底）。
 // 请求体 {"query":"...","session_id":"..."}，响应 text/event-stream，
@@ -63,7 +63,7 @@ func ServeSSE(c *gin.Context) {
 	// 放宽写截止时间，避免被 server 级 WriteTimeout（15s）中断长流。
 	// gin 的 ResponseWriter 实现了 Unwrap，ResponseController 可透传到底层连接。
 	rc := http.NewResponseController(c.Writer)
-	if err := rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout)); err != nil {
+	if err := rc.SetWriteDeadline(time.Now().Add(proxy.runTimeout + sseWriteTimeoutExtra)); err != nil {
 		log.Printf("agent sse: set write deadline failed: %v", err)
 	}
 

@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"slices"
 	"syscall"
-	"time"
 
 	"stock-agent-server/internal/agent"
 	"stock-agent-server/internal/asr"
@@ -45,7 +44,12 @@ func main() {
 		}
 	}
 
-	pg, err := db.NewPostgres(cfg.DSN)
+	pg, err := db.NewPostgres(cfg.DSN, db.PoolParams{
+		MaxOpenConns:    cfg.DB.MaxOpenConns,
+		MaxIdleConns:    cfg.DB.MaxIdleConns,
+		ConnMaxLifetime: cfg.DB.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.DB.ConnMaxIdleTime,
+	})
 	if err != nil {
 		log.Fatalf("init postgres: %v", err)
 	}
@@ -55,49 +59,70 @@ func main() {
 		log.Fatalf("auto migrate: %v", err)
 	}
 
-	rdb := db.NewRedis(ctx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	rdb := db.NewRedis(ctx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, cfg.Redis.PoolSize)
 	deps.Init(pg, rdb)
 
-	auth.Init(cfg.JWTSecret)
-	quote.SetQuoteAPI(cfg.QuoteAPI)
+	auth.Init(cfg.JWTSecret, cfg.JWTTTL)
+	// 行情源与批量参数：超时 / 并发 / 缓存 TTL 统一由配置注入
+	quote.Init(cfg.QuoteAPI,
+		cfg.HTTP.QuoteTimeout, cfg.HTTP.SearchTimeout, cfg.HTTP.QuoteCacheTTL,
+		cfg.HTTP.QuoteFetchLimit, cfg.HTTP.QuoteBatchSize, cfg.HTTP.QuoteMgetChunk)
 	// 小程序凭据：两个都有值时登录走微信 code2session，否则退化为演示账号
-	wechat.AppID = cfg.WechatAppID
-	wechat.Secret = cfg.WechatSecret
+	wechat.Init(cfg.WechatAppID, cfg.WechatSecret, cfg.HTTP.WechatTimeout)
 	// 企业微信自建应用凭据：三项齐全时，命中的提醒会额外推送给企业成员（@all），
 	// 与小程序内的 WebSocket 提醒并存；未配置则只走 WebSocket
-	wecom.CorpID = cfg.WeComCorpID
-	wecom.Secret = cfg.WeComSecret
-	wecom.AgentID = cfg.WeComAgentID
+	wecom.Init(cfg.WeComCorpID, cfg.WeComSecret, cfg.WeComAgentID, cfg.HTTP.WecomTimeout)
+	// 行情提醒 WS hub 连接上限（每用户 / 全局）
+	ws.Configure(cfg.Hub.MaxPerUser, cfg.Hub.MaxTotal)
 	if err := upload.Init(cfg.UploadDir); err != nil {
 		log.Fatalf("init upload dir: %v", err)
 	}
 
-	// Agent 网关：注入 Redis（三道限流闸门）与 Python Agent 服务地址。
+	// Agent 网关：注入 Redis（三道限流闸门）与 Python Agent 服务地址及运行参数。
 	// 必须在 router.New 之前完成，否则路由 handler 取到的 limiter/proxy 为 nil
-	agent.Init(rdb, cfg.AgentBaseURL)
+	agent.Init(rdb, agent.Options{
+		BaseURL:          cfg.AgentBaseURL,
+		QPS:              cfg.Agent.QPS,
+		Concurrent:       cfg.Agent.Concurrent,
+		DailyQuota:       cfg.Agent.DailyQuota,
+		ProxyConcurrency: cfg.Agent.ProxyConcurrency,
+		WSMaxConns:       cfg.Agent.WSMaxConns,
+		RunTimeout:       cfg.Agent.RunTimeout,
+		TTFTTimeout:      cfg.Agent.TTFTTimeout,
+		MaxLineBytes:     cfg.Agent.MaxLineMB << 20,
+	})
 
 	// 语音转文字：同样要在 router.New 之前注入，否则 handler 读到空配置
-	asr.Init(cfg.ASRBaseURL, cfg.ASRAPIKey, cfg.ASRModel)
+	asr.Init(cfg.ASRBaseURL, cfg.ASRAPIKey, cfg.ASRModel, cfg.HTTP.ASRTimeout)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,
-		Handler: router.New(cfg.AllowOrigins),
+		Handler: router.New(cfg),
 		// 不设超时的话，慢速发送请求头的连接可以长期占住资源（Slowloris）
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
+	// ListenAndServe 的错误经通道回传：goroutine 里 log.Fatalf 会跳过 defer、
+	// 绕过优雅关闭路径（连接池 / Redis 客户端都不会收尾）
+	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("server listening on %s (env=%s)", cfg.Addr, cfg.Env)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %v", err)
-		}
+		serverErr <- srv.ListenAndServe()
 	}()
 
-	<-ctx.Done()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	select {
+	case <-ctx.Done():
+	case err := <-serverErr:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %v", err)
+		}
+		return
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 
 	// 长连接先关：srv.Shutdown 不会等待被 hijack 的 WebSocket，

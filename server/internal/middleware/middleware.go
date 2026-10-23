@@ -153,8 +153,33 @@ func bearer(c *gin.Context, allowQuery bool) string {
 	return ""
 }
 
-// RateLimit 基于 Redis 有序集合的滑动窗口限流（按 IP）
-func RateLimit(limit int64, window time.Duration) gin.HandlerFunc {
+// windowScript 滑动窗口限流（原子执行）。
+// 先清理窗口外记录并计数，「放行才写入」——被 429 的请求不占窗口容量
+// （旧实现先 ZAdd 再判断，被拒请求也留在 ZSET 里抬升后续计数，实际阈值偏紧）。
+// 读-判-写在一段 Lua 内完成，杜绝并发请求间的竞态。
+var windowScript = redis.NewScript(`
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', key, 0, now - window_ms)
+local cnt = redis.call('ZCARD', key)
+local ttl = math.ceil(window_ms / 1000)
+if cnt >= limit then
+    redis.call('EXPIRE', key, ttl)
+    return 0
+end
+redis.call('ZADD', key, now, member)
+redis.call('EXPIRE', key, ttl)
+return 1
+`)
+
+// RateLimit 基于 Redis 有序集合的滑动窗口限流。
+// name 区分限流域（不同作用域不共享窗口，如 "ip" / "login" / "asr"）；
+// ident 为限流主体标识（IP 或用户 ID）。
+func RateLimit(name, ident string, limit int64, window time.Duration) gin.HandlerFunc {
 	var seq int64
 	return func(c *gin.Context) {
 		rdb := deps.RDB
@@ -164,24 +189,54 @@ func RateLimit(limit int64, window time.Duration) gin.HandlerFunc {
 			return
 		}
 		ctx := c.Request.Context()
-		key := "rl:" + c.ClientIP()
+		key := "rl:" + name + ":" + ident
 		now := time.Now().UnixMilli()
-		pipe := rdb.Pipeline()
-		pipe.ZRemRangeByScore(ctx, key, "0", strconv.FormatInt(now-window.Milliseconds(), 10))
-		cnt := pipe.ZCard(ctx, key)
 		// member 必须唯一，否则同毫秒内多次请求会被 ZADD 覆盖而漏计
 		member := strconv.FormatInt(now, 10) + "-" + strconv.FormatInt(atomic.AddInt64(&seq, 1), 36) + "-" + uuid.NewString()
-		pipe.ZAdd(ctx, key, redis.Z{Score: float64(now), Member: member})
-		pipe.Expire(ctx, key, window)
-		if _, err := pipe.Exec(ctx); err != nil {
+		allowed, err := windowScript.Run(ctx, rdb, []string{key},
+			now, window.Milliseconds(), limit, member).Int()
+		if err != nil {
 			// 限流是旁路逻辑，Redis 故障不拦业务请求
 			log.Printf("rid=%s rate limit error, skip: %v", RequestIDFrom(c), err)
-		} else if cnt.Val() >= limit {
+		} else if allowed == 0 {
 			resp.Fail(c, resp.CodeTooManyRequests, "请求过于频繁，请稍后再试")
 			c.Abort()
 			return
 		}
 		c.Next()
+	}
+}
+
+// IPRateLimit 全局按 IP 限流。
+func IPRateLimit(limit int64, window time.Duration) gin.HandlerFunc {
+	return ipRateLimitNamed("ip", limit, window)
+}
+
+// LoginRateLimit 登录接口专用按 IP 限流。与全局档分桶：
+// 同一 IP 被全局档放行后，仍要单独过登录这道更严的闸。
+func LoginRateLimit(limit int64, window time.Duration) gin.HandlerFunc {
+	return ipRateLimitNamed("login", limit, window)
+}
+
+func ipRateLimitNamed(name string, limit int64, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		RateLimit(name, c.ClientIP(), limit, window)(c)
+	}
+}
+
+// UserRateLimit 按登录用户限流（user_id 由 Auth 中间件注入），
+// 未登录 / 拿不到 user_id 时回退按 IP，保证公开路由挂上它也有保护。
+// 用于消耗上游资源的接口：行情/搜索（放大第三方请求）、ASR（烧付费额度）。
+func UserRateLimit(limit int64, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ident := ""
+		if uid, ok := c.Get("user_id"); ok {
+			ident = "u:" + strconv.FormatInt(uid.(int64), 10)
+		}
+		if ident == "" {
+			ident = "ip:" + c.ClientIP()
+		}
+		RateLimit("user", ident, limit, window)(c)
 	}
 }
 

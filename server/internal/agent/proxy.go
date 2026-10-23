@@ -12,48 +12,40 @@ import (
 	"net/http"
 	"strings"
 	"time"
-)
 
-const (
-	// proxyConcurrency 代理层有界信号量容量。
-	// 网关侧连接可以很多（WS 全局闸门 512），但真正打到 Python Agent 的并发要收敛，
-	// 否则瞬时高并发会把上游打爆。超出的请求在这里排队等待，形成天然背压。
-	proxyConcurrency = 64
-
-	// runTimeout 单次运行的整体超时。Agent 推理 + 工具调用可能较久，
-	// 给足 120s；到点未结束则取消上游请求，避免 goroutine 与连接长期悬挂。
-	runTimeout = 120 * time.Second
-
-	// ttftTimeout 首字节（首行 ndjson）等待上限。
-	// 超过则先推一个 status 事件安抚前端（「还在思考」），避免界面长时间无反馈像卡死。
-	ttftTimeout = 8 * time.Second
-
-	// maxLineSize 单行 ndjson 上限。Agent 可能一次性吐出较大的 card/table 结构，
-	// 给到 4MB；超出说明上游异常，直接报错而非撑爆内存。
-	maxLineSize = 4 * 1024 * 1024
+	"stock-agent-server/internal/httpclient"
 )
 
 // AgentProxy 代理到 Python Agent 服务：把一次运行请求转成流式事件序列。
 type AgentProxy struct {
-	baseURL    string
-	httpClient *http.Client
-	sem        chan struct{} // 有界信号量，限制打到上游的并发
+	baseURL string
+	client  *http.Client
+	sem     chan struct{} // 有界信号量，限制打到上游的并发
+
+	// runTimeout 单次运行的整体超时。Agent 推理 + 工具调用可能较久，
+	// 默认 120s；到点未结束则取消上游请求，避免 goroutine 与连接长期悬挂。
+	runTimeout time.Duration
+	// ttftTimeout 首字节（首行 ndjson）等待上限。
+	// 超过则先推一个 status 事件安抚前端（「还在思考」），避免界面长时间无反馈像卡死。
+	ttftTimeout time.Duration
+	// maxLineSize 单行 ndjson 上限。Agent 可能一次性吐出较大的 card/table 结构，
+	// 默认 4MB；超出说明上游异常，直接报错而非撑爆内存。
+	maxLineSize int
 }
 
-// NewAgentProxy 创建代理。baseURL 形如 http://127.0.0.1:8000（结尾斜杠会被裁掉）。
+// NewAgentProxy 创建代理。
 // 不设置 http.Client.Timeout：流式响应的读取时间不可预估，
 // 超时统一交给每次请求的 context（runTimeout）控制，避免 Client.Timeout 把长流掐断。
-func NewAgentProxy(baseURL string) *AgentProxy {
+// 连接池用共享 Transport（MaxIdleConnsPerHost=64）：并发打到同一上游，
+// 空闲连接要足够复用，否则每次运行都重走 TCP/TLS 握手。
+func NewAgentProxy(opts Options) *AgentProxy {
 	return &AgentProxy{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		httpClient: &http.Client{
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: proxyConcurrency,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
-		sem: make(chan struct{}, proxyConcurrency),
+		baseURL:     strings.TrimRight(opts.BaseURL, "/"),
+		client:      httpclient.New(0),
+		sem:         make(chan struct{}, opts.ProxyConcurrency),
+		runTimeout:  opts.RunTimeout,
+		ttftTimeout: opts.TTFTTimeout,
+		maxLineSize: opts.MaxLineBytes,
 	}
 }
 
@@ -62,7 +54,7 @@ func NewAgentProxy(baseURL string) *AgentProxy {
 // 两个通道在 goroutine 结束时都会关闭；errs 至多含一个错误值。
 // 调用方通过取消 ctx 来提前终止（客户端断开 / 超时），上游请求会随之取消。
 func (p *AgentProxy) StreamRun(ctx context.Context, threadID, query, userID string) (<-chan Event, <-chan error) {
-	events := make(chan Event, proxyConcurrency)
+	events := make(chan Event, cap(p.sem))
 	errs := make(chan error, 1)
 
 	go func() {
@@ -80,7 +72,7 @@ func (p *AgentProxy) StreamRun(ctx context.Context, threadID, query, userID stri
 			return
 		}
 
-		runCtx, cancel := context.WithTimeout(ctx, runTimeout)
+		runCtx, cancel := context.WithTimeout(ctx, p.runTimeout)
 		defer cancel()
 
 		payload, err := json.Marshal(map[string]string{
@@ -101,7 +93,7 @@ func (p *AgentProxy) StreamRun(ctx context.Context, threadID, query, userID stri
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/x-ndjson")
 
-		resp, err := p.httpClient.Do(req)
+		resp, err := p.client.Do(req)
 		if err != nil {
 			errs <- err
 			return
@@ -126,7 +118,7 @@ func (p *AgentProxy) StreamRun(ctx context.Context, threadID, query, userID stri
 // 实现「8s 内无首字节先推 status」的监控，而不会被阻塞的 Scan 卡住。
 func (p *AgentProxy) pumpNDJSON(runCtx context.Context, body io.Reader, events chan<- Event, errs chan<- error) {
 	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner.Buffer(make([]byte, 0, 64*1024), p.maxLineSize)
 
 	lines := make(chan []byte)
 	scanErr := make(chan error, 1)
@@ -145,7 +137,7 @@ func (p *AgentProxy) pumpNDJSON(runCtx context.Context, body io.Reader, events c
 		scanErr <- scanner.Err()
 	}()
 
-	ttft := time.NewTimer(ttftTimeout)
+	ttft := time.NewTimer(p.ttftTimeout)
 	defer ttft.Stop()
 	firstReceived := false
 

@@ -1,6 +1,6 @@
-"""资金流 / 龙虎榜 / 北向资金工具（数据源：Tushare Pro）。
+"""资金流工具（数据源：Tushare Pro）。
 
-三个接口均需一定 Tushare 积分，积分不足时返回 {"ok": False, "error": ...}，
+接口需要一定 Tushare 积分，积分不足时返回 {"ok": False, "error": ...}，
 由 call_tool_safe 透传，不影响其它工具与主流程。
 """
 from datetime import datetime, timedelta
@@ -11,8 +11,6 @@ from tools import call_tool_safe, take_latest, tushare_query, to_ts_code
 
 # 资金流一次最多回多少行（每天一行，30 行约一个多月）
 _MAX_MONEYFLOW_ROWS = 30
-# 北向资金一次最多回多少行
-_MAX_HSGT_ROWS = 30
 
 
 @tool
@@ -46,41 +44,4 @@ async def get_money_flow(code: str, trade_date: str = "", days: int = 30) -> dic
     )
     if res.get("ok"):
         res["data"] = take_latest(res.get("data"), "trade_date", _MAX_MONEYFLOW_ROWS)
-    return res
-
-
-@tool
-async def get_top_list(trade_date: str) -> dict:
-    """获取某交易日的龙虎榜：上榜个股、收盘价、涨跌幅、龙虎榜买入/卖出额与上榜原因。
-
-    Args:
-        trade_date: 交易日期 YYYYMMDD（必填，如 "20261017"）。
-
-    Returns:
-        {"ok": True, "data": [{...}]} 成功；{"ok": False, "error": "..."} 失败。
-    """
-    return await call_tool_safe(
-        tushare_query, "top_list", {"trade_date": trade_date},
-        "trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_reason",
-    )
-
-
-@tool
-async def get_hsgt_flow(trade_date: str = "") -> dict:
-    """获取沪深港通北向资金流向：沪股通/深股通净流入、北向资金合计。
-    适合回答「外资 / 北向今天买了吗」类问题。
-
-    Args:
-        trade_date: 交易日期 YYYYMMDD，留空取最新。
-
-    Returns:
-        {"ok": True, "data": [{...}]} 成功；{"ok": False, "error": "..."} 失败。
-    """
-    params = {"trade_date": trade_date} if trade_date else {}
-    res = await call_tool_safe(
-        tushare_query, "moneyflow_hsgt", params,
-        "trade_date,ggt_ss,ggt_sz,hgt,sgt,north_money,south_money",
-    )
-    if res.get("ok"):
-        res["data"] = take_latest(res.get("data"), "trade_date", _MAX_HSGT_ROWS)
     return res

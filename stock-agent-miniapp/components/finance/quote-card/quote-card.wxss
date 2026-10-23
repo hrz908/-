@@ -13,21 +13,23 @@
   text-align: left;
 }
 
-/* 价格行（标题下方这一行）：整行靠左，价格与涨跌幅依次向左排。
-   基线对齐保留（第1条例外）：价格与百分比按文字基线排是有意选择。 */
+/* 价格行（名称下方这一行）：三个数字等距居中——flex:1 均分一行，
+   每格文字居中（与数据栅格同一口径）；基线对齐保留：价格与涨跌数字
+   字号不同，按文字基线排是有意选择。 */
 .price-row {
   display: flex;
   align-items: baseline;
-  justify-content: flex-start;
   gap: var(--gap-grid);
   margin-top: var(--sp-3);
 }
 
-/* 价格与涨跌幅都靠左（栅格那两行才是等距居中） */
+/* 三个数字各占一等份、格内居中 */
 .price,
-.chg {
-  flex: none;
-  text-align: left;
+.chg,
+.pct {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
 }
 
 /* 价格 32px 级（--fs-price = 64rpx） */
@@ -38,9 +40,10 @@
   letter-spacing: -0.5rpx;
 }
 
-/* 涨跌幅：紧跟主价格，但要比辅助级大一档——它是卡片上第二重要的数字，
-   用 --fs-aux（11px）贴在 32px 价格旁边会小到读不出来 */
-.chg {
+/* 涨跌额/涨跌幅：与现价同排，比辅助级大一档——它们是卡片上
+   第二重要的数字，用 --fs-aux（11px）会小到读不出来 */
+.chg,
+.pct {
   font-size: var(--fs-title);
   font-weight: 600;
 }

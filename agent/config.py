@@ -12,6 +12,9 @@ EMBED_DIM = 1024
 
 # 工具超时
 TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "8.0"))
+# LLM 单次请求超时（秒）：流式生成累计可远超此值的场景不存在——
+# 该超时约束的是每次请求的完成时间；不设的话上游卡死会挂住整条事件流
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 # RAG 相关度阈值：对余弦相似度设阈（不是 RRF 融合分）。
 # bge-m3 的 query↔chunk 相关命中实测约 0.22~0.5，故默认 0.2；
 # 语料/模型变化时需重新校准（阈值过高会让 RAG 恒 escalate 到 mcp、从不生成引用回答）
@@ -21,7 +24,7 @@ GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 # 调 Go 网关受保护接口用的服务间 token（Agent 作为可信内部服务）
 GO_SERVER_TOKEN = os.getenv("GO_SERVER_TOKEN", "")
 
-# Tushare Pro：第三方只读数据增强（财务/资金流/龙虎榜/北向/资讯/历史K线）。
+# Tushare Pro：第三方只读数据增强（财务/资金流/资讯/历史K线）。
 # 直接走 HTTP REST（POST http://api.tushare.pro），不引入 tushare SDK：
 # 纯异步 httpx 调用，复用 call_tool_safe 的超时/重试/降级，且不给镜像增加 pandas 等重依赖。
 # token 为空时相关工具不注册（见 tools.get_tools），避免 LLM 选中后必然失败。

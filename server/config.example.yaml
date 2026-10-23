@@ -1,0 +1,77 @@
+# 服务配置样例。复制为 config.yaml 放在启动目录即可生效；
+# 优先级：环境变量 > 本文件 > 内置默认值（全部项都有默认值，缺省也能跑）。
+# 环境变量名 = 键名大写 + 点转下划线（如 server.read_timeout -> SERVER_READ_TIMEOUT）。
+
+#addr: ":8080"
+#dsn: "postgres://postgres:postgres@localhost:5432/stock_agent?sslmode=disable"
+#jwt_secret: "please-change-me"
+#jwt_ttl: 168h
+
+#redis_addr: "127.0.0.1:6379"
+#redis_password: ""
+#redis_db: 0
+
+#env: "dev"          # prod 下强制要求 JWT_SECRET 与微信凭据
+#allow_origins: "*"
+#upload_dir: "./uploads"
+
+#quote_api: ""       # 自建行情源；留空用内置腾讯源
+#wechat_appid: ""
+#wechat_secret: ""
+#wecom_corp_id: ""
+#wecom_secret: ""
+#wecom_agent_id: 0
+
+#agent_base_url: "http://127.0.0.1:8000"
+#asr_base_url: "https://api.siliconflow.cn/v1"
+#asr_api_key: ""     # 留空回退 OPENAI_API_KEY
+#asr_model: "FunAudioLLM/SenseVoiceSmall"
+
+server:
+  read_header_timeout: 5s
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 5s
+
+db:
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: 5m
+  conn_max_idle_time: 5m
+
+redis:
+  pool_size: 0       # 0 = go-redis 默认（10 x CPU）
+
+ratelimit:           # 每分钟次数（Redis 滑动窗口）
+  ip_per_min: 100
+  login_per_min: 10
+  market_per_min: 120
+  asr_per_min: 10
+
+agent:
+  qps: 2
+  concurrent: 3
+  daily_quota: 500
+  proxy_concurrency: 64
+  ws_max_conns: 512
+  run_timeout: 120s
+  ttft_timeout: 8s
+  max_line_mb: 4
+
+http:
+  quote_timeout: 3s
+  search_timeout: 5s
+  wechat_timeout: 5s
+  wecom_timeout: 5s
+  asr_timeout: 20s
+  quote_cache_ttl: 30s
+  quote_fetch_limit: 5
+  quote_batch_size: 20
+  quote_mget_chunk: 100
+
+hub:
+  max_per_user: 5
+  max_total: 2048
+
+watchlist_max_items: 200

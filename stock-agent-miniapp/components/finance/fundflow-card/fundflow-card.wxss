@@ -124,13 +124,13 @@
   text-align: right;             /* 对应金额靠右 */
 }
 
-/* 「龙虎榜」三个字与其余行首一致：靠左 */
+/* 「龙虎榜」标题：居中 */
 .lhb-title {
-  text-align: left;
+  text-align: center;
 }
 
-/* 龙虎榜行（表格格式）：席位占 1/2，买 / 卖 合计占另外 1/2（各 1/4），各列文字居中。
-   .lhb-vals 与 .lhb-seat 同为 flex:1 → 各半；内部买、卖再各 flex:1 → 各占 1/4。 */
+/* 龙虎榜行（表格格式）：席位占 1/2 靠左，买 / 卖合计占另外 1/2，各列文字居中。
+   .lhb-vals 与 .lhb-seat 同为 flex:1 → 各半；内部买、卖再各 flex:1 → 各占 1/4、格内居中。 */
 .lhb-seat {
   flex: 1;                       /* 席位：整行 1/2 */
   text-align: left;              /* 席位名左对齐（表头「席位」同步左对齐） */
@@ -145,7 +145,7 @@
 
 .lhb-vals text {
   flex: 1;                       /* +买入、-卖出 各占整行 1/4 */
-  text-align: right;             /* 金融表格习惯：数值列右对齐，数位竖向对齐 */
+  text-align: center;            /* 买入/卖出等距居中：各居其格中央（同数据栅格口径） */
 }
 
 /* 纵向等距：各块顶部间距统一为一档 */
@@ -169,8 +169,8 @@
   color: var(--ink-3);
 }
 
-/* 表头对齐与数据行一致（左右对齐）：
-   「席位」跟随 .lhb-seat 的左对齐；「买入 / 卖出」跟随 .lhb-vals text 的右对齐。
+/* 表头对齐与数据行一致：
+   「席位」跟随 .lhb-seat 的左对齐；「买入 / 卖出」跟随 .lhb-vals text 的居中对齐。
    这里不再覆盖 text-align。 */
 .lhb-head .lhb-seat {
   color: var(--ink-3);           /* 覆盖 .lhb-seat 的 --ink-2，表头用弱文字 */

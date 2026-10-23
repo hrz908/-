@@ -11,12 +11,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
-)
 
-// 搜索专用超时。比行情接口的 3 秒略宽：首次请求要额外算上
-// DNS 解析 + TLS 握手，3 秒在网络一般的情况下容易误判成超时。
-// 搜索是体验加分项，宁可多等 2 秒，也不要因为假超时返回空列表
-const searchTimeout = 5 * time.Second
+	"stock-agent-server/internal/httpclient"
+)
 
 // smartBoxURL 腾讯 smartbox 搜索接口
 const smartBoxURL = "https://smartbox.gtimg.cn/s3/"
@@ -32,10 +29,12 @@ var unicodeEscape = regexp.MustCompile(`\\u[0-9a-fA-F]{4}`)
 // 会截错范围
 var varAssignRe = regexp.MustCompile(`v_[a-z0-9]+="([^"]*)"`)
 
-// searchHTTP 复用连接（与行情接口分开，因为超时不同）。
+// searchHTTP 复用连接（与行情接口分开，因为超时不同，见 quote.Init）。
 // 搜索是高频操作，若每次都新建 client，会重复走 DNS + TLS 握手，
-// 首次请求特别慢，正是之前偶发超时的根源
-var searchHTTP = &http.Client{Timeout: searchTimeout}
+// 首次请求特别慢，正是之前偶发超时的根源。
+// 超时比行情的 3 秒略宽：首次请求要额外算上 DNS + TLS 握手，
+// 搜索是体验加分项，宁可多等 2 秒，也不要因为假超时返回空列表
+var searchHTTP = httpclient.New(5 * time.Second)
 
 // SearchResult 单条股票搜索结果。
 // 只给前端真正需要的字段：这是哪只股票 + 该用哪个交易所前缀。
