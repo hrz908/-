@@ -23,7 +23,7 @@ class AgentState(TypedDict, total=False):
     query: str
     # 改写后的独立问题（指代消解结果）
     rewritten: str
-    # 意图路由：mcp / rag / chat / clarify
+    # 意图路由：stock / chat / off_topic / clarify；rag 未命中后改写为 stock_agent
     intent: str
     confidence: float
     # 分类节点抽取的实体（symbol / market / date_range），供下游复用

@@ -3,6 +3,15 @@
 call_tool_safe 统一封装「8s 超时 + 重试 1 次 + 失败降级」，
 任何工具的网络/解析异常都不会冒泡到图里，而是返回 {"ok": False, "error": ...}。
 go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive），自行解 Go 信封。
+
+数据源结构（2026-10-23 起）：
+- Go 网关（实时行情/搜索）：get_quote / symbol_search / get_peer_compare
+- akshare（东财/新浪）：估值 / 资金流 / 财报 / 资讯 / 龙虎榜
+- baostock：历史日 K（15 个交易日窗口）
+三者都不需要 token，工具全部无条件注册（原 Tushare 的积分门控已删除）。
+2026-10-23 起本函数同时是 MCP 工具源（mcp_servers/stock_server.py 经
+ tools/mcp_loader.py 加载）的兜底来源：MCP 子进程失败时整段回退到这里，
+工具名 / 参数 / 返回契约保持一致。
 """
 import asyncio
 from typing import Any, Callable, Awaitable, Optional
@@ -12,10 +21,7 @@ import httpx
 from config import (
     GO_SERVER_URL,
     GO_SERVER_TOKEN,
-    MAX_TUSHARE_ROWS,
     TOOL_TIMEOUT,
-    TUSHARE_TOKEN,
-    TUSHARE_API,
 )
 
 # Go 网关统一响应体 { code, message, data } 里的成功码
@@ -98,10 +104,10 @@ async def go_get(path: str, params: Optional[dict] = None) -> dict:
 
 
 def to_ts_code(code: str) -> str:
-    """把股票代码转成 Tushare 的 ts_code 格式（600519 -> 600519.SH）。
+    """把股票代码转成 Tushare 风格的 ts_code 格式（600519 -> 600519.SH）。
 
+    Tushare 数据源已下线，但前端卡片 note 与 LLM 上下文仍用这个展示格式。
     兼容项目里出现的多种写法："600519"、"SH600519"、"600519.SH"。
-    已带 .SH/.SZ/.BJ 后缀的原样返回（统一大写）。
     """
     c = (code or "").strip().upper()
     if "." in c:
@@ -119,43 +125,10 @@ def to_ts_code(code: str) -> str:
     return f"{c}.SH"
 
 
-async def tushare_query(api_name: str, params: Optional[dict] = None, fields: str = "") -> dict:
-    """调 Tushare Pro HTTP REST 接口，返回统一 {"ok":..., "data":[dict,...]} 结构。
-
-    协议：POST，body {api_name, token, params, fields}；
-    响应 {code, msg, data:{fields:[...], items:[[...]]}}，这里把 fields/items
-    组装成 list[dict] 方便 LLM 直接读。
-    积分不足 / 无权限时 Tushare 返回 code!=0，转为 {"ok": False, "error": msg}。
-    HTTP 层异常（非 2xx / 网络错误）仍抛出，由 call_tool_safe 兜底降级重试。
-    """
-    if not TUSHARE_TOKEN:
-        return {"ok": False, "error": "tushare token not configured"}
-    payload: dict = {"api_name": api_name, "token": TUSHARE_TOKEN, "params": params or {}}
-    if fields:
-        payload["fields"] = fields
-    client = get_http_client()
-    resp = await client.post(TUSHARE_API, json=payload, headers={"Accept": "application/json"})
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("code") != _CODE_OK:
-        return {"ok": False, "error": body.get("msg") or "tushare error"}
-    data = body.get("data") or {}
-    cols = data.get("fields") or []
-    rows = [dict(zip(cols, it)) for it in (data.get("items") or [])]
-    # 行数硬上限：Tushare 的 daily / daily_basic / moneyflow 等接口在只给 ts_code
-    # 时会返回该股全部历史（茅台约 6000 行），整段 JSON 进对话会撑爆模型上下文
-    # （实测单次估值工具就产生 30 万 token，直接触发上游 max_seq_len 报错）。
-    # 这些接口默认按日期倒序返回（最新的在最前），保留前 N 行即「最近 N 条」，
-    # 不改变时序语义。真正的「取最近 N 条」由各工具自己用日期区间收窄。
-    if len(rows) > MAX_TUSHARE_ROWS:
-        rows = rows[:MAX_TUSHARE_ROWS]
-    return {"ok": True, "data": rows}
-
-
 def take_latest(rows: Any, key: str = "trade_date", limit: int = 30) -> list:
     """取按日期倒序的前 N 行（工具层统一的「只要最近若干条」出口）。
 
-    Tushare 对部分接口不保证返回顺序，这里显式按日期字段排序后再截断，
+    数据源不保证返回顺序，这里显式按日期字段排序后再截断，
     保证拿到的永远是「最近 N 条」而不是「随机 N 条」。
     """
     if not isinstance(rows, list):
@@ -171,29 +144,26 @@ def take_latest(rows: Any, key: str = "trade_date", limit: int = 30) -> list:
 
 
 def get_tools() -> list:
-    """返回全部可供 LLM 绑定的工具（惰性导入，避免包内循环依赖）。"""
+    """返回全部可供 LLM 绑定的工具（惰性导入，避免包内循环依赖）。
+
+    所有数据源（Go 网关 / akshare / baostock）均免 token，无条件注册；
+    个别接口失败时由 call_tool_safe 降级，不影响其余工具。
+    """
     from tools.quote import get_quote
     from tools.search import symbol_search
     from tools.compare import get_peer_compare
+    from tools.fundamental import (
+        get_valuation,
+        get_financial_indicator,
+        get_financial_report,
+    )
+    from tools.moneyflow import get_money_flow
+    from tools.news import get_stock_news
+    from tools.history import get_history_daily
+    from tools.lhb import get_top_list
 
-    # 同业对比只依赖 Go 网关当日快照（不碰 Tushare），始终注册
-    tools = [get_quote, symbol_search, get_peer_compare]
-
-    # Tushare 增强工具：仅在配置了 token 时注册，
-    # 否则 LLM 选中后必然失败（白白消耗一次工具往返与降级）
-    if TUSHARE_TOKEN:
-        from tools.fundamental import (
-            get_valuation,
-            get_financial_indicator,
-            get_financial_report,
-        )
-        from tools.moneyflow import get_money_flow
-        from tools.news import get_stock_news
-        from tools.history import get_history_daily
-        from tools.lhb import get_top_list
-
-        tools += [
-            get_valuation, get_financial_indicator, get_financial_report,
-            get_money_flow, get_stock_news, get_history_daily, get_top_list,
-        ]
-    return tools
+    return [
+        get_quote, symbol_search, get_peer_compare,
+        get_valuation, get_financial_indicator, get_financial_report,
+        get_money_flow, get_stock_news, get_history_daily, get_top_list,
+    ]

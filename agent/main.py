@@ -5,7 +5,7 @@
 - card  : {"event":"card","data":{"type":..,"payload":..}}  结构化卡片
 - table : {"event":"table","data":{"type":..,"payload":..}} 结构化表格
 - sources: 引用来源（RAG，{"docs": [{title, chunk_id, score}]}）
-- tool_start / tool_end: MCP 工具调用进度
+- tool_start / tool_end: 工具调用进度（MCP 子进程 / 进程内直连）
 - error : {"event":"error","data":{"message":"..."}}
 - done  : {"event":"done","data":{"thread_id":..,"usage":{..}}}
 
@@ -41,6 +41,12 @@ async def lifespan(app: FastAPI):
     yield
     await close_checkpointer()
     await close_http_client()
+    # MCP 工具会话（stdio 子进程）退出时断开，失败静默
+    try:
+        from tools.mcp_loader import close_mcp_tools
+        await close_mcp_tools()
+    except Exception:  # noqa: BLE001 - 收尾失败不影响进程退出
+        pass
 
 
 app = FastAPI(title="StockA Agent", lifespan=lifespan)
@@ -75,7 +81,7 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             subgraphs=True,
         ):
             # subgraphs=True 时每个 item 是 (namespace, mode, data) 三元组：
-            # mcp/rag/chat 子图内部的 token 与 card/table/tool 事件才会冒泡到父流，
+            # stock/rag/chat 子图内部的 token 与 card/table/tool 事件才会冒泡到父流，
             # 否则子图被当成单个节点、内部事件全部丢失（前端只收到 done）。
             # 同时兼容不含命名空间的 (mode, data) 二元组与单模式裸 data。
             if isinstance(item, tuple) and len(item) == 3:
@@ -85,7 +91,7 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             else:  # 兜底：单模式
                 mode, data = "messages", item
 
-            # token 事件由生成节点（chat/rag/mcp/clarify）在 astream 循环里
+            # token 事件由生成节点（chat/rag/stock/refuse/clarify）在 astream 循环里
             # 显式 emit("token", ...) 经 custom 模式透传，避免与 messages 模式重复。
             if mode == "custom":
                 # data 已是 {"event":..,"data":..}（由 subgraphs.emit 产出），直接透传

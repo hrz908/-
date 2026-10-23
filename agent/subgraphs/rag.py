@@ -1,25 +1,32 @@
-r"""RAG 混合检索子图。
+r"""RAG 混合检索子图（RAG 漏斗）。
 
-流程: hybrid_retrieve -> sufficiency_check --(充分)--> generate_with_citations -> END
-                                          \--(不足)--> escalate(设 intent=mcp) -> END
+流程: hybrid_retrieve -> sufficiency_check --(命中)--> generate_with_citations -> END
+                                          \--(不足)--> escalate(设 intent=stock_agent) -> END
 
-sufficiency_check: 最高分 < RAG_THRESHOLD 或有效片段 < 2 -> escalate，
-把 intent 改成 "mcp"，由主图条件边重路由到行情工具子图。
+sufficiency_check 两级判定：
+1. 阈值闸: 最高分 < RAG_THRESHOLD 或有效片段 < 2 -> 未命中；
+2. LLM 判读: 过阈值的片段交给小模型判断「能否回答」（prompts/rag_judge.xml），
+   避免主题相似但答非所问（问实时股价却检索到投教文章）。
+未命中时把 intent 改成 "stock_agent"，由主图条件边重路由到炒股 agent 子图。
 generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发射 sources 事件
 （数据格式 {"docs": [{title, chunk_id, score}]}，与前端和 Go 事件协议一致）。
 """
+import logging
 from datetime import datetime
 from typing import Literal
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
+from pydantic import BaseModel, Field
 
-from llm import get_llm
+from llm import get_llm, get_small_llm
 from state import AgentState, recent_turns
 from config import RAG_THRESHOLD
 from retriever import build_retriever
 from prompts.parse import render
 from subgraphs import emit
+
+logger = logging.getLogger("stocka.agent")
 
 _MIN_CHUNKS = 2
 _retriever = None
@@ -49,9 +56,51 @@ async def hybrid_retrieve(state: dict) -> dict:
     return {"retrieved": retrieved}
 
 
-def sufficiency_check(state: dict) -> dict:
-    """判断检索是否充分。不足则升级 intent=mcp 让主图重路由。
+class _Judge(BaseModel):
+    """RAG 命中判读的结构化输出契约（与 prompts/rag_judge.xml 规则对应）。"""
 
+    can_answer: bool = Field(description="检索资料能否直接回答用户问题")
+    reason: str = Field(default="", description="一句话理由")
+
+
+# 判读上下文上限（字符）：只取片段开头，够判主题与信息量即可
+_JUDGE_MAX_CHARS = 4000
+
+
+async def _judge_can_answer(query: str, retrieved: list) -> bool:
+    """LLM 判读检索片段能否回答用户问题。
+
+    判官缺席（模型异常 / 结构化输出失败）时按「能」处理，退回纯阈值口径：
+    宁可沿用原行为出引用回答，也不因为判读故障把所有问题都甩给取数 agent。
+    """
+    sep = chr(10) * 2
+    passages = sep.join(
+        "[" + str(i) + "] 《" + str(r.get("title", "")) + "》"
+        + str(r.get("content", ""))[:300]
+        for i, r in enumerate(retrieved, 1)
+    )[:_JUDGE_MAX_CHARS]
+    try:
+        small = get_small_llm(streaming=False, temperature=0.0)
+        verdict = await small.with_structured_output(_Judge).ainvoke([
+            HumanMessage(content=render("rag_judge.xml", query=query, passages=passages))
+        ])
+        return bool(verdict.can_answer)
+    except Exception as e:  # noqa: BLE001 - 判读失败不阻断，退回纯阈值口径
+        logger.warning(
+            "rag judge failed (%s: %s), fallback to threshold-only",
+            type(e).__name__, e,
+        )
+        return True
+
+
+async def sufficiency_check(state: dict) -> dict:
+    """判断检索是否充分。不足则升级 intent=stock_agent 让主图重路由。
+
+    两级判定（LangGraph 架构 §4.2）：
+    1. 阈值闸（便宜）：最高相似度 < RAG_THRESHOLD 或有效片段 < 2 -> 未命中；
+    2. LLM 判读（准）：过阈值的片段交给小模型判断「能否回答问题」，避免主题
+       相似但答非所问（问实时股价却检索到投教文章）。
+    判读异常按「命中」处理，退回纯阈值口径，不阻断链路。
     用余弦相似度 similarity 而非 RRF 融合分 score 来判定：
     score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），无法衡量相关性；
     similarity 才与 RAG_THRESHOLD 同尺度（bge-m3 的 query↔chunk 相关命中约 0.2~0.5）。
@@ -59,17 +108,20 @@ def sufficiency_check(state: dict) -> dict:
     retrieved = state.get("retrieved", []) or []
     top_sim = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)
     if len(retrieved) < _MIN_CHUNKS or top_sim < RAG_THRESHOLD:
-        return {"intent": "mcp"}
-    return {}
+        return {"intent": "stock_agent"}
+    query = state.get("rewritten") or state.get("query", "") or ""
+    if await _judge_can_answer(query, retrieved):
+        return {}
+    return {"intent": "stock_agent"}
 
 
 def route_after_check(state: dict) -> Literal["escalate", "generate"]:
-    # escalate 后 intent 被改成 mcp
-    return "escalate" if state.get("intent") == "mcp" else "generate"
+    # 两级判定未命中后 intent 被改成 stock_agent
+    return "escalate" if state.get("intent") == "stock_agent" else "generate"
 
 
 async def escalate(state: dict) -> dict:
-    """占位节点：intent 已在 sufficiency_check 改为 mcp，直接结束子图。"""
+    """占位节点：intent 已在 sufficiency_check 改为 stock_agent，直接结束子图。"""
     return {}
 
 

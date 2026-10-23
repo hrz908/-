@@ -1,4 +1,4 @@
-r"""MCP 行情工具子图（有界 ReAct 循环）。
+r"""炒股 agent 子图（有界 ReAct 循环，经 MCP 工具集 / 直连工具取数）。
 
 流程:
     tool_call --(有 tool_calls 且未超轮次)--> tool_execute --┐
@@ -14,8 +14,13 @@ tool_execute 执行完工具后回到 tool_call，让模型看到工具结果再
 - tool_execute: 并发执行本轮所有 tool_calls（每个工具已内置超时 + 重试 + 失败降级），
   每个工具调用前后发射 tool_start / tool_end 事件，产出 ToolMessage；
   tool_results 跨轮累加（读取已有 + 本轮），保证 synthesize 能看到全部工具数据。
-- synthesize: 用 prompts/mcp.xml + 累计 tool_results 流式生成最终回答，
+- synthesize: 用 prompts/stock.xml + 累计 tool_results 流式生成最终回答，
   并把行情/K线/估值等结构化数据以 card/table 事件独立发射。
+
+工具源（LangGraph 架构 2026-10-23）：数据工具经 tools/mcp_loader 优先从
+MCP Server（FastMCP stdio）加载，失败自动回退进程内直连；另挂
+search_knowledge_base（知识库检索）供模型在循环中补充研报/概念检索。
+结构化卡片发射前过 pydantic 校验（subgraphs/cards.py），失败降级为纯文本。
 """
 import asyncio
 import json
@@ -26,20 +31,22 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.graph import END, START, StateGraph
 
 from config import MAX_INPUT_TOKENS
-from llm import get_llm, count_message_tokens, is_context_overflow
-from state import AgentState, recent_turns
-from tools import get_tools
+from llm import count_message_tokens, get_llm, is_context_overflow
 from prompts.parse import render
+from state import AgentState, recent_turns
 from subgraphs import emit, emit_card, emit_table
+from subgraphs.cards import validate_card, validate_table
+from tools import get_tools
+from tools.rag_tool import search_knowledge_base
 
 logger = logging.getLogger("stocka.agent")
 
-# 工具调用系统提示已抽到 prompts/mcp_toolcall.xml（与 chat/rag/router 同目录统一管理），
-# 由 render("mcp_toolcall.xml") 注入 tool_call 节点，不在代码里硬编码长文本。
+# 工具调用系统提示已抽到 prompts/stock_toolcall.xml（与 chat/rag/router 同目录统一管理），
+# 由 render("stock_toolcall.xml") 注入 tool_call 节点，不在代码里硬编码长文本。
 
 # 多跳工具调用的轮次上限：tool_execute 每完成一轮就回到 tool_call，
 # 最多允许 _MAX_TOOL_ROUNDS 轮工具执行，超过则强制进入 synthesize，防止无限循环。
@@ -66,16 +73,39 @@ _TOOL_LABELS = {
     "get_history_daily": "历史行情",
     "get_top_list": "龙虎榜席位",
     "get_peer_compare": "同业对比",
+    "search_knowledge_base": "知识库检索",
 }
 
-# 工具名 -> 结构化事件构造器
+# 工具集进程级缓存：首轮 tool_call 前经 _ensure_tools 懒加载
 _TOOLS = None
 
 
-def _tools():
+async def _ensure_tools() -> None:
+    """懒加载工具集：MCP Server 优先，失败回退进程内直连，再挂上知识库检索工具。
+
+    工具源决策在 tools/mcp_loader（MCP FastMCP stdio 子进程 vs 直连 @tool），
+    两条路径的工具名 / 参数 / 返回契约完全一致；知识库检索工具恒为进程内 @tool。
+    """
     global _TOOLS
+    if _TOOLS is not None:
+        return
+    try:
+        from tools import mcp_loader
+        base = await mcp_loader.aload_stock_tools()
+    except Exception:  # noqa: BLE001 - loader 内部已兜底，这里再保一层
+        base = get_tools()
+    tools = list(base)
+    try:
+        tools.append(search_knowledge_base)
+    except Exception:  # noqa: BLE001 - 检索工具构造失败不阻断取数工具
+        pass
+    _TOOLS = tools
+
+
+def _tools() -> list:
+    """同步取当前工具集；_ensure_tools 尚未跑过时退回直连工具。"""
     if _TOOLS is None:
-        _TOOLS = get_tools()
+        return get_tools()
     return _TOOLS
 
 
@@ -300,6 +330,8 @@ def _infer_tool_by_args(args: dict):
             return "get_quote"
         if rest <= {"days", "adj", "end_date"}:
             return "get_history_daily"
+        if "limit" in rest:
+            return "get_stock_news"
     return None
 
 
@@ -324,12 +356,14 @@ def _normalize_tool_call(ai: AIMessage) -> AIMessage:
 
 
 async def tool_call(state: dict) -> dict:
+    # 首轮先懒加载工具集（MCP 优先、直连兜底，见 _ensure_tools）
+    await _ensure_tools()
     # 只喂本轮消息（含本轮已取到的工具结果），逐条截断正文，防止上下文膨胀
     run_msgs = [_shrink(m) for m in _current_run_messages(state)]
     if not run_msgs:
         # 兜底：拿不到本轮消息时至少把问题本身交给模型
         run_msgs = [HumanMessage(content=state.get("query", "") or "")]
-    msgs = [SystemMessage(content=render("mcp_toolcall.xml"))] + run_msgs
+    msgs = [SystemMessage(content=render("stock_toolcall.xml"))] + run_msgs
     nudge = _pending_nudge(state)
     if nudge:
         msgs.append(SystemMessage(content=nudge))
@@ -425,6 +459,29 @@ async def tool_execute(state: dict) -> dict:
     return {"messages": tool_messages, "tool_results": tool_results}
 
 
+def _emit_validated_card(card_type: str, payload) -> None:
+    """带 schema 校验的卡片发射（双模式输出的结构化闸门）。
+
+    载荷先过 subgraphs.cards 的 pydantic 校验：通过才发 card 事件；
+    失败只丢弃这张卡并记日志——正文回答仍由 synthesize 的文本兜底，
+    保证用户始终有答案（校验失败降级为纯文本，LangGraph 架构 §4.5）。
+    """
+    if not validate_card(card_type, payload):
+        logger.warning("card %s payload failed validation, skip emit: %s",
+                       card_type, str(payload)[:200])
+        return
+    emit_card(card_type, payload)
+
+
+def _emit_validated_table(table_type: str, payload) -> None:
+    """带 schema 校验的表格发射；校验失败只丢表，正文照常。"""
+    if not validate_table(table_type, payload):
+        logger.warning("table %s payload failed validation, skip emit: %s",
+                       table_type, str(payload)[:200])
+        return
+    emit_table(table_type, payload)
+
+
 def _emit_structured(tool_results: list) -> None:
     """把行情/估值/资金流/财报等结构化数据以独立 card/table 事件发射
     （不进入 token 流）。
@@ -440,7 +497,7 @@ def _emit_structured(tool_results: list) -> None:
     - get_history_daily    -> table: kline_table（K 线卡，最近 15 个交易日）
     - get_peer_compare     -> card: compare_card（同业对比卡，当日快照）
 
-    行载荷按行发射：Tushare 返回的是数组，一轮问多只股票时一标的一卡，
+    行载荷按行发射：数据源返回的是数组，一轮问多只股票时一标的一卡，
     前端每张卡是一条独立消息。单工具最多发 _MAX_CARDS_PER_TOOL 张，防刷屏。
     """
     lhb = _lhb_payload(tool_results)
@@ -452,31 +509,34 @@ def _emit_structured(tool_results: list) -> None:
             continue
         data = result.get("data")
         if name == "get_quote" and data:
-            emit_card("quote_card", data)
+            _emit_validated_card("quote_card", data)
         elif name == "symbol_search" and data:
-            emit_table("symbol_list", data)
+            _emit_validated_table("symbol_list", data)
         elif name == "get_valuation" and data:
             for row in _rows_of(data)[:_MAX_CARDS_PER_TOOL]:
-                emit_card("valuation_card", row)
+                _emit_validated_card("valuation_card", row)
         elif name == "get_money_flow" and data:
             rows = _rows_of(data)
             has_moneyflow = bool(rows)
             for row in rows[:_MAX_CARDS_PER_TOOL]:
+                extra = {}
                 # 龙虎榜并入第一张卡：同一标的的资金流 + 上榜席位一屏看完
                 if lhb and row is rows[0]:
-                    row = {**row, "lhb": lhb["rows"], "lhb_date": lhb["trade_date"]}
-                emit_card("fundflow_card", row)
+                    extra = {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]}
+                _emit_validated_card("fundflow_card", _fundflow_card_payload(row, extra))
         elif name == "get_history_daily" and data:
             rows = _kline_rows(data)
             if rows:
-                emit_table("kline_table", {"rows": rows})
+                _emit_validated_table("kline_table", {"rows": rows})
         elif name == "get_financial_report" and data:
-            emit_card("report_card", data)
+            _emit_validated_card("report_card", data)
         elif name == "get_peer_compare" and data:
-            emit_card("compare_card", data)
+            _emit_validated_card("compare_card", data)
     # 龙虎榜单独命中、本轮没有资金流数据时：发一张仅龙虎榜的资金流向卡
     if lhb and not has_moneyflow:
-        emit_card("fundflow_card", {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]})
+        _emit_validated_card(
+            "fundflow_card", {"lhb": lhb["rows"], "lhb_date": lhb["trade_date"]}
+        )
 
 
 def _lhb_payload(tool_results: list):
@@ -509,17 +569,50 @@ def _kline_rows(data: list) -> list:
 
 
 def _rows_of(data):
-    """把工具载荷归一成行列表：Tushare 给数组，组合工具给 dict。"""
+    """把工具载荷归一成行列表：数据源给数组，组合工具给 dict。"""
     if isinstance(data, list):
         return [r for r in data if isinstance(r, dict)]
     return [data] if isinstance(data, dict) else []
+
+
+def _split_net_wan(net):
+    """净额（元）-> (买入, 卖出) 万元伪拆分。
+
+    东财资金流只给净额；前端卡片按「买入-卖出」计算净额，
+    正数全记买入、负数全记卖出可无损还原净额，且不编造不存在的双边数据。
+    """
+    if net is None:
+        return None, None
+    w = round(net / 1e4, 2)
+    return (w, 0.0) if w >= 0 else (0.0, -w)
+
+
+def _fundflow_card_payload(row: dict, extra: dict | None = None) -> dict:
+    """资金流工具行（净额，元口径）-> 前端 fundflow_card 载荷（万元口径）。
+
+    字段名与原 Tushare moneyflow 契约保持一致（net_mf_amount、
+    buy/sell_{elg,lg,md,sm}_amount），前端卡片工厂无需感知数据源切换。
+    """
+    main = row.get("main_net")
+    payload = {
+        "ts_code": row.get("ts_code"),
+        "trade_date": row.get("trade_date"),
+        "net_mf_amount": round(main / 1e4, 2) if main is not None else None,
+    }
+    for tier, src in (("elg", "super_net"), ("lg", "large_net"),
+                      ("md", "mid_net"), ("sm", "small_net")):
+        buy, sell = _split_net_wan(row.get(src))
+        payload[f"buy_{tier}_amount"] = buy
+        payload[f"sell_{tier}_amount"] = sell
+    payload.update(extra or {})
+    return payload
 
 
 # 命中这些词说明用户就是要数据；此时若一个数据都没取到，绝不能让模型自由发挥。
 # 除行情价格类外，补上估值/财报/资金/龙虎榜/同业对比五类：它们对应各自的
 # 工具与卡片，取不到数时同样必须走兜底文案，而不是让模型凭印象编数字。
 # 注意：北向/南向/融资融券对应的工具已下线（2026-10-22），这些词留在表里
-# 只会让问句进 MCP 后无工具可调、命中兜底文案——属死路由，已清除
+# 只会让问句进取数分支后无工具可调、命中兜底文案——属死路由，已清除
 _DATA_KEYWORDS = (
     "k线", "K线", "行情", "价格", "涨跌", "走势", "收盘", "报价", "涨幅",
     "估值", "市盈率", "市净率", "市销率", "股息", "市值",
@@ -595,9 +688,8 @@ def _is_concept_question(state: dict) -> bool:
 def _failure_reason(tool_results: list) -> str:
     """从失败的工具结果里提炼一句准确的失败原因。
 
-    直接把 Tushare 原文丢给模型，它会把「频率超限(1次/分钟)」转述成
-    「每小时限1次」这种假细节，所以这里归一化成一句准确的中文说明，
-    由兜底文案与提示词共用。
+    直接把上游原文丢给模型，它会自由发挥出「每小时限1次」这种假细节
+    （实测），所以这里归一化成一句准确的中文说明，由兜底文案与提示词共用。
     """
     for item in tool_results:
         res = item.get("result") or {}
@@ -606,11 +698,16 @@ def _failure_reason(tool_results: list) -> str:
         err = str(res.get("error") or "")
         if not err:
             continue
-        if "频率超限" in err or "访问频率" in err:
-            return "数据接口访问频率超限（Tushare 每个接口每分钟 1 次）"
-        if "访问权限" in err or "没有接口" in err or "没有访问该接口" in err:
-            return "当前账号没有该数据接口的访问权限（Tushare 积分/权限不足）"
-        if "timeout" in err.lower():
+        low = err.lower()
+        if "频率" in err or "频繁" in err or "rate" in low:
+            return "数据源访问频率受限，请稍后再试"
+        if "权限" in err or "没有接口" in err or "forbidden" in low or "403" in low:
+            return "数据源暂无法提供该数据（接口权限或数据范围受限）"
+        # 连接/登录类判定排在超时之前：「baostock 登录失败: timeout」本质是连不上，
+        # 说成「接口响应超时」会误导用户的重试方向（回归测试固定用例）
+        if "retry" in low or "connection" in low or "连接" in err or "登录" in err:
+            return "数据源连接失败，请稍后再试"
+        if "timeout" in low or "timed out" in low:
             return "数据接口响应超时"
         return err[:80]
     return ""
@@ -647,8 +744,9 @@ async def synthesize(state: dict) -> dict:
     tool_results = state.get("tool_results", []) or []
     fallback = _no_data_fallback(state, tool_results)
     if fallback:
-        # 不走 LLM：直接把兜底文案当成本轮回答。不另外 emit token——
-        # 返回的 AIMessage 本身会被 messages 流投递成一次 token，再 emit 就重复一遍
+        # 不走 LLM：兜底文案必须显式 emit 成 token。main.py 只透传 custom 事件，
+        # 返回的 AIMessage 不会自动变成前端文本——少这一句前端就是空白回答（实测）
+        emit("token", {"delta": fallback})
         return {"messages": [AIMessage(content=fallback)]}
     # 无工具结果（模型直接回答）时也给一个空上下文
     tr_text = json.dumps(tool_results, ensure_ascii=False, default=str) if tool_results else "（无工具数据）"
@@ -662,7 +760,7 @@ async def synthesize(state: dict) -> dict:
         tr_text = f"【数据获取失败说明】{reason}\n{tr_text}"
     query = state.get("rewritten") or state.get("query", "") or ""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prompt = render("mcp.xml", now=now, query=query, tool_results=tr_text)
+    prompt = render("stock.xml", now=now, query=query, tool_results=tr_text)
 
     # 结构化数据走独立事件
     _emit_structured(tool_results)
@@ -687,6 +785,7 @@ async def synthesize(state: dict) -> dict:
             raise
         # 上游仍报超长：降级成一条能用的回答，绝不让整条对话只剩 error 事件
         logger.warning("synthesize context overflow, fallback to safe reply", exc_info=True)
+        emit("token", {"delta": _OVERFLOW_REPLY})
         return {"messages": [AIMessage(content=_OVERFLOW_REPLY)]}
     ai = parts[0] if parts else None
     for p in parts[1:]:
@@ -694,7 +793,7 @@ async def synthesize(state: dict) -> dict:
     return {"messages": [ai if ai is not None else AIMessage(content="")]}
 
 
-def build_mcp_subgraph():
+def build_stock_subgraph():
     g = StateGraph(AgentState)
     g.add_node("tool_call", tool_call)
     g.add_node("tool_execute", tool_execute)

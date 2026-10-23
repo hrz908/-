@@ -8,5 +8,8 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 联调产物（tests/test_e2e.py 生成，不进镜像）
+agent_out_*.txt
+e2e_report.md
 Dockerfile
 .dockerignore

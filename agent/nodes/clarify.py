@@ -22,8 +22,10 @@ _CLARIFY_SYSTEM = (
 
 
 async def clarify(state: dict) -> dict:
-    # 护栏拦截：直接安全降级，不调模型
+    # 护栏拦截：直接安全降级，不调模型。固定文案必须 emit 成 token，
+    # main.py 只透传 custom 事件，光返回 AIMessage 前端拿不到任何文字
     if state.get("error") == "guardrail_blocked":
+        emit("token", {"delta": _BLOCK_REPLY})
         return {"messages": [AIMessage(content=_BLOCK_REPLY)]}
 
     query = state.get("rewritten") or state.get("query", "") or ""
@@ -42,4 +44,7 @@ async def clarify(state: dict) -> dict:
         ).strip()
     except Exception:  # noqa: BLE001 - 模型异常时用固定兜底话术
         text = ""
+    if not text:
+        # 模型没生成出文字：兜底话术同样要显式 emit，否则前端空白
+        emit("token", {"delta": _FALLBACK})
     return {"messages": [AIMessage(content=text or _FALLBACK)]}

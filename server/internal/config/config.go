@@ -122,6 +122,8 @@ type Config struct {
 // 非法 int / duration 直接启动失败（与旧 envInt 的 fail-fast 策略一致），
 // 不允许配置错误静默回退、把问题藏到运行期。
 func Load() Config {
+	// 本地开发兜底：把 server/.env 注入进程环境（真实环境变量优先，文件缺失不报错）
+	loadDotEnv(".env")
 	setDefaults()
 
 	// 无前缀 + 点转下划线：既有环境变量名（ADDR、REDIS_ADDR、JWT_SECRET…）原样兼容
@@ -132,8 +134,11 @@ func Load() Config {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	if err := viper.ReadInConfig(); err != nil {
-		// 配置文件缺失是正常形态（默认值 + 环境变量即可运行），其余解析错误必须暴露
-		var notFound *viper.ConfigFileNotFoundError
+		// 配置文件缺失是正常形态（默认值 + 环境变量即可运行），其余解析错误必须暴露。
+		// 注意：viper v1.x 返回的是 ConfigFileNotFoundError 值类型而非指针，
+		// 用 *ConfigFileNotFoundError 做 errors.As 永远匹配不上——会把「没写配置文件」
+		// 误判成致命错误（本地无 config.yaml 时直接起不来）。
+		var notFound viper.ConfigFileNotFoundError
 		if !errors.As(err, &notFound) {
 			log.Fatalf("read config: %v", err)
 		}

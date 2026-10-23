@@ -40,7 +40,7 @@ def parse_route(text: str) -> dict:
     优先按 XML 解析；非法/缺失时尝试 JSON；都失败降级 clarify（parse_failed）。
     """
     intent = extract("intent", text)
-    if intent in {"mcp", "rag", "chat", "clarify"}:
+    if intent in {"stock", "chat", "off_topic", "clarify"}:
         try:
             conf = float(extract("confidence", text) or 0.5)
         except ValueError:

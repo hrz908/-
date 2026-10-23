@@ -21,7 +21,8 @@ logger = logging.getLogger("stocka.agent")
 _DISCLAIMER = "\n\n> 以上信息仅供参考，不构成任何投资建议。市场有风险，投资需谨慎。"
 
 # 个股相关意图：这些场景的回答需要挂免责声明
-_STOCK_INTENTS = {"mcp"}
+# stock = 经 RAG 漏斗直接作答；stock_agent = 漏斗未命中后由炒股 agent 取数作答
+_STOCK_INTENTS = {"stock", "stock_agent"}
 
 _redis = None
 

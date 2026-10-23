@@ -7,7 +7,7 @@
 
 # ===== 一、环境变量 / 密钥 =====
 # 本地环境变量：含真实密钥，且每台机器不同，不入库。
-# server 启动时要求存在 server/.env，缺失直接 die（见 server/internal/config/config.go）
+# 本地 .env 由服务自身兜底加载（Go: internal/config/loadDotEnv；agent: 启动时注入进程环境），缺失不算错误
 .env
 .env.*
 !.env.example
@@ -60,6 +60,9 @@ dist/
 build/
 # ingest 的本地文档监听目录（放待入库的原始文档，是数据不是源码）
 ingest/data/
+# agent 联调产物：tests/test_e2e.py 每次运行生成（原始事件流 + 可读报告，含真实回答与卡片载荷）
+agent/agent_out_*.txt
+agent/e2e_report.md
 
 # ===== 五、日志与临时文件 =====
 *.log

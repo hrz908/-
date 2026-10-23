@@ -24,13 +24,22 @@ GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 # 调 Go 网关受保护接口用的服务间 token（Agent 作为可信内部服务）
 GO_SERVER_TOKEN = os.getenv("GO_SERVER_TOKEN", "")
 
-# Tushare Pro：第三方只读数据增强（财务/资金流/资讯/历史K线）。
-# 直接走 HTTP REST（POST http://api.tushare.pro），不引入 tushare SDK：
-# 纯异步 httpx 调用，复用 call_tool_safe 的超时/重试/降级，且不给镜像增加 pandas 等重依赖。
-# token 为空时相关工具不注册（见 tools.get_tools），避免 LLM 选中后必然失败。
-# 注意：多数增强接口需 2000+ 积分，免费新用户（约 120 积分）通常仅 daily/adj_factor 可用
-TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
-TUSHARE_API = os.getenv("TUSHARE_API", "http://api.tushare.pro")
+# ===== MCP 工具源（炒股 agent 取数工具，LangGraph 架构 2026-10-23）=====
+# 取数工具可由 mcp_servers/stock_server.py（FastMCP，stdio 子进程）暴露；
+# 加载失败自动回退进程内直连（tools.get_tools），上层无感知。
+# 注意 mcp python-sdk 必须钉 1.x（2.x 与 langchain-mcp-adapters 0.3.x 不兼容）
+STOCK_MCP_ENABLED = os.getenv("STOCK_MCP_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+STOCK_MCP_SERVER_PATH = os.getenv(
+    "STOCK_MCP_SERVER_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_servers", "stock_server.py"),
+)
+
+# 数据源说明（2026-10-23 起）：
+# 卡片数据 = akshare（东财/新浪，免 token） + baostock（历史日 K，免 token）
+# 原配置 TUSHARE_TOKEN / TUSHARE_API 已废弃删除；
+# 实测原 token 对 moneyflow/top_list/top_inst 等接口无权限（40203）。
+# akshare 抓东财/新浪公开页面，Docker 内直连即可；本机调试若走系统代理失败，
+# 进程内设 NO_PROXY=* 绕过。
 
 # 对话 token 超过该值触发滚动摘要
 SUMMARY_TOKEN_LIMIT = int(os.getenv("SUMMARY_TOKEN_LIMIT", "6000"))
@@ -40,8 +49,3 @@ SUMMARY_TOKEN_LIMIT = int(os.getenv("SUMMARY_TOKEN_LIMIT", "6000"))
 #   'number of input tokens (301046) has exceeded max_seq_len (163840) limit'
 # 这类错误冒泡会让整轮回答变成空，所以发送前先按这个预算裁剪。
 MAX_INPUT_TOKENS = int(os.getenv("MAX_INPUT_TOKENS", "60000"))
-
-# Tushare 单个接口返回的最大行数（硬上限）。
-# daily / daily_basic / moneyflow 这类接口在只给 ts_code 时会返回该股全部历史
-# （茅台约 6000 行），整段 JSON 进对话会直接撑爆模型上下文。
-MAX_TUSHARE_ROWS = int(os.getenv("MAX_TUSHARE_ROWS", "200"))

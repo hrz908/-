@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""AI 对话故障的回归测试（纯函数，不依赖 LLM / Tushare / 网络）。
+"""AI 对话故障的回归测试（纯函数，不依赖 LLM / 数据源 / 网络）。
 
 覆盖 2026-10-22 实测发现的三个问题：
   P1 上下文溢出（301046 token > max_seq_len）导致整条回答为空
   P2 取数类接口返回整段历史，把对话上下文撑爆
   P3 无数据兜底靠关键词判定，漏判后模型自己编失败原因
+2026-10-23 LangGraph 架构改造新增：
+  P5 意图三分（stock/chat/off_topic）+ rag 两级命中判读 + 固定话术婉拒
+  P6 卡片 pydantic 校验（失败降级纯文本）
+  P7 MCP 工具源禁用/失败时的直连兜底
 
 用法：python tests/test_regression.py
 """
@@ -14,11 +18,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 回归测试固定走「进程内直连工具」：MCP 通道会拉起 stdio 子进程（akshare 导入慢），
+# 且其加载/兜底行为由 P7 用例覆盖。必须在 import config 之前设置。
+os.environ["STOCK_MCP_ENABLED"] = "0"
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from config import MAX_INPUT_TOKENS
 from llm import count_message_tokens, is_context_overflow
-from subgraphs.mcp import (
+from subgraphs.stock import (
     _DATA_ABBR_RE,
     _OVERFLOW_REPLY,
     _asked_for_data,
@@ -35,6 +43,10 @@ from subgraphs.mcp import (
     _recent_history,
     route_after_call,
 )
+from subgraphs.stock import _TOOL_LABELS
+from subgraphs.cards import validate_card, validate_table
+from nodes.refuse import _REFUSE_TEXT, refuse
+from tools.rag_tool import search_knowledge_base
 from tools import take_latest
 
 _FAILED = []
@@ -146,13 +158,15 @@ def test_asked_for_data():
 def test_failure_reason():
     print("\n[P3] 失败原因如实归一化")
     rate = _failure_reason(
-        _tool_results("get_valuation", False, "抱歉，您访问接口(daily_basic)频率超限(1次/分钟)"))
-    check("限频原因准确", "频率超限" in rate and "每分钟" in rate, rate)
+        _tool_results("get_valuation", False, "访问频率超限，请稍后再试"))
+    check("限频原因准确", "频率" in rate and "稍后" in rate, rate)
     perm = _failure_reason(
-        _tool_results("get_financial_indicator", False, "抱歉，您没有接口(fina_indicator)访问权限"))
+        _tool_results("get_financial_indicator", False, "没有接口访问权限"))
     check("权限原因准确", "权限" in perm, perm)
     tmo = _failure_reason(_tool_results("get_quote", False, "timeout"))
     check("超时原因准确", "超时" in tmo, tmo)
+    conn = _failure_reason(_tool_results("get_quote", False, "baostock 登录失败: timeout"))
+    check("连接原因准确", "连接" in conn, conn)
     check("无失败时为空",
           _failure_reason(_tool_results("get_quote", True, data=[{}])) == "")
 
@@ -162,10 +176,10 @@ def test_no_data_fallback():
     st = {"query": "贵州茅台现在的估值水平如何？它当前的PE和PB大概是多少？",
           "rewritten": "贵州茅台的PE和PB是多少？"}
     tr = (_tool_results("symbol_search", True, data=[{"code": "600519"}])
-          + _tool_results("get_valuation", False, "频率超限(1次/分钟)"))
+          + _tool_results("get_valuation", False, "访问频率超限"))
     out = _no_data_fallback(st, tr)
     check("触发兜底", bool(out), repr(out))
-    check("兜底里带真实原因", "每分钟" in out, out)
+    check("兜底里带真实原因", "频率" in out, out)
     check("兜底不编造「每小时」", "每小时" not in out, out)
 
     # 有数据拿到时不能兜底（否则会盖掉正常回答）
@@ -263,7 +277,7 @@ def test_data_question_always_fetches():
 def test_graph_wiring_and_retry():
     print("\n[P3] 子图接线：重试路由可用（防 KeyError）")
     import asyncio
-    from subgraphs import mcp as mcp_mod
+    from subgraphs import stock as stock_mod
 
     class _FakeLLM:
         """永远不调工具的假模型：逼出「模型没调工具」这条分支。"""
@@ -279,10 +293,10 @@ def test_graph_wiring_and_retry():
             return AIMessage(content=f"第{self.calls}轮：我先想想")
 
     fake = _FakeLLM()
-    orig = mcp_mod.get_llm
-    mcp_mod.get_llm = lambda **kw: fake
+    orig = stock_mod.get_llm
+    stock_mod.get_llm = lambda **kw: fake
     try:
-        g = mcp_mod.build_mcp_subgraph()
+        g = stock_mod.build_stock_subgraph()
         q = "查询贵州茅台（SH600519）的最新行情"
         state = {
             "messages": [HumanMessage(content=q)],
@@ -298,7 +312,7 @@ def test_graph_wiring_and_retry():
     except Exception as e:  # noqa: BLE001
         check("子图能跑完不报 KeyError", False, f"{type(e).__name__}: {e}")
     finally:
-        mcp_mod.get_llm = orig
+        stock_mod.get_llm = orig
 
 
 def test_text_tool_call_restore():
@@ -339,6 +353,124 @@ def test_text_tool_call_restore():
           len(out2.tool_calls) == 1 and out2.tool_calls[0]["id"] == "x")
 
 
+def test_card_validation():
+    print("\n[P6] 卡片 pydantic 校验（失败降级为纯文本）")
+    check("行情卡通过", validate_card("quote_card", {"code": "600519", "price": 1300.0}))
+    check("行情卡缺标识被拦", not validate_card("quote_card", {"price": 1300.0}))
+    check("行情卡无价格被拦", not validate_card("quote_card", {"code": "600519"}))
+    check("估值卡通过", validate_card("valuation_card",
+                                    {"ts_code": "600519.SH", "trade_date": "20261023", "pe": 30}))
+    check("估值卡缺日期被拦", not validate_card("valuation_card", {"ts_code": "600519.SH"}))
+    check("资金流卡通过", validate_card("fundflow_card", {"ts_code": "600519", "net_mf_amount": 1.0}))
+    check("纯龙虎榜卡通过", validate_card("fundflow_card",
+                                     {"lhb": [{"seat": "x", "buy": 1, "sell": 2}],
+                                      "lhb_date": "20261022"}))
+    check("资金流卡空载荷被拦", not validate_card("fundflow_card", {}))
+    check("财报卡通过", validate_card("report_card",
+                                   {"income": {"revenue": 1}, "indicator": None, "cashflow": None}))
+    check("财报卡全空被拦", not validate_card("report_card",
+                                       {"income": None, "indicator": None, "cashflow": None}))
+    check("对比卡通过", validate_card("compare_card", {"items": [{"name": "x"}]}))
+    check("对比卡空 items 被拦", not validate_card("compare_card", {"items": []}))
+    check("K线表通过", validate_table("kline_table",
+                                  {"rows": [{"date": "2026-10-23", "close": 1}]}))
+    check("K线表缺日期被拦", not validate_table("kline_table", {"rows": [{"close": 1}]}))
+    check("搜索候选通过", validate_table("symbol_list", [{"code": "600519", "name": "贵州茅台"}]))
+    check("搜索候选缺 code 被拦", not validate_table("symbol_list", [{"name": "贵州茅台"}]))
+
+
+def test_off_topic_refusal():
+    print("\n[P5] off_topic 固定话术婉拒")
+    import asyncio
+
+    out = asyncio.run(refuse({"query": "帮我写一首诗"}))
+    msg = out["messages"][0]
+    check("产出固定话术", msg.content == _REFUSE_TEXT)
+    check("话术含身份与引导", "溜溜" in msg.content and "股票" in msg.content)
+    check("婉拒不反问", "？" not in msg.content and "?" not in msg.content)
+
+
+def test_rag_judge_fallback():
+    print("\n[P5] RAG 两级命中判读")
+    import asyncio
+    from subgraphs import rag as rag_mod
+
+    out = asyncio.run(rag_mod.sufficiency_check({"retrieved": [], "query": "x"}))
+    check("空检索 -> stock_agent", out.get("intent") == "stock_agent", str(out))
+    check("命中路由到 generate",
+          rag_mod.route_after_check({"intent": "stock"}) == "generate")
+    check("未命中路由到 escalate",
+          rag_mod.route_after_check({"intent": "stock_agent"}) == "escalate")
+
+    retrieved = [
+        {"title": "研报A", "content": "内容", "similarity": 0.9},
+        {"title": "研报B", "content": "内容", "similarity": 0.8},
+    ]
+    orig = rag_mod.get_small_llm
+    # 判官缺席（模型异常）-> 按命中处理，退回纯阈值口径
+    rag_mod.get_small_llm = lambda **kw: (_ for _ in ()).throw(RuntimeError("no llm"))
+    try:
+        out2 = asyncio.run(rag_mod.sufficiency_check(
+            {"retrieved": retrieved, "query": "茅台研报观点"}))
+        check("判官异常时按命中（不 escalate）", out2 == {}, str(out2))
+        check("判官不可用时返回 True", asyncio.run(rag_mod._judge_can_answer("q", retrieved)) is True)
+    finally:
+        rag_mod.get_small_llm = orig
+
+    # 判官判「不能回答」-> escalate 到炒股 agent
+    class _Verdict:
+        can_answer = False
+        reason = "资料不含实时价格"
+
+    class _Chain:
+        async def ainvoke(self, msgs):
+            return _Verdict()
+
+    class _SmallLLM:
+        def with_structured_output(self, schema):
+            return _Chain()
+
+    rag_mod.get_small_llm = lambda **kw: _SmallLLM()
+    try:
+        out3 = asyncio.run(rag_mod.sufficiency_check(
+            {"retrieved": retrieved, "query": "茅台现在多少钱"}))
+        check("判官判不能 -> stock_agent", out3.get("intent") == "stock_agent", str(out3))
+    finally:
+        rag_mod.get_small_llm = orig
+
+
+def test_intent_taxonomy():
+    print("\n[P5] 意图三分与漏斗口径")
+    import asyncio
+    from nodes.classify import classify, _hit_data_keyword
+
+    check("数据关键词命中", _hit_data_keyword("贵州茅台最新行情"))
+    check("研报类不算数据关键词", not _hit_data_keyword("帮我读一下这篇研报的观点"))
+    st = asyncio.run(classify({"query": "查询SH600519的实时报价", "rewritten": "", "messages": []}))
+    check("数据问句确定性判为 stock", st.get("intent") == "stock", str(st))
+    check("快路径置信度为 1", st.get("confidence") == 1.0, str(st))
+
+
+def test_mcp_loader_fallback():
+    print("\n[P7] MCP 工具源禁用时的直连兜底")
+    import asyncio
+    from tools import mcp_loader
+    from subgraphs import stock as stock_mod
+
+    tools = asyncio.run(mcp_loader.aload_stock_tools())
+    names = [t.name for t in tools]
+    check("回退直连工具（10 个）", len(names) == 10, str(names))
+    check("工具标签表齐全", all(n in _TOOL_LABELS for n in names), str(names))
+
+    check("知识库检索工具可构造", search_knowledge_base.name == "search_knowledge_base")
+
+    stock_mod._TOOLS = None
+    asyncio.run(stock_mod._ensure_tools())
+    names2 = [t.name for t in stock_mod._tools()]
+    check("子图工具集含知识库检索", "search_knowledge_base" in names2, str(names2))
+    asyncio.run(mcp_loader.close_mcp_tools())
+
+
 def main():
     print("=" * 62)
     print("AI 对话故障回归测试")
@@ -355,6 +487,11 @@ def main():
     test_data_question_always_fetches()
     test_graph_wiring_and_retry()
     test_text_tool_call_restore()
+    test_card_validation()
+    test_off_topic_refusal()
+    test_rag_judge_fallback()
+    test_intent_taxonomy()
+    test_mcp_loader_fallback()
     print("\n" + "=" * 62)
     if _FAILED:
         print(f"FAILED: {len(_FAILED)} 项 -> {_FAILED}")

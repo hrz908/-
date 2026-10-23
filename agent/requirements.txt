@@ -11,3 +11,16 @@ pydantic>=2.0.0
 httpx>=0.27.0
 jinja2>=3.1.0
 tiktoken>=0.7.0
+# ===== 行情数据源（卡片数据，2026-10-23 起替代 Tushare REST）=====
+# akshare：东财/新浪公开接口（估值/资金流/财报/资讯/龙虎榜），免 token
+akshare>=1.17.0
+# baostock：历史日 K（自带复权），免 token；同步库，经线程池+锁串行调用
+baostock>=0.8.9
+# 两者共同依赖，显式声明锁定下限
+pandas>=2.2.0
+# ===== MCP 工具源（LangGraph 架构 2026-10-23）=====
+# 取数工具经 FastMCP server 暴露（mcp_servers/stock_server.py），由 adapters 加载；
+# 加载失败自动回退进程内直连（tools.get_tools）。mcp 必须钉 1.x：
+# 2.x 移除了 RequestContext，langchain-mcp-adapters 0.3.x 导入即报错。
+mcp>=1.2,<2
+langchain-mcp-adapters>=0.3,<0.4

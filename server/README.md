@@ -143,10 +143,10 @@ server/
 | event | data.type | 载荷 | 前端渲染 |
 |---|---|---|---|
 | `card` | `quote_card` | `QuoteDetail` 单对象（code/name/price/change/change_percent/open/high/low/volume/amount/turnover/pe/pb/total_mv/free_mv/status/time） | 行情速览卡 |
-| `card` | `valuation_card` | `daily_basic` 单行（pe/pe_ttm/pb/ps_ttm/dv_ttm/total_mv 等；**金额单位万元**） | 估值卡 |
-| `card` | `fundflow_card` | `moneyflow` 单行（buy/sell_sm/md/lg/elg_amount、net_mf_amount；**金额单位万元**）；
+| `card` | `valuation_card` | 东财估值单行（字段名沿用 daily_basic 口径：pe/pe_ttm/pb/ps_ttm/total_mv；**金额单位万元**；dv_ttm 当前数据源无此字段，恒空） | 估值卡 |
+| `card` | `fundflow_card` | 东财资金流行经发射层换算（字段名沿用 moneyflow 契约：buy/sell_sm/md/lg/elg_amount、net_mf_amount；**金额单位万元**，由净额正负拆分而来）；
 命中龙虎榜时并入 `lhb`（`[{seat, buy, sell}]`，仅此三个量，**万元**）与 `lhb_date` | 资金流向卡（含龙虎榜区块） |
-| `card` | `report_card` | `{indicator, income, cashflow}` 三表合并（各为单行 dict，可缺表；**金额单位元**） | 财报速览卡 |
+| `card` | `report_card` | `{indicator, income, cashflow}` 三表合并（新浪报表+财务指标，各为单行 dict，可缺表；**金额单位元**） | 财报速览卡 |
 | `card` | `compare_card` | `{items, ts_code}`；items 为 `[{name, price, changePct, pe, pb, totalMv}]`（**当日快照，元口径**，最多本股 + 2 家同行） | 同业对比卡 |
 | `table` | `symbol_list` | 股票搜索候选行数组 | 搜索候选列表 |
 | `table` | `kline_table` | `{rows: [{date, open, high, low, close, volume}]}`（升序，最多 15 个交易日；`trade_date→date`、`vol→volume` 已映射） | K 线卡 |
@@ -154,15 +154,18 @@ server/
 说明：
 
 1. `valuation_card` / `fundflow_card` 按行发射（一轮问多只股票时一标的一卡，单工具上限 3 张）；
-2. `report_card` 来自组合工具 `get_financial_report`（并发拉 fina_indicator + income + cashflow），
+2. `report_card` 来自组合工具 `get_financial_report`（并发拉新浪财务指标 + 利润表 + 现金流量表），
    任一子表取不到时对应字段为 `null`，前端渲染 `--`，不影响其它字段；
 3. `kline_table` 由 `get_history_daily` 发射（2026-10-23 复活；Go `/stock/kline` 仍保持下线），
    产品约定 K 线走势只取 15 个交易日，工具侧窗口收死（days 上限 15）；
-4. 龙虎榜由 `get_top_list`（Tushare `top_inst`）提供，只取席位/买入/卖出三个量；
-   无权限时优雅降级（ fundflow 卡不带 lhb 区块）。北向/南向/融资融券工具保持下线；
+4. 龙虎榜由 `get_top_list`（东财龙虎榜详情）提供，只取席位/买入/卖出三个量；
+   近期未上榜时优雅降级（fundflow 卡不带 lhb 区块）。北向/南向/融资融券工具保持下线；
 5. `compare_card` 由 `get_peer_compare` 提供，五个维度全部来自 Go 网关当日行情快照
-   （腾讯源），不依赖 Tushare 配额；历史分位、行业均值、一致预期等字段仍**没有数据源**，
+   （腾讯源）；历史分位、行业均值、一致预期等字段仍**没有数据源**，
    卡片按缺失降级，不编造。
+6. **数据源（2026-10-23 起）**：卡片数据 = akshare（东财/新浪，免 token）+ baostock（历史日 K，免 token），
+   原 Tushare 通道已删除（实测 token 对 moneyflow/top_list 等接口无权限 40203）；
+   quote/search/compare 仍走 Go 网关腾讯快照。
 
 ---
 

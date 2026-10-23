@@ -4,11 +4,16 @@
 （with_structured_output），失败时回退 XML + parse_route。confidence < 0.6
 强制降级为 clarify（宁可反问，不可乱答）。解析失败一律 clarify。
 
+意图三分（LangGraph 主图，2026-10-23 起）：
+- stock: 一切股票相关问题，统一先进 RAG 漏斗——检索知识库命中则带引用作答，
+  未命中由主图把 intent 改写成 stock_agent 重路由进炒股 agent（工具取数）。
+- chat: 闲聊寒暄，直接陪聊，不挂工具。
+- off_topic: 与股票无关的正经话题，走固定话术婉拒（nodes/refuse.py）。
+- clarify: 问题含糊或低置信度，反问澄清。
+
 关键词兜底先行（agent-graph 规则 1）：行情/报价/K线/涨跌/估值/财报/资金类
-问句命中即强制走 MCP 分支，LLM 判定只作为兜底之后的补充。
-背景 bug：`查询 SH600519 的实时报价` 被判成 RAG 分支，没调任何行情工具，
-直接引用无关文档作答。mcp.py 的 _DATA_KEYWORDS 只保护 MCP 分支内的 synthesize，
-RAG 分支裸奔——这道闸补在路由层。
+问句命中即确定性判为 stock——既省一次路由 LLM 调用，也防 LLM 把取数问句
+判错；漏斗不会拿无关文档硬答，因为 rag 子图还有 LLM 判读把门。
 """
 import re
 from datetime import datetime
@@ -40,13 +45,11 @@ _MCP_KEYWORDS_SUBSTR = (
 )
 # 短英文指标整词匹配（词边界），防止 "apple" 命中 "pe"、"space" 命中 "ps"
 _MCP_KEYWORDS_WORD = re.compile(r"(?<![a-zA-Z])(pe|pb|ps)(?![a-zA-Z])", re.IGNORECASE)
-# RAG 强信号：想读文档（研报观点/解读）时不拦，交给 LLM 判读文档意图
-_RAG_SIGNALS = ("研报", "观点", "解读", "投教", "知识库")
 
 
 class _RouteDecision(BaseModel):
     """意图路由的结构化输出契约（与 router.xml 的 <route> 字段一一对应）。"""
-    intent: str = Field(description="mcp|rag|chat|clarify 之一")
+    intent: str = Field(description="stock|chat|off_topic|clarify 之一")
     confidence: float = Field(description="对该判断的把握，0~1 的小数")
     reason: str = Field(default="", description="一句话理由")
     symbol: str = Field(default="", description="标的代码或名称，可空")
@@ -105,10 +108,10 @@ async def classify(state: dict) -> dict:
 
     query = state.get("rewritten") or state.get("query", "") or ""
 
-    # 关键词兜底先行：命中数据词且无 RAG 强信号 -> 确定性进 MCP 分支，
+    # 关键词兜底先行：命中数据词 -> 确定性判为 stock（漏斗内部再决定查文档还是取数），
     # 不再消耗一次 small_llm 调用，也不给 LLM 判错的机会
-    if _hit_data_keyword(query) and not any(s in query for s in _RAG_SIGNALS):
-        return {"intent": "mcp", "confidence": 1.0, "entities": {}}
+    if _hit_data_keyword(query):
+        return {"intent": "stock", "confidence": 1.0, "entities": {}}
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     history = _format_history(state.get("messages", []))
@@ -118,7 +121,7 @@ async def classify(state: dict) -> dict:
     route = await _route_decision(prompt)
     intent = route["intent"]
     confidence = route["confidence"]
-    if intent not in {"mcp", "rag", "chat", "clarify"}:
+    if intent not in {"stock", "chat", "off_topic", "clarify"}:
         intent, confidence = "clarify", 0.0
     # 低置信度强制澄清
     if confidence < _CONF_MIN:
