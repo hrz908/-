@@ -36,7 +36,7 @@ from langgraph.graph import END, START, StateGraph
 
 from config import MAX_INPUT_TOKENS
 from llm import count_message_tokens, get_llm, is_context_overflow
-from prompts.parse import render
+from prompts.parse import render, load_template
 from state import AgentState, recent_turns
 from subgraphs import emit, emit_card, emit_table
 from subgraphs.cards import validate_card, validate_table
@@ -144,12 +144,35 @@ def _current_run_messages(state: dict) -> list:
     （ReAct 多跳）。但绝不能带上之前轮次的工具结果：实测第二轮会因为「历史里
     已经有 K 线数据」而不再发起调用，直接凭印象作答（答成「无法获取」）。
     只取本轮顺带把上下文锁在一轮之内，不会随会话轮数累积到几十万 token。
+
+    指代消解贯通：rewrite 节点已把「它的市盈率是多少」改写成「贵州茅台的市盈率
+    是多少」，但 tool_call 只喂本轮消息时模型看到的是没有主语的「它」——
+    实测多轮第二轮因此一个工具都不调，3 轮重试后落入无数据兜底（MT-01）。
+    这里把本轮首条 HumanMessage 的正文替换为 rewritten（仅影响本次调用，
+    model_copy 不改状态里的原消息；tool_call_id 配对不涉及 human 消息）。
     """
     msgs = list(state.get("messages", []))
     for i in range(len(msgs) - 1, -1, -1):
         if isinstance(msgs[i], HumanMessage):
-            return msgs[i:]
+            head = msgs[i:]
+            return _apply_rewrite(head, state)
     return msgs
+
+
+def _apply_rewrite(run_msgs: list, state: dict) -> list:
+    """把本轮首条用户消息的正文替换为指代消解后的 rewritten（有值时）。"""
+    rewritten = (state.get("rewritten") or "").strip()
+    query = (state.get("query") or "").strip()
+    if not rewritten or rewritten == query or not run_msgs:
+        return run_msgs
+    first = run_msgs[0]
+    content = first.content if isinstance(first.content, str) else ""
+    if content.strip() != query:
+        return run_msgs
+    try:
+        return [first.model_copy(update={"content": rewritten})] + run_msgs[1:]
+    except Exception:  # noqa: BLE001 - 拷贝失败就退回原消息，不让链路断
+        return run_msgs
 
 
 # 取数类工具：只有它们的结果才能支撑回答里的数字。
@@ -363,7 +386,8 @@ async def tool_call(state: dict) -> dict:
     if not run_msgs:
         # 兜底：拿不到本轮消息时至少把问题本身交给模型
         run_msgs = [HumanMessage(content=state.get("query", "") or "")]
-    msgs = [SystemMessage(content=render("stock_toolcall.xml"))] + run_msgs
+    msgs = [SystemMessage(content=render(
+        "stock_toolcall.xml", examples=load_template("toolcall_examples.xml")))] + run_msgs
     nudge = _pending_nudge(state)
     if nudge:
         msgs.append(SystemMessage(content=nudge))
@@ -638,6 +662,11 @@ def _no_data_fallback(state: dict, tool_results: list) -> str:
     called_data_tool = any(item.get("tool") in _DATA_TOOLS for item in tool_results)
     if called_data_tool:
         reason = _failure_reason(tool_results)
+        # 客观无数据（如近期未上榜、当日暂无新闻）是数据源的真实结论，
+        # 不是故障：如实转述即可，套「请稍后重试」会误导用户（实测 L-01）
+        if _all_failures_graceful_empty(tool_results):
+            return (f"查询完成：{reason or '暂无相关数据'}。"
+                    "这是数据源当前的客观情况，并非系统故障；可以换个标的或时间范围再试。")
         head = "抱歉，这一轮没有取到所需的数据，我无法给出你要的数字。"
         if reason:
             head += reason + "。"
@@ -665,6 +694,23 @@ def _asked_for_data(state: dict) -> bool:
     if any(k.upper() in text for k in _DATA_KEYWORDS):
         return True
     return bool(_DATA_ABBR_RE.search(text))
+
+
+# 客观无数据的失败文案特征：未上榜 / 当日暂无 / 没有相关记录。
+# 与「连接失败 / 限频 / 超时」分开：前者是数据源的真实结论，不该套重试话术。
+_GRACEFUL_EMPTY_RE = re.compile(r"未上榜|暂无|当日无|没有相关|无记录|无数据")
+
+
+def _all_failures_graceful_empty(tool_results: list) -> bool:
+    """本轮所有取数类失败是否都是「客观无数据」而非「取数失败」。"""
+    fails = [item for item in tool_results
+             if item.get("tool") in _DATA_TOOLS and not (item.get("result") or {}).get("ok")]
+    if not fails:
+        return False
+    return all(
+        _GRACEFUL_EMPTY_RE.search(str((item.get("result") or {}).get("error") or ""))
+        for item in fails
+    )
 
 
 # 概念性问题：问的是「是什么 / 怎么算 / 有什么区别」，本身不需要真实数据。
@@ -760,7 +806,8 @@ async def synthesize(state: dict) -> dict:
         tr_text = f"【数据获取失败说明】{reason}\n{tr_text}"
     query = state.get("rewritten") or state.get("query", "") or ""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prompt = render("stock.xml", now=now, query=query, tool_results=tr_text)
+    prompt = render("stock.xml", now=now, query=query, tool_results=tr_text,
+                    examples=load_template("stock_examples.xml"))
 
     # 结构化数据走独立事件
     _emit_structured(tool_results)

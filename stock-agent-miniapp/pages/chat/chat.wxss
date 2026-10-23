@@ -515,13 +515,17 @@
   background: var(--ink);
   transform: scaleX(0);
   transform-origin: right center;
-  transition: transform 0.28s ease;
+  transition: transform 0.3s ease;
   z-index: 0;
   pointer-events: none;
 }
 
 .sender-bar--voice::after {
   transform: scaleX(1);
+  /* 语音态抬到发送键之上：扫入时直接把它盖住。发送键本身不隐藏、
+     不移除、不移动（位置见 .bar-send 语音态的 margin-left:auto），
+     只是被这层深色压在下面——「被语音胶囊盖住」是纯绘制层效果 */
+  z-index: 2;
 }
 
 /* 模式键（语音 / 键盘）：深色圆钮（与发送键同款 --ink），图标反白。
@@ -550,9 +554,11 @@
 
 .sender-bar--voice .bar-btn {
   /* 语音态「按住说话」层绝对铺满胶囊，需把模式键抬到它之上，
-     否则键盘图标被覆盖、点不中，切不回键盘态 */
+     否则键盘图标被覆盖、点不中，切不回键盘态。
+     z-index 取 3：::after 深色扫入层已是 2（要盖住常驻的发送键），
+     模式键必须再高一档，否则会被扫入层压住点不中 */
   position: relative;
-  z-index: 2;
+  z-index: 3;
   /* 键盘切换键背景透明：胶囊已整体扫成深色，反白图标观感不变，
      去掉圆钮自绘黑底，圆弧不再与胶囊弧线叠出接缝。
      只改语音态：键盘态胶囊是白底，透明会让白图标隐入背景 */
@@ -563,13 +569,19 @@
   transition: background 0s linear 0.28s;
 }
 
-/* 语音态「按住说话」：绝对铺满整个胶囊，文字精确居中于胶囊正中央 */
+/* 语音态「按住说话」：绝对铺满整个胶囊，「按住说话」四个字
+   在胶囊内左右上下精确居中（含左端模式键的全宽口径）。
+   注意 height 必须显式置 auto：base 规则的 88rpx 会让
+   top/bottom/height 同时非 auto（over-constrained），此时 bottom
+   被忽略、层高被钉在 88rpx 锚在顶部，铺不满胶囊全高，
+   文字会比真中心高一截——这正是「不居中」的根因 */
 .sender-bar--voice .bar-hold {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   bottom: 0;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -603,7 +615,7 @@
   color: var(--ink);
 }
 
-/* 语音态：胶囊中央的「按住说话」 */
+/* 语音态：模式键右侧的「按住说话」长条 */
 .bar-hold {
   flex: 1;
   min-width: 0;
@@ -616,19 +628,6 @@
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
-  /* 语音没有光标，靠底色 + 轻微缩放告诉用户已经按住了 */
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-
-/* 按住反馈：中性按压色，不用强调蓝 */
-.bar-hold--active {
-  background: var(--press);
-  transform: scale(0.99);
-}
-
-/* 语音态的按住反馈：主色底上用反白淡底，深色 --press 在黑底上看不出来 */
-.sender-bar--voice .bar-hold--active {
-  background: rgba(250, 250, 250, 0.16);
 }
 
 /* 发送键：恒为主按钮近黑底（无输入内容、正在等回复都不切色，只有按压态的
@@ -648,6 +647,16 @@
   z-index: 1;
 }
 
+/* 语音态发送键：位置与键盘态完全一致——键盘态靠输入区 flex:1 把它顶到
+   最右；语音态输入区不在场，用 margin-left:auto 把它继续钉在同一右边缘，
+   切换前后位置零位移（绝不挪到模式键旁边/语音层左侧）。
+   不隐藏、不移除、不改透明度：它只是被从右向左扫入的深色胶囊层
+   （::after，语音态 z-index 2）盖在下面；常驻 DOM 也意味着切换时不会
+   重放 bar-fade-in 淡入——重放正是白色发送图标「闪一下」的根因 */
+.sender-bar--voice .bar-send {
+  margin-left: auto;
+}
+
 /* 加载态：方块代替发送图标（沿用 chat-sender 的「停止」观感）。
    蓝底上用白色方块，与发送图标同色系 */
 .bar-send-stop {
@@ -657,21 +666,23 @@
   background: var(--surface);
 }
 
-/* 键盘 / 语音切换时，进场子元素淡入 + 轻微上移，过渡更顺滑 */
+/* 键盘 / 语音切换时，进场子元素只做透明度交叉淡入（0.3s，与键盘同速）。
+   不带位移：键盘本身正在弹出/收起，元素再自己滑一段会双重运动，
+   看起来就是「闪动跳动」；纯淡入与深色扫入层同步收放，观感是一口气 morph 完成。
+   注意 bar-send 已常驻 DOM（不随语音态移除），这段淡入只在页面首次加载时
+   播一遍，切换时不会重放——重放会让白色发送图标在扫入层退走时闪一下 */
 .bar-field,
 .bar-hold,
 .bar-send {
-  animation: bar-fade-in 220ms ease both;
+  animation: bar-fade-in 300ms ease both;
 }
 
 @keyframes bar-fade-in {
   from {
     opacity: 0;
-    transform: translateY(6rpx);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
@@ -727,6 +738,26 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* 新对话主按钮：导航栏下方的主行动点，品牌蓝底白字——导航键已是近黑，
+   这里用项目主行动色（蓝）把「新建」从四个深色入口里区分出来 */
+.drawer-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 88rpx;
+  /* 左右留白与各分区一致；上方间距由抽屉 body 的 flex gap（--sp-3）提供 */
+  margin: 0 var(--sp-3);
+  background: var(--accent);
+  border-radius: var(--r-card);
+}
+
+.drawer-new-text {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: #ffffff;
+}
+
 .drawer-section {
   padding: 0 var(--sp-3);
 }
@@ -769,52 +800,66 @@
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* 今日大盘：分组卡片 + 行 */
-.drawer-markets {
+/* ===== 历史对话：新对话下方的可滚动容器 ===== */
+/* 抽屉 body 本身可滚，这里给列表一个上限高度做内部滚动，
+   短屏时外层照常滚，不会把导航区顶出画面 */
+.drawer-history {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-scroll {
+  max-height: 720rpx;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  padding: 0 var(--sp-2) 0 var(--sp-3);
   background: var(--surface-2);
   border: var(--hairline);
   border-radius: var(--r-tag);
-  overflow: hidden;
+  margin-bottom: var(--sp-2);
 }
 
-.market-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  min-height: 112rpx;
-  padding: 0 var(--sp-3);
+/* 选中效果：当前会话——淡蓝底 + 蓝描边 + 蓝标题 */
+.history-item--active {
+  background: var(--accent-tint);
+  border: 2rpx solid var(--accent);
 }
 
-/* 行间分隔线：sep 由 JS 按行号算好（WXSS 禁兄弟选择器） */
-.market-row--sep {
-  border-top: var(--hairline);
-}
-
-/* 指数名：吃掉前一半宽度（后面两个数据占另外 1/2） */
-.market-name {
+.history-item-main {
   flex: 1;
   min-width: 0;
-  font-size: var(--fs-aux);
-  color: var(--ink-2);
+}
+
+.history-item-title {
+  display: block;
+  font-size: var(--fs-body);
+  color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* 指数值与涨跌幅：合计占整行 1/2（各 1/4），整块靠右，涨红跌绿由 up/down 着色 */
-.market-note {
-  flex: none;
-  width: 50%;
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  font-size: var(--fs-aux);
-  font-weight: 500;
+.history-item--active .history-item-title {
+  color: var(--accent);
+  font-weight: 600;
 }
 
-.market-val,
-.market-pct {
-  flex: 1;
-  text-align: right;
-  white-space: nowrap;
+/* 删除入口：固定宽热区，catchtap 防冒泡（不会误触选中） */
+.history-item-del {
+  flex: none;
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-empty {
+  padding: var(--sp-4) 0;
+  text-align: center;
+  font-size: var(--fs-aux);
+  color: var(--ink-3);
 }

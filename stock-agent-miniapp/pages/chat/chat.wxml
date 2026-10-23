@@ -297,20 +297,25 @@
         ></textarea>
       </view>
 
-      <!-- 语音态：胶囊中央的「按住说话」，上滑可取消。
+      <!-- 语音态：胶囊整宽中央的「按住说话」（以含模式键的全宽居中），上滑可取消。
+           按住即录、抬起即发（不是开关式 toggle）；按下不加任何
+           灰阶/缩放反馈，观感与手机键盘一致。
            这里可以用 catch：本节点没有需要点击的子元素 -->
       <view
         wx:else
-        class="bar-hold {{recording ? 'bar-hold--active' : ''}}"
+        class="bar-hold"
         catchtouchstart="onRecordStart"
         catchtouchmove="onRecordMove"
         catchtouchend="onRecordEnd"
         catchtouchcancel="onRecordEnd"
       >{{recordTip}}</view>
 
-      <!-- 发送键：恒为主按钮近黑底白字（无内容、等待回复时都不切色）；
-           语音态整块不渲染（胶囊此时是「按住说话」的主色长条） -->
-      <view wx:if="{{!voiceMode}}" class="bar-send" aria-label="发送" bindtap="onSend">
+      <!-- 发送键：恒为主按钮近黑底白字（无输入内容、等待回复时都不切色）。
+           常驻 DOM、不隐藏、不移动：键盘态靠输入区 flex:1 顶到最右，
+           语音态用 margin-left:auto 钉在同一右边缘（切换前后位置一致），
+           并被从右向左扫入的深色胶囊层（::after）直接盖住，形成
+           「发送键被语音胶囊盖住」的视觉效果（见 chat.wxss 的 z 轴层级） -->
+      <view class="bar-send" aria-label="发送" bindtap="onSend">
         <view wx:if="{{sending}}" class="bar-send-stop"></view>
         <ant-icon wx:else type="SendOutline" style="font-size:44rpx;color:#FFFFFF;" />
       </view>
@@ -335,7 +340,7 @@
         </view>
       </view>
 
-      <!-- 导航菜单 -->
+      <!-- 导航菜单：分组卡片承载，行间分隔线由 JS 按行号算好 -->
       <view class="drawer-section">
         <view class="drawer-section-title">导航</view>
         <view class="drawer-menu">
@@ -347,25 +352,44 @@
             data-menu="{{m.key}}"
             bindtap="onMenuSelect"
           >
-            <ant-icon type="{{m.icon}}" style="font-size:32rpx;color:var(--ink-2);" />
             <text class="drawer-item-text">{{m.label}}</text>
             <ant-icon type="RightOutline" style="font-size:28rpx;color:var(--ink-3);" />
           </view>
         </view>
       </view>
 
-      <!-- 今日大盘：指数值 + 涨跌幅分列，涨红跌绿 -->
-      <view class="drawer-section">
-        <view class="drawer-section-title">今日大盘</view>
-        <view class="drawer-markets">
-          <view class="market-row {{k.sep ? 'market-row--sep' : ''}}" wx:for="{{markets}}" wx:for-item="k" wx:key="name">
-            <text class="market-name">{{k.name}}</text>
-            <view class="market-note {{k.up ? 'up' : 'down'}}">
-              <text class="market-val num">{{k.value}}</text>
-              <text class="market-pct num">{{k.pct}}</text>
+      <!-- 新对话：导航栏下方的主行动点（品牌蓝底白字，与深色导航键区分）。
+           先注册一条新 session（立即进入历史列表），再压栈全新的对话页实例；
+           旧对话留在栈里可返回 -->
+      <view class="drawer-new" aria-label="开始新对话" bindtap="onNewChat">
+        <ant-icon type="ChatAddOutline" style="font-size:32rpx;color:var(--primary-fg);" />
+        <text class="drawer-new-text">新对话</text>
+      </view>
+
+      <!-- 历史对话：可滚动容器。当前会话高亮（选中效果），
+           每行右侧删除入口（catchtap 防止冒泡触发选中） -->
+      <view class="drawer-section drawer-history">
+        <view class="drawer-section-title">历史对话</view>
+        <scroll-view
+          class="history-scroll"
+          scroll-y="{{true}}"
+          enhanced="{{true}}"
+          show-scrollbar="{{false}}"
+        >
+          <view
+            wx:for="{{sessions}}"
+            wx:key="session_id"
+            class="history-item {{item.active ? 'history-item--active' : ''}}"
+          >
+            <view class="history-item-main" data-sid="{{item.session_id}}" bindtap="onSessionSelect">
+              <text class="history-item-title">{{item.title}}</text>
+            </view>
+            <view class="history-item-del" data-sid="{{item.session_id}}" catchtap="onSessionDelete">
+              <ant-icon type="DeleteOutline" style="font-size:28rpx;color:var(--ink-3);" />
             </view>
           </view>
-        </view>
+          <view wx:if="{{!sessions.length}}" class="history-empty">暂无历史对话</view>
+        </scroll-view>
       </view>
     </view>
   </base-popup>

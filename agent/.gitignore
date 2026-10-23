@@ -17,3 +17,8 @@ env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# benchmark 运行产物（报告与原始结果留在本地，不入库）
+tests/benchmark/runs/
+agent_out_*.txt
+e2e_report.md

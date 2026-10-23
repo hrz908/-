@@ -180,7 +180,7 @@ func (a *agentConn) handleRun(ctx context.Context, userID int64, sessionID, quer
 
 	// thread_id 由服务端派生，客户端无法伪造他人会话
 	threadID := fmt.Sprintf("default:%d:%s", userID, sessionID)
-	events, errs := proxy.StreamRun(ctx, threadID, query, strconv.FormatInt(userID, 10))
+	events, errs := proxy.StreamRun(ctx, threadID, sessionID, query, strconv.FormatInt(userID, 10))
 
 	for {
 		select {

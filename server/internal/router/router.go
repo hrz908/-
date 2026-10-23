@@ -84,6 +84,13 @@ func New(cfg config.Config) *gin.Engine {
 		// Agent AI 对话 SSE 兜底（H5 / 不支持 WS 的环境）：走 Header 鉴权，留在组内
 		authorized.POST("/agent/stream", agent.ServeSSE)
 
+		// 会话历史（小程序「历史对话」抽屉）：列表 / 注册 / 恢复消息 / 删除。
+		// 会话注册表与 checkpoint 由 Agent 侧持有，网关只做鉴权转发
+		authorized.GET("/agent/sessions", agent.ServeListSessions)
+		authorized.POST("/agent/sessions", agent.ServeCreateSession)
+		authorized.GET("/agent/sessions/:sid/messages", agent.ServeSessionMessages)
+		authorized.DELETE("/agent/sessions/:sid", agent.ServeDeleteSession)
+
 		// 语音转文字：multipart 上传录音，网关转发上游 ASR。
 		// 挂在鉴权组内——每次识别都消耗上游付费额度，不能匿名调用；
 		// 再叠一层用户级限流，防止单账号刷爆上游额度

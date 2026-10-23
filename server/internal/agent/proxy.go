@@ -53,9 +53,14 @@ func NewAgentProxy(opts Options) *AgentProxy {
 // 上游按 ndjson 返回（每行一个 Event JSON），本函数逐行解析后送入 events。
 // 两个通道在 goroutine 结束时都会关闭；errs 至多含一个错误值。
 // 调用方通过取消 ctx 来提前终止（客户端断开 / 超时），上游请求会随之取消。
-func (p *AgentProxy) StreamRun(ctx context.Context, threadID, query, userID string) (<-chan Event, <-chan error) {
+// sessionID 用于把本轮会话 upsert 进历史列表（registerSession，旁路失败不阻断）。
+func (p *AgentProxy) StreamRun(ctx context.Context, threadID, sessionID, query, userID string) (<-chan Event, <-chan error) {
 	events := make(chan Event, cap(p.sem))
 	errs := make(chan error, 1)
+
+	// 会话注册（历史对话列表）：旁路逻辑，超时/失败只记日志。
+	// 放在占用并发槽之前——它不该跟上游推理抢配额，也不该被 429 挡住
+	p.registerSession(ctx, sessionID, userID, query)
 
 	go func() {
 		// 关闭顺序（LIFO）：先关 errs 再关 events。

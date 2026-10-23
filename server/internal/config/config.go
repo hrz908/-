@@ -84,29 +84,29 @@ type HubConfig struct {
 // Config 运行期配置。顶层键保持与旧环境变量同名（addr/dsn/jwt_secret…），
 // 分组键经 replacer 映射为下划线环境变量（server.read_timeout -> SERVER_READ_TIMEOUT）。
 type Config struct {
-	Addr          string // HTTP 监听地址
-	DSN           string // PostgreSQL 连接串
-	JWTSecret     string
-	JWTTTL        time.Duration // 登录 token 有效期
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	Addr          string `mapstructure:"addr"` // HTTP 监听地址
+	DSN           string `mapstructure:"dsn"`  // PostgreSQL 连接串
+	JWTSecret     string `mapstructure:"jwt_secret"`
+	JWTTTL        time.Duration `mapstructure:"jwt_ttl"` // 登录 token 有效期
+	RedisAddr     string `mapstructure:"redis_addr"`
+	RedisPassword string `mapstructure:"redis_password"`
+	RedisDB       int    `mapstructure:"redis_db"`
 
-	QuoteAPI     string // 行情接口基地址；为空时用内置腾讯源
-	WechatAppID  string // 小程序 appid；与 Secret 同时为空时，dev 下登录退化为演示账号
-	WechatSecret string
-	WeComCorpID  string // 企业微信企业 ID（corpid）
-	WeComSecret  string
-	WeComAgentID int
+	QuoteAPI     string `mapstructure:"quote_api"`     // 行情接口基地址；为空时用内置腾讯源
+	WechatAppID  string `mapstructure:"wechat_appid"`  // 小程序 appid；与 Secret 同时为空时，dev 下登录退化为演示账号
+	WechatSecret string `mapstructure:"wechat_secret"` //
+	WeComCorpID  string `mapstructure:"wecom_corp_id"` // 企业微信企业 ID（corpid）
+	WeComSecret  string `mapstructure:"wecom_secret"`
+	WeComAgentID int    `mapstructure:"wecom_agent_id"`
 
-	UploadDir    string
-	Env          string // dev（默认）/ prod。prod 下强制要求 JWT_SECRET 与微信凭据
-	AllowOrigins string // CORS 允许的 Origin，逗号分隔；* 表示全部（默认）
+	UploadDir    string `mapstructure:"upload_dir"`
+	Env          string `mapstructure:"env"`           // dev（默认）/ prod。prod 下强制要求 JWT_SECRET 与微信凭据
+	AllowOrigins string `mapstructure:"allow_origins"` // CORS 允许的 Origin，逗号分隔；* 表示全部（默认）
 
-	AgentBaseURL string // Python Agent 服务基地址，网关反向代理到该地址的 /run/stream
-	ASRBaseURL   string // 语音转文字上游基地址（OpenAI 兼容的 /audio/transcriptions）
-	ASRAPIKey    string // 上游密钥；为空时 /asr/transcribe 直接返回「未配置」
-	ASRModel     string // 上游 ASR 模型名
+	AgentBaseURL string `mapstructure:"agent_base_url"` // Python Agent 服务基地址，网关反向代理到该地址的 /run/stream
+	ASRBaseURL   string `mapstructure:"asr_base_url"`   // 语音转文字上游基地址（OpenAI 兼容的 /audio/transcriptions）
+	ASRAPIKey    string `mapstructure:"asr_api_key"`    // 上游密钥；为空时 /asr/transcribe 直接返回「未配置」
+	ASRModel     string `mapstructure:"asr_model"`      // 上游 ASR 模型名
 
 	Server            ServerConfig    `mapstructure:"server"`
 	DB                DBConfig        `mapstructure:"db"`

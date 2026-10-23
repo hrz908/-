@@ -10,6 +10,8 @@
   P5 意图三分（stock/chat/off_topic）+ rag 两级命中判读 + 固定话术婉拒
   P6 卡片 pydantic 校验（失败降级纯文本）
   P7 MCP 工具源禁用/失败时的直连兜底
+  P8 benchmark 调优新增行为（改写贯通 tool_call / 含糊指判 clarify / 兜底分级 / few-shot）
+  P9 会话历史与 checkpoint 增长治理（消息窗口裁剪 / thread_id 口径 / session_id 校验）
 
 用法：python tests/test_regression.py
 """
@@ -471,6 +473,139 @@ def test_mcp_loader_fallback():
     asyncio.run(mcp_loader.close_mcp_tools())
 
 
+# ===== P8：benchmark 调优（2026-10-24）新增行为的回归 =====
+def test_rewrite_into_toolcall():
+    print("\n[P8] 指代消解结果贯通 tool_call（多轮第二轮必须能取数）")
+    from subgraphs.stock import _apply_rewrite
+
+    q = "它的市盈率是多少？"
+    rewritten = "贵州茅台的市盈率是多少？"
+    state = {"query": q, "rewritten": rewritten,
+             "messages": [HumanMessage(content=q)]}
+    out = _apply_rewrite(state["messages"], state)
+    check("本轮问题被替换为消解后的问题", out[0].content == rewritten, str(out[0].content))
+
+    # 单轮完整问题（rewritten == query）不动正文
+    state2 = {"query": "贵州茅台行情", "rewritten": "贵州茅台行情",
+              "messages": [HumanMessage(content="贵州茅台行情")]}
+    out2 = _apply_rewrite(state2["messages"], state2)
+    check("完整问题不改写", out2[0].content == "贵州茅台行情")
+
+    # rewritten 为空时不动
+    state3 = {"query": q, "rewritten": "", "messages": [HumanMessage(content=q)]}
+    check("无消解结果时不动", _apply_rewrite(state3["messages"], state3)[0].content == q)
+
+    # 后续消息（如 ToolMessage）不受影响
+    state4 = {"query": q, "rewritten": rewritten, "messages": [
+        HumanMessage(content=q),
+        AIMessage(content="", tool_calls=[{"name": "get_valuation", "args": {}, "id": "1"}]),
+        ToolMessage(content="{}", tool_call_id="1", name="get_valuation"),
+    ]}
+    out4 = _apply_rewrite(state4["messages"], state4)
+    check("后续消息原样保留", len(out4) == 3 and out4[2].tool_call_id == "1")
+
+
+def test_vague_reference_guard():
+    print("\n[P8] 指代不明问句确定性判 clarify")
+    import asyncio
+    from nodes.classify import classify, _is_vague_reference
+
+    check("「那个股票怎么样」判含糊", _is_vague_reference("那个股票怎么样"))
+    check("「这只股票如何」判含糊", _is_vague_reference("这只股票如何"))
+    check("带代码的不含糊", not _is_vague_reference("600519这只股票怎么样"))
+    check("长句不误伤", not _is_vague_reference("帮我分析一下贵州茅台和五粮液这两只股票哪个更值得长期持有"))
+    check("普通问句不误伤", not _is_vague_reference("贵州茅台最新行情"))
+
+    out = asyncio.run(classify({"query": "那个股票怎么样", "rewritten": "",
+                                "messages": []}))
+    check("含糊问句路由为 clarify", out.get("intent") == "clarify", str(out))
+
+
+def test_graceful_empty_fallback():
+    print("\n[P8] 兜底文案区分「客观无数据」与「取数失败」")
+    from subgraphs.stock import _no_data_fallback, _all_failures_graceful_empty
+
+    # 未上榜：客观结论，不应套「请稍后重试」
+    tr_lhb = _tool_results("get_top_list", False, "近期未上榜或暂无龙虎榜数据")
+    st = {"query": "查一下三花智控最近的龙虎榜席位明细", "rewritten": ""}
+    out = _no_data_fallback(st, tr_lhb)
+    check("未上榜走客观结论文案", "并非系统故障" in out and "稍后重试" not in out, out)
+    check("未上榜判定为客观无数据", _all_failures_graceful_empty(tr_lhb))
+
+    # 连接失败：仍走重试文案
+    tr_conn = _tool_results("get_money_flow", False, "ConnectionError: RemoteDisconnected")
+    out2 = _no_data_fallback(st, tr_conn)
+    check("连接失败仍提示重试", "稍后重试" in out2, out2)
+    check("连接失败不是客观无数据", not _all_failures_graceful_empty(tr_conn))
+
+    # 混合失败（一条未上榜 + 一条连接失败）按取数失败处理，不轻言「无数据」
+    check("混合失败不判客观无数据",
+          not _all_failures_graceful_empty(tr_lhb + tr_conn))
+
+
+def test_fewshot_examples_wired():
+    print("\n[P8] few-shot 示例接入三个提示词")
+    from prompts.parse import render, load_template
+
+    for name in ("stock_examples.xml", "router_examples.xml", "toolcall_examples.xml"):
+        text = load_template(name)
+        check(f"{name} 非空且含示例标记", "<example" in text or "示范" in text, name)
+
+    stock_prompt = render("stock.xml", now="2026-10-24", query="q",
+                          tool_results="[]", examples=load_template("stock_examples.xml"))
+    check("stock.xml 注入示例", "示范回答的共性" in stock_prompt)
+    check("stock.xml 新规则在位（点明标的）", "点明标的" in stock_prompt)
+
+    router_prompt = render("router.xml", now="2026-10-24", history="", query="q",
+                           examples=load_template("router_examples.xml"))
+    check("router.xml 注入示例", "边界判别示范" in router_prompt)
+
+    toolcall_prompt = render("stock_toolcall.xml",
+                             examples=load_template("toolcall_examples.xml"))
+    check("stock_toolcall.xml 注入示例", "取数链路示范" in toolcall_prompt)
+    check("toolcall 新规则在位（概念检索无果用通识）", "基于通用知识直接作答" in toolcall_prompt)
+
+
+# ===== P9：会话历史与 checkpoint 增长治理（2026-10-24）=====
+def test_history_trim_and_session_utils():
+    print("\n[P9] 消息窗口裁剪与会话注册表工具")
+    from nodes.guardrail import _trim_history
+    from sessions import thread_id_of, valid_session_id
+
+    # 窗口内不裁
+    msgs = [HumanMessage(content=f"q{i}") for i in range(10)]
+    check("窗口内原样返回", _trim_history(msgs) == msgs)
+
+    # 超窗口只保留末尾，且最后一条是本轮新问题
+    msgs = [HumanMessage(content=f"q{i}") for i in range(80)]
+    out = _trim_history(msgs)
+    check("裁到窗口大小", len(out) == 40, str(len(out)))
+    check("末尾是本轮问题", out[-1].content == "q79")
+
+    # 头部悬挂 ToolMessage 被丢弃（其配对的 AIMessage 已被裁掉，
+    # 孤儿 ToolMessage 会让上游接口报错）
+    msgs = ([ToolMessage(content="{}", tool_call_id="1", name="get_quote")]
+            + [HumanMessage(content=f"q{i}") for i in range(45)])
+    out = _trim_history(msgs)
+    check("开头孤儿 ToolMessage 被丢", not isinstance(out[0], ToolMessage))
+    check("裁剪后以人类消息开头", isinstance(out[0], HumanMessage))
+
+    # 成对的 tool_calls + ToolMessage 整体保留（不被拦腰切断）
+    msgs = ([HumanMessage(content="old")] * 30
+            + [HumanMessage(content="q"),
+               AIMessage(content="", tool_calls=[{"name": "get_quote", "args": {}, "id": "1"}]),
+               ToolMessage(content="{}", tool_call_id="1", name="get_quote"),
+               AIMessage(content="答")])
+    out = _trim_history(msgs)
+    check("配对的 tool 消息整体保留", any(isinstance(m, ToolMessage) for m in out))
+
+    # thread_id 口径与 Go 网关（ws_agent.go / sse_agent.go）一致
+    check("thread_id 拼装口径", thread_id_of("42", "sess_1") == "default:42:sess_1")
+    check("合法 session_id 通过", valid_session_id("sess_123_abc"))
+    check("非法 session_id 被拒",
+          not valid_session_id("a b") and not valid_session_id("x" * 65) and not valid_session_id(""))
+
+
 def main():
     print("=" * 62)
     print("AI 对话故障回归测试")
@@ -492,6 +627,11 @@ def main():
     test_rag_judge_fallback()
     test_intent_taxonomy()
     test_mcp_loader_fallback()
+    test_rewrite_into_toolcall()
+    test_vague_reference_guard()
+    test_graceful_empty_fallback()
+    test_fewshot_examples_wired()
+    test_history_trim_and_session_utils()
     print("\n" + "=" * 62)
     if _FAILED:
         print(f"FAILED: {len(_FAILED)} 项 -> {_FAILED}")

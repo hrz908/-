@@ -68,7 +68,7 @@ func ServeSSE(c *gin.Context) {
 	}
 
 	threadID := fmt.Sprintf("default:%d:%s", userID, strings.TrimSpace(req.SessionID))
-	events, errs := proxy.StreamRun(ctx, threadID, req.Query, strconv.FormatInt(userID, 10))
+	events, errs := proxy.StreamRun(ctx, threadID, strings.TrimSpace(req.SessionID), req.Query, strconv.FormatInt(userID, 10))
 
 	for {
 		select {

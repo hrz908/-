@@ -9,6 +9,13 @@
 - error : {"event":"error","data":{"message":"..."}}
 - done  : {"event":"done","data":{"thread_id":..,"usage":{..}}}
 
+会话历史接口（2026-10-24，供小程序「历史对话」抽屉，经 Go 网关转发）：
+- GET    /sessions?user_id=                     会话列表（标题 + 最近活跃）
+- POST   /sessions                              注册新对话占位 / 每轮 run upsert
+- GET    /sessions/{sid}/messages?user_id=      恢复某会话的纯文本消息
+- DELETE /sessions/{sid}?user_id=               删除会话（注册行 + checkpoints + 摘要）
+所有接口都校验 thread_id 归属（default:user:session），防越权访问他人会话。
+
 运行: uvicorn main:app --host 0.0.0.0 --port 8000
 """
 import json
@@ -17,19 +24,40 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
 from state import initial_state
 from graph import get_graph
-from checkpointer import close_checkpointer
+from checkpointer import close_checkpointer, prune_thread_checkpoints
 from nodes import log_agent_run
+from sessions import (
+    delete_session,
+    ensure_sessions_table,
+    list_sessions,
+    session_messages,
+    thread_id_of,
+    upsert_session,
+    valid_session_id,
+)
 from tools import close_http_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("stocka.agent")
+
+
+def _check_ownership(user_id: str, session_id: str) -> str:
+    """校验 session_id 合法性并拼出 thread_id；非法一律 400。
+
+    Go 网关的 user_id 来自 JWT（不可伪造），这里再做一层防御：
+    thread_id 必须等于 default:{user_id}:{session_id}，从结构上杜绝
+    用他人 session_id 读写别人会话的可能。
+    """
+    if not (user_id or "").strip() or not valid_session_id(session_id):
+        raise HTTPException(status_code=400, detail="invalid user_id or session_id")
+    return thread_id_of(user_id.strip(), session_id)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +66,11 @@ async def lifespan(app: FastAPI):
         await get_graph()
     except Exception as e:  # noqa: BLE001 - 预热失败不阻断启动，首个请求会再试
         logger.warning("graph warmup failed: %s", e)
+    # 会话注册表（chat_sessions）：历史对话列表的存储，幂等建表
+    try:
+        await ensure_sessions_table()
+    except Exception as e:  # noqa: BLE001 - 建表失败不阻断启动，接口侧会懒建重试
+        logger.warning("ensure chat_sessions failed: %s", e)
     yield
     await close_checkpointer()
     await close_http_client()
@@ -72,6 +105,9 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
     config = {"configurable": {"thread_id": thread_id}}
     try:
         graph = await get_graph()
+        # 每轮 run 前裁掉该线程的历史 checkpoint 版本（PostgresSaver 不回收旧版本，
+        # 不裁则单线程行数随 run 数线性增长）。失败静默，不影响本轮对话
+        await prune_thread_checkpoints(thread_id)
         inp = initial_state(user_id=user_id, thread_id=thread_id, query=query)
         inp["messages"] = [HumanMessage(content=query)]
 
@@ -164,3 +200,51 @@ async def run_stream(req: RunRequest):
 @app.get("/healthz")
 async def health():
     return {"status": "ok"}
+
+
+# ===== 会话历史（历史对话抽屉）=====
+
+class SessionUpsert(BaseModel):
+    user_id: str
+    session_id: str
+    title: str = ""
+
+
+@app.get("/sessions")
+async def get_sessions(user_id: str):
+    """会话列表：按最近活跃倒序。user_id 由 Go 网关从 JWT 解析后注入。"""
+    if not (user_id or "").strip():
+        raise HTTPException(status_code=400, detail="invalid user_id")
+    return {"sessions": await list_sessions(user_id.strip())}
+
+
+@app.post("/sessions")
+async def post_session(body: SessionUpsert):
+    """注册/刷新会话。
+
+    两种调用方：
+    - 「新对话」按钮：title 为空 → 占位标题「新对话」，auto_title=true，
+      首条真实消息到达后标题被替换为首个问题；
+    - 每轮 run（Go 网关代理时带 query）：同一条会话只更新 updated_at，
+      已有真实标题不被覆盖。
+    """
+    _check_ownership(body.user_id, body.session_id)
+    await upsert_session(
+        body.user_id.strip(), body.session_id, body.title, auto_title=not body.title.strip()
+    )
+    return {"ok": True}
+
+
+@app.get("/sessions/{session_id}/messages")
+async def get_session_messages(session_id: str, user_id: str):
+    """某会话的纯文本消息（切会话/恢复上下文）。"""
+    _check_ownership(user_id, session_id)
+    return {"messages": await session_messages(user_id.strip(), session_id)}
+
+
+@app.delete("/sessions/{session_id}")
+async def remove_session(session_id: str, user_id: str):
+    """删除会话：注册行 + checkpoints + Redis 滚动摘要。"""
+    _check_ownership(user_id, session_id)
+    deleted = await delete_session(user_id.strip(), session_id)
+    return {"ok": True, "deleted": deleted}

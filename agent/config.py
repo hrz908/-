@@ -44,6 +44,13 @@ STOCK_MCP_SERVER_PATH = os.getenv(
 # 对话 token 超过该值触发滚动摘要
 SUMMARY_TOKEN_LIMIT = int(os.getenv("SUMMARY_TOKEN_LIMIT", "6000"))
 
+# ===== 会话历史（chat_sessions 注册表，2026-10-24）=====
+# 单用户保留的会话数上限：超出自动淘汰最旧的（删注册行 + checkpoints + 摘要）。
+# 限额取足，正常使用碰不到；防的是脚本/误用导致的会话数无限增长
+SESSION_KEEP_MAX = int(os.getenv("SESSION_KEEP_MAX", "50"))
+# 历史对话列表一次最多返回的会话数
+SESSION_LIST_MAX = int(os.getenv("SESSION_LIST_MAX", "50"))
+
 # 单次 LLM 请求允许的最大输入 token（保守上限，留足余量）。
 # 上游模型上下文是 163840（DeepSeek-V3），但一旦超了上游直接返回 400：
 #   'number of input tokens (301046) has exceeded max_seq_len (163840) limit'

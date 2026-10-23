@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
 
 from llm import get_small_llm
-from prompts.parse import render, parse_route
+from prompts.parse import render, parse_route, load_template
 from nodes.rewrite import _format_history
 
 _CONF_MIN = 0.6
@@ -45,6 +45,25 @@ _MCP_KEYWORDS_SUBSTR = (
 )
 # 短英文指标整词匹配（词边界），防止 "apple" 命中 "pe"、"space" 命中 "ps"
 _MCP_KEYWORDS_WORD = re.compile(r"(?<![a-zA-Z])(pe|pb|ps)(?![a-zA-Z])", re.IGNORECASE)
+
+# 指代不明的问句：「那个股票怎么样」「这只股票如何」——rewrite 无法消解
+# （无历史上下文）时原样进入分类。实测路由 LLM 会把这类问句判成 stock，
+# 白跑一轮漏斗后给出「没有数据」的答案（R-03）。这里加确定性护栏：
+# 命中指代模式、不带 6 位代码、且是短问句 -> 直接 clarify 反问。
+_VAGUE_REF_RE = re.compile(r"(那个|这只|这个|那只|这只|这支|那支|这只股|那只股|这个股|那个股)(只|个|支)?(股|股票)?")
+_VAGUE_MAX_LEN = 24
+
+
+def _is_vague_reference(query: str) -> bool:
+    """未指明标的的短问句（指代 + 股票，无代码）。"""
+    q = (query or "").strip()
+    if not q or len(q) > _VAGUE_MAX_LEN:
+        return False
+    if not _VAGUE_REF_RE.search(q):
+        return False
+    if re.search(r"\d{6}", q):  # 带了代码就不算含糊
+        return False
+    return True
 
 
 class _RouteDecision(BaseModel):
@@ -113,10 +132,16 @@ async def classify(state: dict) -> dict:
     if _hit_data_keyword(query):
         return {"intent": "stock", "confidence": 1.0, "entities": {}}
 
+    # 指代不明兜底：「那个股票怎么样」无历史可消解时直接 clarify，
+    # 不让路由 LLM 猜（实测会判成 stock，白跑漏斗）
+    if _is_vague_reference(query):
+        return {"intent": "clarify", "confidence": 0.9, "entities": {}}
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     history = _format_history(state.get("messages", []))
 
-    prompt = render("router.xml", now=now, history=history, query=query)
+    prompt = render("router.xml", now=now, history=history, query=query,
+                    examples=load_template("router_examples.xml"))
 
     route = await _route_decision(prompt)
     intent = route["intent"]

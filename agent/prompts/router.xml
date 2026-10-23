@@ -17,6 +17,8 @@
 - clarify: 问题含糊或缺少关键信息（未指明标的 / 时间范围 / 指标口径），需要反问澄清。
 </intent_options>
 
+{examples}
+
 <rules>
 1. 只输出一个 route XML 结构，不要任何额外解释、前缀或后缀。
 2. confidence 为 0~1 的小数，表示你对该判断的把握；拿不准时倾向 clarify 而非乱猜。

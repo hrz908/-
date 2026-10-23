@@ -1,21 +1,32 @@
 // 对话页：消息收发走 Agent SSE（services/agent.js 单例），流式 token 逐字追加；
 // 纯文本走自绘气泡 + markdown 渲染（utils/markdown.js），行情/K 线这类结构化数据走自绘卡片消息
+// 「新对话」压栈本页新实例：每实例一条独立 session + 独立消息状态，见 onNewChat / NEW_CHAT_URL
 
+// 注意：这里只能用默认导入。「默认 + 命名」混合导入会让 devtools 的
+// SWC 热编译引入 @swc/runtime/_interop_require_wildcard，该运行时在
+// 本项目里不存在，chat.js 会在加载时直接抛错、整个页面的方法全部丢光
+// （表现为 WXML 正常渲染但点击全部无效）。取 session_id 走单例方法
+// agentSocket.freshSessionId()，不要改成 import { generateSessionId }
 import agentSocket from '../../services/agent';
-import { quote } from '../../services/stock';
 import { transcribe } from '../../services/asr';
+import {
+  listSessions,
+  createSession,
+  sessionMessages,
+  deleteSession
+} from '../../services/sessions';
 import { parseMarkdown } from '../../utils/markdown';
 
-// 侧边抽屉导航项（自绘列表）
+// 侧边抽屉导航项（分组卡片 + 行间分隔线）
 // 不列「主页」：抽屉本来就只在主页存在，这一项点了没地方去。
-// 每行 = 左侧图标 + 文字 + 右侧 ant-icon 箭头；sep 由 JS 按行号算（WXSS 禁兄弟选择器）
+// 每行 = 文字 + 右侧箭头；sep 由 JS 按行号算好（WXSS 禁兄弟选择器）
 const MENUS = [
-  { key: 'watchlist', label: '自选股', icon: 'StarOutline' },
-  { key: 'alerts', label: '提醒', icon: 'BellOutline' },
-  { key: 'settings', label: '我的', icon: 'UserOutline' },
+  { key: 'watchlist', label: '自选股', sep: false },
+  { key: 'alerts', label: '提醒', sep: true },
+  { key: 'settings', label: '我的', sep: true },
   // 卡片画廊（静态测试页，不接后端）：从抽屉进可随时查看八张金融卡样式
-  { key: 'kline', label: 'K线测试', icon: 'HistogramOutline' }
-].map((m, i) => Object.assign({}, m, { sep: i > 0 }));
+  { key: 'kline', label: 'K线测试', sep: true }
+];
 
 // 抽屉导航项 → 子页面路由，key 与 MENUS 一一对应
 const ROUTES = {
@@ -25,32 +36,13 @@ const ROUTES = {
   kline: '/pages/test/index'
 };
 
-// 今日大盘指数：代码 -> 展示名。实时行情在 onLoad 与抽屉打开时从后端 /stock/quote 拉取。
-// 指数代码必须带市场前缀（SH/SZ），否则 6 位纯数字会被后端按个股规则误判市场
-const MARKET_INDICES = [
-  { code: 'SH000001', name: '上证指数' },
-  { code: 'SZ399001', name: '深证成指' },
-  { code: 'SZ399006', name: '创业板指' },
-  { code: 'SH000680', name: '科创综指' }
-];
+// 「新对话」：注册一条新 session 后压栈本页的一个新实例 = 一条全新会话
+// （独立消息、独立会话），旧对话留在栈里可返回；
+// 从新对话页进子页，返回照样回到新对话页。?session= 带上注册好的 id
+const NEW_CHAT_URL = '/pages/chat/chat?new=1';
 
-// 首屏占位：实时数据到位前先显示名称 + 占位符，避免抽屉里一片空白
-const MARKETS_PLACEHOLDER = MARKET_INDICES.map((m, i) => ({
-  name: m.name,
-  value: '--',
-  pct: '--',
-  up: true,
-  sep: i > 0
-}));
-
-// 指数点位加千分位：3718.44 -> 3,718.44（不用 toLocaleString，小程序端支持不稳）
-function formatIndex(v) {
-  const n = parseFloat(v);
-  if (isNaN(n)) return v == null ? '--' : String(v);
-  const fixed = n.toFixed(2);
-  const dot = fixed.indexOf('.');
-  return fixed.slice(0, dot).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + fixed.slice(dot);
-}
+// 空会话 / 恢复失败时的首屏问候语
+const GREETING = '你好，我是溜来。你可以问我行情、K 线、研报等问题。';
 
 // 触发抽屉开关的最小横向滑动距离（px）
 const SWIPE_MIN = 40;
@@ -411,7 +403,9 @@ Page({
     scrollTop: 0,
     scrollAnimated: false,
     menus: MENUS,
-    markets: MARKETS_PLACEHOLDER,
+    // 历史对话列表（抽屉）：{ session_id, title, updated_at, active }，
+    // active 标记当前会话（选中效果），loadSessions 时按 _sessionId 计算
+    sessions: [],
 
     // 输入模式：false = 键盘输入，true = 语音输入（模式键在两者之间切换）
     voiceMode: false,
@@ -424,7 +418,7 @@ Page({
     // 正在播放的语音消息下标，-1 表示当前没有在播
     playingIndex: -1,
     messages: [
-      assistantMsg('你好，我是溜来。你可以问我行情、K 线、研报等问题。')
+      assistantMsg(GREETING)
     ],
     // 状态提示（「正在查询…」「重连中」）：挂在消息列表底部，done/error 后清空
     statusText: '',
@@ -433,7 +427,21 @@ Page({
     thinking: false
   },
 
-  onLoad() {
+  onLoad(options) {
+    // 每个对话页实例 = 一条独立会话：
+    // - 带 ?session=<id>（新对话注册后压栈 / 历史列表点选）：复用该会话，
+    //   后端 thread_id 由它决定，打开即恢复这条对话的上下文；
+    // - 不带参（首页进入）：现场生成一条，首条消息发出时才进历史列表
+    const resumeSid = options && options.session
+      ? decodeURIComponent(options.session)
+      : '';
+    this._sessionId = resumeSid || agentSocket.freshSessionId();
+    // 本页发起的最新一轮 rid：agent 单例的请求级事件全带 __rid，
+    // 只渲染自己发起的那轮，旧页在途流的 token 不会串进本页
+    this._myReqId = 0;
+    // 本页挂在 agent 单例上的监听（event -> callback），onUnload 按引用精确摘除
+    this._agentHandlers = {};
+
     this.initVoice();
 
     let statusBarHeight = 44;
@@ -499,8 +507,8 @@ Page({
       chatHeight
     });
     this.scrollToBottom({ force: true });
-    // 预热四大指数行情：抽屉首次打开前就把数据备好
-    this.loadMarkets();
+    // 恢复历史会话的消息（新对话为空，走默认问候语）
+    if (resumeSid) this.loadSessionMessages(resumeSid);
 
     if (wx.onWindowResize) {
       this._onResize = (res) => {
@@ -517,13 +525,28 @@ Page({
   },
 
   // ===== Agent SSE =====
-  // agentSocket 是单例；这里只负责挂/摘本页的监听（SSE 为每问一请求，无持久连接）
+  // agentSocket 是单例；这里只负责挂/摘本页的监听（SSE 为每问一请求，无持久连接）。
+  // 新对话页压栈后，单例被多个对话页实例共享，因此：
+  // 1. 请求级事件统一走 on() 包一层 rid 过滤——只渲染本页自己发起的那一轮
+  //    （__rid 由 services/agent 在 sendMessage 时打下），旧页在途流的
+  //    token / 卡片不会串进新页的空会话；
+  // 2. 监听引用全部存进 this._agentHandlers，onUnload 按引用精确摘除——
+  //    off(event) 不传 callback 会清空该事件的全部监听，把另一个实例的一起误删
   _initAgentSocket() {
+    const on = (ev, fn) => {
+      const wrapped = (data) => {
+        if (!data || data.__rid !== this._myReqId) return;
+        fn(data);
+      };
+      this._agentHandlers[ev] = wrapped;
+      agentSocket.on(ev, wrapped);
+    };
+
     // 流式 token：逐字追加到当前 streaming 状态的 assistant 消息。
     // 性能约束：token 频率很高，不能每次都把整个 messages 回传给视图层——
     // 增量先积在 _streamText 里，按帧（约 100ms）合批后用路径级 setData
     // （messages[i].content[0].data）只更新那一段文本
-    agentSocket.on('token', (data) => {
+    on('token', (data) => {
       const delta = (data && data.delta) || '';
       if (!delta) return;
       this._appendToken(delta);
@@ -534,7 +557,7 @@ Page({
     // 插入卡片后要把当前流式消息收尾（_finishStreaming）：
     // 后端常见的节奏是「文字 → 卡片 → 文字」，不断流的话
     // 卡片之后的 token 会被追加到卡片上方的旧消息里，顺序就乱了
-    agentSocket.on('card', (data) => {
+    on('card', (data) => {
       if (!data || !data.payload) return;
       let msg = null;
       if (data.type === 'quote_card') msg = quoteCard(data.payload);
@@ -550,7 +573,7 @@ Page({
     });
 
     // K 线表格：payload 约定为 { rows: [...] }，兼容直接给数组
-    agentSocket.on('table', (data) => {
+    on('table', (data) => {
       if (!data || data.type !== 'kline_table' || !data.payload) return;
       const rows = data.payload.rows || data.payload;
       if (!Array.isArray(rows) || !rows.length) return;
@@ -561,21 +584,21 @@ Page({
     });
 
     // 后端主动推的状态提示
-    agentSocket.on('status', (data) => {
+    on('status', (data) => {
       this.setData({ statusText: (data && data.label) || '' });
     });
 
     // 工具调用：开始查行情/研报时给个可读的提示，结束后清掉
-    agentSocket.on('tool_start', (data) => {
+    on('tool_start', (data) => {
       this.setData({ statusText: (data && data.label) || '正在查询...' });
     });
 
-    agentSocket.on('tool_end', () => {
+    on('tool_end', () => {
       this.setData({ statusText: '' });
     });
 
     // 错误：复位发送态并提示，不往消息列表里塞错误气泡
-    agentSocket.on('error', (data) => {
+    on('error', (data) => {
       this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
@@ -584,19 +607,21 @@ Page({
     });
 
     // 本轮回答结束：流式消息转 complete，解锁发送按钮
-    agentSocket.on('done', () => {
+    on('done', () => {
       this._flushStream({ force: true });
       this._finishStreaming();
       this._clearSendWatchdog();
       this.setData({ sending: false, statusText: '', thinking: false });
     });
 
-    // 断连：连接层会自动重连，这里只在正在等回答时给个提示
-    agentSocket.on('disconnected', () => {
+    // 断连：连接级事件（不属于某一轮），不做 rid 过滤；
+    // 只在正在等回答时给个提示，重连由连接层自动完成
+    this._agentHandlers.disconnected = () => {
       if (this.data.sending) {
         this.setData({ statusText: '连接已断开，正在重连...' });
       }
-    });
+    };
+    agentSocket.on('disconnected', this._agentHandlers.disconnected);
 
     agentSocket.connect();
   },
@@ -708,27 +733,35 @@ Page({
   },
 
   onUnload() {
+    // 置位后录音回调直接放弃结果，不再往已销毁的页面上 setData
+    this._unloaded = true;
+    // 摘监听放在最前：后面的音频 destroy 在开发者工具模拟器里会抛异常
+    // （InnerAudioContext 从未播放过时其内部实例不存在），异常会中断 onUnload，
+    // 监听清理必须在此之前完成，否则旧页会一直挂在单例上收事件
+    // 必须按引用逐个摘：不传 callback 的 off() 会清空该事件的全部监听，
+    // 新对话压栈场景下会把另一个对话页实例的监听一起误删
+    Object.keys(this._agentHandlers || {}).forEach((ev) => {
+      agentSocket.off(ev, this._agentHandlers[ev]);
+    });
+    this._agentHandlers = {};
     if (this._onResize && wx.offWindowResize) wx.offWindowResize(this._onResize);
     if (this._scrollTimer) clearTimeout(this._scrollTimer);
     if (this._measureTimer) clearTimeout(this._measureTimer);
     if (this._streamTimer) clearTimeout(this._streamTimer);
     this._clearSendWatchdog();
-    // 录音/播放器：走的时候停干净，否则后台还能听到声音
+    // 录音/播放器：走的时候停干净，否则后台还能听到声音。
+    // 模拟器里从未播放过的 InnerAudioContext.destroy() 会抛内部异常
+    // （内部实例未创建，真机不会），包一层兜底别让噪音异常刷 console
     if (this._recordTimer) clearTimeout(this._recordTimer);
+    if (this._recording && this._recorder) this._recorder.stop();
     if (this._audio) {
-      this._audio.stop();
-      this._audio.destroy();
+      try {
+        this._audio.stop();
+        this._audio.destroy();
+      } catch (e) {
+        // ignore
+      }
     }
-    // 摘掉本页在 agent 单例上挂的全部监听；连接本身保留（单例跨页面复用）
-    agentSocket.off('token');
-    agentSocket.off('card');
-    agentSocket.off('table');
-    agentSocket.off('status');
-    agentSocket.off('tool_start');
-    agentSocket.off('tool_end');
-    agentSocket.off('error');
-    agentSocket.off('done');
-    agentSocket.off('disconnected');
   },
 
   // sender-wrap 是绝对定位容器（自成 BFC，子元素外边距不会合并出去），
@@ -821,8 +854,10 @@ Page({
     this.scrollToBottom({ force: true });
     this._armSendWatchdog();
 
-    // 通过 SSE 发送；每次提问开一条独立流，agentSocket 内部负责解析事件
-    agentSocket.sendMessage(text);
+    // 通过 SSE 发送；每次提问开一条独立流，agentSocket 内部负责解析事件。
+    // 传入本页实例的 session_id（后端按它拼 thread_id），并记下本轮 rid：
+    // 回来的事件只渲染本页自己发起的这一轮
+    this._myReqId = agentSocket.sendMessage(text, this._sessionId);
   },
 
   // 发送看门狗：sending 只在 done / error 里复位，服务没起、WS 没连上或消息被缓存
@@ -889,12 +924,15 @@ Page({
     this._audio = wx.createInnerAudioContext();
 
     this._recorder.onStop((res) => {
+      // 页面已销毁：不再碰视图，直接放弃这次结果
+      if (this._unloaded) return;
       const path = (res && res.tempFilePath) || '';
       const ms = (res && res.duration) || 0;
       // 是否取消要在状态复位之前读出来：onRecordEnd 里已经把结果放进 _recordCanceled
       const canceled = this._recordCanceled;
 
       this._recording = false;
+      this._fingerDown = false;
       this.setData({ recording: false, recordCanceling: false, recordTip: '按住说话' });
 
       if (canceled || !path) return;
@@ -906,7 +944,9 @@ Page({
     });
 
     this._recorder.onError(() => {
+      if (this._unloaded) return;
       this._recording = false;
+      this._fingerDown = false;
       this.setData({ recording: false, recordCanceling: false, recordTip: '按住说话' });
       this.toast('录音失败，请重试');
     });
@@ -917,14 +957,31 @@ Page({
   },
 
   onRecordStart(e) {
-    if (this._recording) return;
+    if (this._recording || this._authorizing) return;
+
+    // 手指状态必须同步记录：authorize 是异步的，等它回调时 e.touches
+    // 大概率已被系统清空，且手指可能已经抬起。若照旧在异步回调里
+    // 读 e、开录，快速点按会出现「点一下却录到自动停止」的类 toggle
+    // 怪行为（抬手时 _recording 还是 false，onRecordEnd 拦不住）
+    const touch = e && e.touches && e.touches[0];
+    this._startY = (touch && touch.clientY) || 0;
+    this._fingerDown = true;
 
     // 麦克风权限：之前拒绝过的话 authorize 会直接失败，
     // 那时只能让用户去设置页打开，这里给个明确出口，别点了没反应
+    this._authorizing = true;
     wx.authorize({
       scope: 'scope.record',
-      success: () => this.startRecord(e),
+      success: () => {
+        this._authorizing = false;
+        // 授权回来前手指已抬起：放弃这次录音，别留一条停不下来的流
+        if (!this._fingerDown) return;
+        this.startRecord();
+      },
       fail: () => {
+        this._authorizing = false;
+        this._fingerDown = false;
+        this.setData({ recordTip: '按住说话' });
         wx.showModal({
           title: '需要麦克风权限',
           content: '发送语音需要麦克风权限，是否去设置页开启？',
@@ -937,9 +994,7 @@ Page({
     });
   },
 
-  startRecord(e) {
-    const touch = e && e.touches && e.touches[0];
-    this._startY = (touch && touch.clientY) || 0;
+  startRecord() {
     this._recording = true;
     this._recordCanceled = false;
 
@@ -967,6 +1022,9 @@ Page({
   },
 
   onRecordEnd() {
+    // 手指抬起先同步记状态：授权还没回来时 _recording 仍是 false，
+    // 这里只标记，让 authorize 的回调据此放弃开录
+    this._fingerDown = false;
     if (!this._recording) return;
     clearTimeout(this._recordTimer);
     this._recordCanceled = !!this.data.recordCanceling;
@@ -1072,33 +1130,10 @@ Page({
   },
 
   // ===== 侧边抽屉 =====
-  // 拉取四大指数实时行情 -> 抽屉「今日大盘」。
-  // 单只失败降级为占位符（--），不阻断整个抽屉；涨红跌绿由 up 字段驱动
-  loadMarkets() {
-    Promise.all(MARKET_INDICES.map((m) => quote(m.code).catch(() => null))).then((list) => {
-      const markets = MARKET_INDICES.map((m, i) => {
-        const d = list[i];
-        if (!d) return { name: m.name, value: '--', pct: '--', up: true, sep: i > 0 };
-        const pctNum = parseFloat(d.change_percent);
-        const num = isNaN(pctNum) ? 0 : pctNum;
-        const up = num >= 0; // >=0 红（涨），<0 绿（跌）
-        return {
-          name: m.name,
-          value: formatIndex(d.price),
-          pct: (up ? '+' : '') + num.toFixed(2) + '%',
-          up,
-          // sep：行间分隔线类名由 JS 按行号算（WXSS 禁兄弟选择器）
-          sep: i > 0
-        };
-      });
-      this.setData({ markets });
-    });
-  },
-
   onMenuTap() {
     this._pendingMenu = '';
     this.setData({ drawerOpen: true });
-    this.loadMarkets(); // 每次打开抽屉刷新一次（后端 30s 缓存，开销可控）
+    this.loadSessions(); // 每次打开抽屉刷新历史列表
   },
 
   // 点行情卡 -> 卡片画廊（pages/test，静态八卡样式页）。
@@ -1134,6 +1169,21 @@ Page({
     this.setData({ drawerOpen: false });
   },
 
+  // 新对话：与菜单项同一套「先收抽屉、动画结束再跳转」的节奏。
+  // 跳转前先注册一条新 session（标题占位「新对话」），让它立即出现在
+  // 历史列表里；注册失败不阻断——首条消息到达时网关会补注册
+  onNewChat() {
+    const sid = agentSocket.freshSessionId();
+    createSession(sid, '').catch(() => {});
+    this._pendingMenu = 'new';
+    this._pendingSession = sid;
+    if (!this.data.drawerOpen) {
+      this.flushPendingNav();
+      return;
+    }
+    this.setData({ drawerOpen: false });
+  },
+
   // popup 收起动画结束（transition mixin 的 leaved 事件）：此刻再跳转，动画已完整播完
   onDrawerLeaved() {
     this.flushPendingNav();
@@ -1142,8 +1192,92 @@ Page({
   flushPendingNav() {
     const menu = this._pendingMenu;
     this._pendingMenu = '';
+    if (menu === 'new') {
+      // 压栈新对话页：旧对话原样留在栈里（可返回继续），新页是独立实例、
+      // 独立会话（?session= 带上刚注册的 id，新页 onLoad 据此沿用），
+      // 从它进子页返回照样回到它自己。
+      // 页面栈上限 10 层，满时 navigateTo 会失败，退化为 reLaunch 重置为一个新对话页
+      const sid = this._pendingSession || '';
+      this._pendingSession = '';
+      const url = NEW_CHAT_URL + (sid ? '&session=' + encodeURIComponent(sid) : '');
+      wx.navigateTo({
+        url,
+        fail: () => wx.reLaunch({ url })
+      });
+      return;
+    }
     const url = menu && ROUTES[menu];
     if (url) wx.navigateTo({ url });
+  },
+
+  // ===== 历史对话 =====
+  // 拉会话列表并标记当前会话（抽屉里的选中效果）。
+  // 失败静默：列表为空只是没历史，不该弹 toast 打断用户
+  loadSessions() {
+    return listSessions().then((data) => {
+      const list = (data && data.sessions) || [];
+      const sessions = list.map((s) => Object.assign({}, s, {
+        active: s.session_id === this._sessionId
+      }));
+      this.setData({ sessions });
+    }).catch(() => {});
+  },
+
+  // 历史列表点选：切到该会话并加载它的纯文本消息。
+  // 点的就是当前会话时只关抽屉，不重复拉消息
+  onSessionSelect(e) {
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    const sid = ds.sid;
+    if (!sid) return;
+    this.setData({ drawerOpen: false });
+    if (sid === this._sessionId) return;
+    this._sessionId = sid;
+    this.loadSessions();
+    this.loadSessionMessages(sid);
+  },
+
+  // 恢复某会话的消息（文本气泡；结构化卡片不持久化，恢复后只有文本）。
+  // 失败时退回问候语 + 轻提示——宁可显示空会话，也别把上一条对话的
+  // 消息留在界面上冒充新会话的内容
+  loadSessionMessages(sid) {
+    return sessionMessages(sid).then((data) => {
+      const list = (data && data.messages) || [];
+      const msgs = list.map((m) =>
+        (m.role === 'user' ? userMsg(m.content) : assistantMsg(m.content))
+      );
+      this.setData({
+        messages: msgs.length ? msgs : [assistantMsg(GREETING)]
+      });
+      this.scrollToBottom({ force: true });
+    }).catch(() => {
+      this.setData({ messages: [assistantMsg(GREETING)] });
+      this.toast('会话加载失败');
+    });
+  },
+
+  // 删除会话：二次确认后删后端（连 checkpoint 与摘要一起清，不可恢复）。
+  // 删的是当前会话时顺手开一条新对话——当前页继续留着只会对着一堆
+  // 已不属于任何 thread 的消息发问
+  onSessionDelete(e) {
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    const sid = ds.sid;
+    if (!sid) return;
+    wx.showModal({
+      title: '删除对话',
+      content: '删除后该对话的所有记录将不可恢复',
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      success: (res) => {
+        if (!res.confirm) return;
+        deleteSession(sid).then(() => {
+          if (sid === this._sessionId) {
+            this.onNewChat(); // 当前会话被删：换一条新的
+            return;
+          }
+          this.loadSessions();
+        }).catch(() => this.toast('删除失败'));
+      }
+    });
   },
 
   // 轻提示：自研 base-toast（替代 wx.showToast 默认样式）
@@ -1204,7 +1338,7 @@ Page({
     this._swipeLocked = true;
     if (dx > 0 && !this.data.drawerOpen) {
       this.setData({ drawerOpen: true });
-      this.loadMarkets(); // 滑动打开抽屉同样刷新指数
+      this.loadSessions(); // 滑动打开抽屉同样刷新历史列表
     } else if (dx < 0 && this.data.drawerOpen) {
       this.setData({ drawerOpen: false });
     }
