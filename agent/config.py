@@ -7,7 +7,9 @@ OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 SMALL_MODEL = os.getenv("SMALL_MODEL", "gpt-4o-mini")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "Qwen/Qwen3-Embedding-4B")
+# 在线（agent 检索 query）用的 embedding 模型；必须与 ingest 的 OFFLINE_EMBED_MODEL
+# 同模型同维度，否则写入与检索落在两个向量空间
+ONLINE_EMBED_MODEL = os.getenv("ONLINE_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B")
 # 输出维度：Qwen3 系列支持 dimensions 降维。1536 是保住 HNSW 索引的上限内取值
 # —— pgvector 对 vector 类型的 HNSW 索引硬限 2000 维，2048/2560 直接报错
 EMBED_DIM = int(os.getenv("EMBED_DIM", "1536"))

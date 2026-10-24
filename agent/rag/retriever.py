@@ -13,7 +13,7 @@ from config import (
     DATABASE_URL,
     OPENAI_API_BASE,
     OPENAI_API_KEY,
-    EMBED_MODEL,
+    ONLINE_EMBED_MODEL,
     EMBED_DIM,
     RERANK_ENABLED,
     RERANK_CANDIDATES,
@@ -78,7 +78,7 @@ class HybridRetriever(BaseRetriever):
     def _get_embedder(self) -> OpenAIEmbeddings:
         if self.embedder is None:
             self.embedder = OpenAIEmbeddings(
-                model=EMBED_MODEL,
+                model=ONLINE_EMBED_MODEL,
                 openai_api_base=OPENAI_API_BASE,
                 openai_api_key=OPENAI_API_KEY,
                 # 必须显式指定：Qwen3-4B 默认输出 2560 维，与库里的 1536 不匹配

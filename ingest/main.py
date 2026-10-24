@@ -6,7 +6,7 @@ from pathlib import Path
 
 import redis
 
-from config import DATABASE_URL, EMBED_MODEL, REDIS_URL, SUPPORTED_EXTENSIONS, WATCH_DIR
+from config import DATABASE_URL, OFFLINE_EMBED_MODEL, REDIS_URL, SUPPORTED_EXTENSIONS, WATCH_DIR
 from embedder import Embedder
 from pipeline import delete_file, process_file
 from store import Store
@@ -151,7 +151,7 @@ async def cmd_once(path: str):
 async def cmd_reembed(model: str):
     """按 embed_model 找出陈旧文档全量重灌"""
     logger.info("=== Reembed 模式 ===")
-    logger.info("当前模型: %s, 目标模型: %s", model, EMBED_MODEL)
+    logger.info("当前模型: %s, 目标模型: %s", model, OFFLINE_EMBED_MODEL)
 
     store = Store(DATABASE_URL)
     await store.connect()
@@ -207,7 +207,8 @@ Ingest 文档入库服务
   DATABASE_URL    PostgreSQL 连接串
   REDIS_URL       Redis 连接串
   WATCH_DIR       监听目录 (默认: ./data/docs)
-  EMBED_MODEL     嵌入模型 (默认: Qwen/Qwen3-Embedding-4B)
+  OFFLINE_EMBED_MODEL  离线嵌入模型 (默认: Qwen/Qwen3-Embedding-4B)，须与 agent 的
+                       ONLINE_EMBED_MODEL 同模型同维度
   EMBED_DIM       输出维度 (默认: 1536，须与数据库 vector(N) 一致)
   CHUNK_SIZE      分块大小 tokens (默认: 512)
   CHUNK_OVERLAP   分块重叠 tokens (默认: 64)
@@ -232,7 +233,7 @@ def main():
             sys.exit(1)
         asyncio.run(cmd_once(sys.argv[2]))
     elif cmd == "reembed":
-        model = EMBED_MODEL
+        model = OFFLINE_EMBED_MODEL
         if "--model" in sys.argv:
             idx = sys.argv.index("--model")
             if idx + 1 < len(sys.argv):

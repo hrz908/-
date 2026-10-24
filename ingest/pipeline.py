@@ -5,7 +5,7 @@ from pathlib import Path
 import redis
 
 from chunker import chunk_markdown
-from config import CHUNK_OVERLAP, CHUNK_SIZE, EMBED_MODEL, LOCK_TTL
+from config import CHUNK_OVERLAP, CHUNK_SIZE, OFFLINE_EMBED_MODEL, LOCK_TTL
 from embedder import Embedder
 from loaders import content_hash, load_document
 from store import Store
@@ -84,7 +84,7 @@ async def process_file(
             title=title,
             mime_type=mime_type,
             content_hash=doc_hash,
-            embed_model=EMBED_MODEL,
+            embed_model=OFFLINE_EMBED_MODEL,
             chunks=chunks,
         )
 

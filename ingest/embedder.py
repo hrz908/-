@@ -8,12 +8,11 @@ import redis
 
 from config import (
     REDIS_URL,
-    EMBED_MODEL,
+    OFFLINE_EMBED_MODEL,
     EMBED_CACHE_TTL,
     EMBED_BATCH_SIZE,
     OPENAI_API_BASE,
     OPENAI_API_KEY,
-    OPENAI_EMBED_MODEL,
     EMBED_DIM,
 )
 
@@ -63,8 +62,8 @@ class Embedder:
         # 尝试 FlagEmbedding
         try:
             from FlagEmbedding import BGEM3FlagModel
-            logger.info("加载 FlagEmbedding 模型: %s", EMBED_MODEL)
-            self.model = BGEM3FlagModel(EMBED_MODEL, use_fp16=True)
+            logger.info("加载 FlagEmbedding 模型: %s", OFFLINE_EMBED_MODEL)
+            self.model = BGEM3FlagModel(OFFLINE_EMBED_MODEL, use_fp16=True)
             self._backend = "flag"
             logger.info("FlagEmbedding 模型加载成功")
             return
@@ -87,7 +86,7 @@ class Embedder:
                 )
             self._backend = "openai"
             logger.info("使用 OpenAI 兼容 embedding API: model=%s, base=%s",
-                        OPENAI_EMBED_MODEL, OPENAI_API_BASE or "(default)")
+                        OFFLINE_EMBED_MODEL, OPENAI_API_BASE or "(default)")
         except ImportError:
             raise RuntimeError(
                 "无法初始化嵌入模型：FlagEmbedding 和 openai 库均不可用。"
@@ -116,7 +115,7 @@ class Embedder:
         for i in range(0, len(texts), EMBED_BATCH_SIZE):
             batch = texts[i:i + EMBED_BATCH_SIZE]
             resp = self._openai_client.embeddings.create(
-                model=OPENAI_EMBED_MODEL,
+                model=OFFLINE_EMBED_MODEL,
                 input=batch,
                 dimensions=EMBED_DIM,
             )
@@ -140,7 +139,7 @@ class Embedder:
             return []
 
         self._load_model()
-        model_name = EMBED_MODEL if self._backend == "flag" else OPENAI_EMBED_MODEL
+        model_name = OFFLINE_EMBED_MODEL
 
         # 1. 检查缓存
         cached: list[Optional[list[float]]] = [None] * len(texts)

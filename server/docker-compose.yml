@@ -60,7 +60,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-deepseek-ai/DeepSeek-V3}
       SMALL_MODEL: ${SMALL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-      EMBED_MODEL: ${EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
+      ONLINE_EMBED_MODEL: ${ONLINE_EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
       EMBED_DIM: ${EMBED_DIM:-1536}
       # RAG 相关性阈值（对余弦相似度设阈，非 RRF 分）；仅在重排关闭时生效
       RAG_THRESHOLD: ${RAG_THRESHOLD:-0.2}
@@ -95,13 +95,12 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/stock_agent?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       WATCH_DIR: /data/docs
-      EMBED_MODEL: ${EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
+      OFFLINE_EMBED_MODEL: ${OFFLINE_EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
       EMBED_DIM: ${EMBED_DIM:-1536}
       # ingest 默认未装 FlagEmbedding，会走 OpenAI 兼容降级路径，故必须给齐下面几项；
-      # embedding 模型与输出维度要和 agent 端一致（同模型同 EMBED_DIM），否则向量空间不匹配
+      # 离线模型与输出维度要和 agent 的 ONLINE_EMBED_MODEL / EMBED_DIM 一致，否则向量空间不匹配
       OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
     volumes:
       - ingestdata:/data/docs
     depends_on:
