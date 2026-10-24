@@ -12,7 +12,7 @@ import (
 // pingTimeout 启动探活超时
 const pingTimeout = 3 * time.Second
 
-// PoolParams 连接池参数（由配置注入，见 config.db.*）。
+// PoolParams 连接池参数，由 config.db.* 注入。
 type PoolParams struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
@@ -20,8 +20,8 @@ type PoolParams struct {
 	ConnMaxIdleTime time.Duration
 }
 
-// NewPostgres 建立 GORM 连接：配好连接池并立即探活。
-// 探活是为了让连接串写错这类问题在启动时就暴露，而不是等第一个业务请求
+// NewPostgres 建立 GORM 连接，配好连接池并立即探活，
+// 让连接串写错这类问题在启动时暴露，而不是等第一个业务请求。
 func NewPostgres(dsn string, pool PoolParams) (*gorm.DB, error) {
 	gdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:         logger.Default.LogMode(logger.Warn),
@@ -35,8 +35,8 @@ func NewPostgres(dsn string, pool PoolParams) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 不设上限时突发流量会把 Postgres 连接打满；IdleTime 让空闲连接
-	// 早于服务端/中间网络设备的连接老化阈值被回收，避免拿到死连接
+	// 不设上限时突发流量会把 Postgres 连接打满；ConnMaxIdleTime 让空闲连接
+	// 早于服务端/中间设备的连接老化阈值被回收，避免拿到死连接
 	sqlDB.SetMaxOpenConns(pool.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(pool.ConnMaxLifetime)
@@ -50,11 +50,9 @@ func NewPostgres(dsn string, pool PoolParams) (*gorm.DB, error) {
 	return gdb, nil
 }
 
-// AutoMigrate 建表并补索引。
-// 模型由各业务模块自己导出（module/xxx.Models），在 main 里汇总后传进来，
-// 这样新增模块时不用改本文件。
-// 注意：AutoMigrate 只会新增列/索引，不会改名或删列；
-// 老库的结构升级走 migrations/ 下的脚本（与 compose 的 initdb 配合）
+// AutoMigrate 建表并补索引。模型由各业务模块导出（module/xxx.Models），
+// main 汇总后传入，新增模块无需改本文件。
+// 只会新增列/索引，不改名也不删列；老库结构升级走 migrations/ 脚本（配合 compose 的 initdb）。
 func AutoMigrate(db *gorm.DB, models ...any) error {
 	if len(models) == 0 {
 		return nil

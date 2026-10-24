@@ -18,14 +18,12 @@ import (
 	"stock-agent-server/internal/resp"
 )
 
-// globalSem 全局连接闸门：进程内同时存活的 Agent WS 连接上限。
-// 超出直接 503，避免连接数无限膨胀耗尽 fd / 内存。取满即拒（default 分支），不排队。
-// 容量在 agent.Init 里按配置创建（config.agent.ws_max_conns，默认 512）。
+// globalSem 全局连接闸门：进程内 WS 连接上限，取满即拒（503）不排队，避免耗尽 fd。
+// 容量由 agent.Init 按 config.agent.ws_max_conns 重建（默认 512）。
 var globalSem = make(chan struct{}, 512)
 
-// upgrader 小程序端握手无法自定义请求头，也不带浏览器 Origin，故不做同源校验；
-// 鉴权已在路由中间件（AuthAllowQueryToken）完成。写缓冲放大到 32KB，
-// 适配 card/table 这类较大的结构化事件帧。
+// upgrader 小程序端握手无法带自定义头与 Origin，故不做同源校验（鉴权走 AuthAllowQueryToken）；
+// 写缓冲 32KB 以容纳 card/table 等较大事件帧。
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 32 * 1024,
@@ -33,15 +31,14 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	wsWriteTimeout   = 5 * time.Second  // 单次写超时，防止慢客户端把推送 goroutine 挂死
-	wsPongTimeout    = 60 * time.Second // 读空闲超时：60s 收不到 pong 判定半开连接并关闭
+	wsWriteTimeout   = 5 * time.Second  // 单次写超时，防慢客户端挂死推送 goroutine
+	wsPongTimeout    = 60 * time.Second // 读空闲上限：无 pong 即判半开连接
 	wsPingInterval   = 25 * time.Second // 服务端心跳间隔
-	wsMaxMessageSize = 64 * 1024        // 客户端消息上限，query 可能较长，给到 64KB
+	wsMaxMessageSize = 64 * 1024        // 客户端消息上限，query 可能较长
 )
 
-// agentConn 包装 websocket.Conn。
-// gorilla/websocket 明确不支持并发写：心跳 ping、事件推送、关闭可能来自不同 goroutine，
-// 全部经这把互斥锁串行化，否则会写坏帧甚至 panic。
+// agentConn 包装 websocket.Conn；gorilla/websocket 禁止并发写，
+// 心跳、推送、关闭统一经 mu 串行化，否则会写坏帧。
 type agentConn struct {
 	ws *websocket.Conn
 	mu sync.Mutex
@@ -69,14 +66,13 @@ func (a *agentConn) close() {
 	_ = a.ws.Close()
 }
 
-// ServeWS 处理 GET /api/v1/ws/agent。
-// 握手参数 ?token=（鉴权中间件消费）& session_id=；客户端发送 {"query":"..."}，
-// 服务端以 Event JSON 帧推送运行过程。
+// ServeWS 处理 GET /api/v1/ws/agent；token 由鉴权中间件消费，session_id 取自 query。
+// 客户端发送 {"query":"..."}，服务端以 Event JSON 帧推送运行过程。
 func ServeWS(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 	sessionID := strings.TrimSpace(c.Query("session_id"))
 
-	// 全局连接闸门：满则 503，不升级连接
+	// 闸门满则 503，不升级连接
 	select {
 	case globalSem <- struct{}{}:
 		defer func() { <-globalSem }()
@@ -87,16 +83,15 @@ func ServeWS(c *gin.Context) {
 
 	wsConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// 升级失败时 gorilla 已写好错误响应，这里只记录
+		// gorilla 已写好错误响应，仅记录
 		log.Printf("agent ws upgrade failed: user=%d err=%v", userID, err)
 		return
 	}
 	ac := newAgentConn(wsConn)
 	defer ac.close()
 
-	// 连接级上下文：读循环退出（客户端断开）或心跳写失败时取消，
-	// 联动停止 ping goroutine 与正在进行的运行。不依赖 c.Request.Context()，
-	// 因为连接被 hijack 后 HTTP server 不再感知断开。
+	// 连接级上下文：读循环退出或心跳写失败时取消，联动停止 ping 与进行中的运行。
+	// 不用 c.Request.Context()：连接 hijack 后 HTTP server 不再感知断开。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -104,11 +99,9 @@ func ServeWS(c *gin.Context) {
 	ac.readLoop(ctx, userID, sessionID)
 }
 
-// pingLoop 服务端心跳：每 25s 发一个 ping。
-// 写失败说明连接已死，主动 cancel 让读循环与运行中的请求尽快退出；
-// 同时必须主动 Close 连接——cancel 只能取消能感知 ctx 的调用，
-// 阻塞在 ReadMessage 里的读循环感知不到，最坏要等 60s 读超时才醒，
-// 期间这条半开连接一直占着全局闸门槽位。
+// pingLoop 每 25s 发一次 ping；写失败说明连接已死，cancel 让读循环与运行尽快退出。
+// 还必须主动 Close：cancel 唤不醒阻塞在 ReadMessage 的读循环，
+// 最坏要等 60s 读超时才释放全局闸门槽位。
 func (a *agentConn) pingLoop(ctx context.Context, cancel context.CancelFunc) {
 	ticker := time.NewTicker(wsPingInterval)
 	defer ticker.Stop()
@@ -126,18 +119,17 @@ func (a *agentConn) pingLoop(ctx context.Context, cancel context.CancelFunc) {
 	}
 }
 
-// readLoop 读取客户端消息并串行处理每次运行。
-// 读到错误即视为断开，返回后触发 ServeWS 的 defer 链完成清理。
+// readLoop 串行读取并处理客户端消息；读错误即视为断开，返回后由 ServeWS 的 defer 清理。
 func (a *agentConn) readLoop(ctx context.Context, userID int64, sessionID string) {
 	a.ws.SetReadLimit(wsMaxMessageSize)
 	a.ws.SetPongHandler(func(string) error {
-		// 收到 pong 续期读超时：活跃连接不会被误判为半开
+		// 收到 pong 续期读超时，活跃连接不被误判半开
 		return a.ws.SetReadDeadline(time.Now().Add(wsPongTimeout))
 	})
 
 	for {
-		// 每轮读之前刷新 deadline：handleRun 可能耗时远超 60s，期间不读消息，
-		// 不刷新的话回到读循环时 deadline 早已过期，会立即误判断开。
+		// 每轮读前刷新 deadline：handleRun 可能远超 60s，
+		// 否则回到此处时 deadline 已过期，会立即误判断开。
 		_ = a.ws.SetReadDeadline(time.Now().Add(wsPongTimeout))
 
 		_, msg, err := a.ws.ReadMessage()
@@ -147,7 +139,7 @@ func (a *agentConn) readLoop(ctx context.Context, userID int64, sessionID string
 
 		var req RunRequest
 		if err := json.Unmarshal(msg, &req); err != nil {
-			// 协议错误只回 error 事件，不断连：客户端可能是格式笔误，连接仍可复用
+			// 协议错误只回 error 事件不断连，连接仍可复用
 			_ = a.writeJSON(Event{Event: EventError, Data: ErrorData{Code: "bad_request", Msg: "无效的消息格式"}})
 			continue
 		}
@@ -156,7 +148,7 @@ func (a *agentConn) readLoop(ctx context.Context, userID int64, sessionID string
 			continue
 		}
 
-		// 消息内 session_id 优先，回退到握手参数
+		// 消息内 session_id 优先，回退握手参数
 		sid := sessionID
 		if s := strings.TrimSpace(req.SessionID); s != "" {
 			sid = s
@@ -166,16 +158,16 @@ func (a *agentConn) readLoop(ctx context.Context, userID int64, sessionID string
 	}
 }
 
-// handleRun 处理一次运行：限流 → 代理流式请求 → 逐事件写回 WS。
-// 任何失败都以 error 事件回传，绝不主动断连（连接可继续服务后续 query）。
+// handleRun 处理一次运行：限流 → 代理流式请求 → 逐事件写回。
+// 任何失败都以 error 事件回传，不主动断连。
 func (a *agentConn) handleRun(ctx context.Context, userID int64, sessionID, query string) {
-	// 三道限流闸门：失败发结构化 error 事件后直接返回，本次不占上游资源
+	// 三道限流闸门，拒绝时回结构化 error 事件，不占用上游资源
 	if err := limiter.Allow(ctx, userID); err != nil {
 		_ = a.writeJSON(Event{Event: EventError, Data: ErrorData{Code: limitCode(err), Msg: err.Error()}})
 		return
 	}
-	// Allow 通过即占用一个并发槽，无论后续成功失败都要归还。
-	// ReleaseConcurrent 内部脱离 ctx，客户端断开导致 ctx 取消时仍能正常归还。
+	// Allow 通过即占用并发槽，无论成败都要归还；
+	// ReleaseConcurrent 内部脱离 ctx，客户端断开时仍能归还
 	defer limiter.ReleaseConcurrent(ctx, userID)
 
 	// thread_id 由服务端派生，客户端无法伪造他人会话
@@ -186,17 +178,17 @@ func (a *agentConn) handleRun(ctx context.Context, userID int64, sessionID, quer
 		select {
 		case ev, ok := <-events:
 			if !ok {
-				// 事件流正常结束：若带有非取消类错误，补发一个 error 事件告知前端
+				// 事件流结束：非取消类错误补发 error 事件告知前端
 				if err := <-errs; err != nil && !errors.Is(err, context.Canceled) {
 					_ = a.writeJSON(Event{Event: EventError, Data: ErrorData{Code: "agent_error", Msg: err.Error()}})
 				}
 				return
 			}
 			if err := a.writeJSON(ev); err != nil {
-				return // 写失败说明客户端已断开，停止转发
+				return // 写失败说明客户端已断开
 			}
 		case <-ctx.Done():
-			// 客户端断开或心跳失败：上游请求随 ctx 取消，这里直接退出
+			// 客户端断开或心跳失败：上游请求随 ctx 取消
 			return
 		}
 	}

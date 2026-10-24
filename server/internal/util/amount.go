@@ -11,7 +11,7 @@ func Money(d decimal.Decimal) string {
 	return d.StringFixed(2)
 }
 
-// Thousands 金额加千分位并保留 2 位小数：1705.30 → 1,705.30
+// Thousands 千分位 + 2 位小数：1705.30 → 1,705.30
 func Thousands(d decimal.Decimal) string {
 	s := d.StringFixed(2)
 	neg := strings.HasPrefix(s, "-")
@@ -39,9 +39,8 @@ func Thousands(d decimal.Decimal) string {
 	return out + frac
 }
 
-// WithSign 数值带正负号，用于涨跌幅展示：+1.23 / -0.86 / 0.00。
-// -0.001 这类值经 StringFixed(2) 会得到 "-0.00"，先归一成 "0.00"，
-// 否则前端会显示一个负零
+// WithSign 数值带正负号（+1.23 / -0.86 / 0.00）。
+// -0.001 经 StringFixed(2) 会得到 "-0.00"，先归一成 "0.00"，否则前端显示负零。
 func WithSign(d decimal.Decimal) string {
 	s := d.StringFixed(2)
 	if s == "-0.00" {

@@ -21,11 +21,11 @@ import (
 // noQuote 无行情占位，与小程序 pending 态的展示保持一致
 const noQuote = "--"
 
-// maxWatchlist 单用户自选股数量上限（默认档，由 Register 按配置覆盖）。
+// maxWatchlist 单用户自选股上限（默认档，由 Register 按配置覆盖）。
 // 不设上限时一个账号加几千条，refresh 会放大成几百次上游 HTTP 请求
 var maxWatchlist = 200
 
-// 计算常量：具名之后盈亏公式读起来更直白，也免得重复 NewFromInt
+// 计算常量：具名之后盈亏公式更直白，也免得重复 NewFromInt
 var (
 	zero    = decimal.Zero
 	hundred = decimal.NewFromInt(100)
@@ -33,7 +33,7 @@ var (
 
 /* ===================== 请求 / 响应结构 ===================== */
 
-// AddWatchReq 添加自选入参。cost_price / quantity 用指针区分「没传」和「传了 0」
+// AddWatchReq 添加自选入参；cost_price / quantity 用指针区分「没传」与「传了 0」
 type AddWatchReq struct {
 	StockCode string  `json:"stock_code"`
 	CostPrice *string `json:"cost_price"`
@@ -68,7 +68,7 @@ type WatchItem struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
-// WatchListResp 列表：含单只盈亏与总盈亏统计
+// WatchListResp 列表响应，含单只盈亏与总盈亏统计
 type WatchListResp struct {
 	List            []WatchItem `json:"list"`
 	TotalProfit     string      `json:"total_profit"`
@@ -116,7 +116,7 @@ func GetWatchlist(c *gin.Context) {
 
 // AddWatchlist POST /api/v1/watchlist
 // 执行顺序：代码归一化 → 校验 → 拉行情（失败直接 502，不写库）→ Upsert → 落缓存。
-// 为什么行情优先：拿不到名称就写库会产生「有记录无名称」的脏数据
+// 先拉行情是为了避免「有记录无名称」的脏数据
 func AddWatchlist(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
@@ -144,8 +144,7 @@ func AddWatchlist(c *gin.Context) {
 		return
 	}
 
-	// 数量上限：没有它时一个账号可以加几千条，
-	// 之后的每次 refresh 都会放大成几百次上游请求
+	// 数量上限：否则一个账号可加几千条，之后每次 refresh 都放大成几百次上游请求
 	var count int64
 	if err := deps.DB.WithContext(ctx).Model(&UserWatchlist{}).
 		Where("user_id = ? AND enabled = ?", userID, true).
@@ -177,14 +176,12 @@ func AddWatchlist(c *gin.Context) {
 		CostPrice: cost,
 		Quantity:  qty,
 		Enabled:   true,
-		// 显式取当前时间：冲突更新要读 row.UpdatedAt 的值，
-		// 留零值会把 updated_at 写成 0001-01-01
+		// 显式取当前时间：冲突更新要读 row.UpdatedAt，留零值会写成 0001-01-01
 		UpdatedAt: time.Now(),
 	}
-	// 冲突时改哪些列：enabled 必须恢复（「移出后重新添加」靠它，
-	// 否则用户会看到添加成功、列表里却查不到）；
-	// 而成本价与持股数量只能「传了才更新」——它们是首次录入的建仓信息，
-	// 重复添加时用户往往不会再填一遍，若像之前那样无条件覆盖就会被冲成 0
+	// 冲突时改哪些列：enabled 必须恢复（「移出后重新添加」靠它），
+	// 否则用户看到添加成功、列表里却查不到；
+	// 成本价 / 持股数量只「传了才更新」——重复添加时用户往往不再填，无条件覆盖会被冲成 0
 	updateCols := []string{"enabled"}
 	if req.CostPrice != nil {
 		updateCols = append(updateCols, "cost_price")
@@ -203,7 +200,7 @@ func AddWatchlist(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternal, "添加自选股失败")
 		return
 	}
-	// 冲突更新时 GORM 借 Postgres 的 RETURNING 回填主键；万一没回填就查一次
+	// 冲突更新时 GORM 借 Postgres RETURNING 回填主键；没回填就补查一次
 	if row.ID == 0 {
 		var exist UserWatchlist
 		if err := deps.DB.WithContext(ctx).
@@ -213,7 +210,7 @@ func AddWatchlist(c *gin.Context) {
 		}
 	}
 
-	// 缓存失败不影响本次添加成功，只记日志
+	// 缓存失败不影响本次添加，只记日志
 	if err := quote.SaveQuoteToRedis(ctx, snap); err != nil {
 		log.Printf("save quote to redis failed: code=%s err=%v", code, err)
 	}
@@ -224,16 +221,12 @@ func AddWatchlist(c *gin.Context) {
 /* ===================== 手动刷新 ===================== */
 
 // RefreshWatchlist POST /api/v1/watchlist/refresh
-// 执行顺序：查列表 → errgroup 并发拉行情（上限 5）→ pipeline 批量写缓存
+// 执行顺序：查列表 → 并发拉行情（上限 limit）→ pipeline 批量写缓存
 //
-//	→ 失败的降级读旧缓存 → 广播「行情已更新」钩子
+//	→ 失败降级读旧缓存 → 广播「行情已更新」钩子
 //
-// 降级策略：拉取失败先退回 Redis 旧值并标记 stale=true；
-//
-//	旧值也没有才置 pending=true、价格 0，前端据此显示 --
-//
-// 本接口只更新 Redis，不写 user_watchlist 表（列表本身没变化）。
-// 刷新完成后通过 hook 广播，由关心该事件模块（如 alert）自行处理，避免模块间互相依赖
+// 降级：拉取失败先退回 Redis 旧值并标记 stale=true；旧值也没有才 pending=true、价格 0，前端据此显示 --。
+// 本接口只更新 Redis，不写 user_watchlist；刷新完成后经 hook 广播，避免模块间互相依赖
 func RefreshWatchlist(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
@@ -259,7 +252,7 @@ func RefreshWatchlist(c *gin.Context) {
 		log.Printf("batch save quotes failed: %v", err)
 	}
 
-	// 拉取失败的：降级读旧缓存；读不到就保持无行情
+	// 拉取失败的降级读旧缓存；读不到就保持无行情
 	staleMap := map[string]*quote.StockSnapshot{}
 	if len(failed) > 0 {
 		old, err := quote.BatchGetQuotes(ctx, failed)
@@ -275,15 +268,14 @@ func RefreshWatchlist(c *gin.Context) {
 	items, totalProfit, totalCostValue := assembleItems(rows, fresh, staleMap, filter)
 	sortItems(items, filter, c.DefaultQuery("order", ""))
 
-	// 行情更新完成，广播给所有关心方（提醒检查等）。
-	// 走异步：检查里的 DB / Redis / WS 推送不该拖慢本接口的响应
+	// 行情更新完成，异步广播给关心方（提醒检查等），不拖慢本接口响应
 	hook.EmitQuoteUpdatedAsync(userID, ctx)
 
-	// 返回结构与列表接口一致，前端可直接整段替换列表与统计
+	// 返回结构与列表接口一致，前端可整段替换列表与统计
 	writeWatchlist(c, items, totalProfit, totalCostValue)
 }
 
-// writeWatchlist 统一写列表响应：两个接口（查询 / 刷新）的结构完全一致
+// writeWatchlist 统一写列表响应：查询与刷新两个接口结构完全一致
 func writeWatchlist(c *gin.Context, items []WatchItem, totalProfit, totalCostValue decimal.Decimal) {
 	resp.OK(c, WatchListResp{
 		List:            items,
@@ -294,7 +286,7 @@ func writeWatchlist(c *gin.Context, items []WatchItem, totalProfit, totalCostVal
 	})
 }
 
-// sumRate 总盈亏比例 = 总盈亏 ÷ 总成本；成本为 0 时记 0，避免除零
+// sumRate 总盈亏比例 = 总盈亏 ÷ 总成本；成本为 0 记 0，避免除零
 func sumRate(profit, costValue decimal.Decimal) string {
 	if !costValue.IsPositive() {
 		return "0.00"
@@ -303,9 +295,7 @@ func sumRate(profit, costValue decimal.Decimal) string {
 }
 
 // DeleteWatchlist DELETE /api/v1/watchlist/:stock_code
-// 软删除：只把 enabled 置为 false，不物理删行。
-// 表里有 enabled 字段就是为了支持「移出但保留历史」，
-// 硬删会让成本价等建仓信息一并丢失，重新添加还得再填一遍。
+// 软删除：只把 enabled 置为 false，硬删会连成本价等建仓信息一起丢掉；
 // 更新必须带 user_id 过滤，防止改到别人的记录
 func DeleteWatchlist(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -326,7 +316,7 @@ func DeleteWatchlist(c *gin.Context) {
 		return
 	}
 	if res.RowsAffected == 0 {
-		// 查不到就统一 404，不区分「不存在」与「不是本人的」
+		// 查不到统一 404，不区分「不存在」与「不是本人的」
 		resp.Fail(c, resp.CodeNotFound, "自选不存在或无权限")
 		return
 	}
@@ -368,9 +358,8 @@ func buildItem(row UserWatchlist, snap *quote.StockSnapshot, stale bool) WatchIt
 	return item
 }
 
-// assembleItems 列表 / 刷新共用的组装逻辑：涨跌幅榜过滤掉无行情的
-// （与前端 filterList 口径一致），并顺手累计总盈亏。
-// fresh 优先于 stale：stale 表示这条用的是旧缓存降级数据
+// assembleItems 列表 / 刷新共用的组装逻辑：涨跌幅榜过滤掉无行情的（与前端 filterList 口径一致），
+// 并顺手累计总盈亏；fresh 优先于 stale（stale 表示用的是旧缓存降级数据）
 func assembleItems(rows []UserWatchlist, fresh, stale map[string]*quote.StockSnapshot, filter string) ([]WatchItem, decimal.Decimal, decimal.Decimal) {
 	skipPending := filter == "up" || filter == "down"
 
@@ -401,9 +390,8 @@ func assembleItems(rows []UserWatchlist, fresh, stale map[string]*quote.StockSna
 	return items, totalProfit, totalCostValue
 }
 
-// calcProfit 浮动盈亏：(最新价 - 成本价) × 数量。
-// 全程 decimal，不用 float64，避免 3682.4000000000005 这类误差。
-// 成本为 0（用户没填）时盈亏比例记 0，避免除零
+// calcProfit 浮动盈亏 =（最新价 - 成本价）× 数量。
+// 全程 decimal 避免 3682.4000000000005 这类误差；成本为 0（用户没填）时比例记 0，避免除零
 func calcProfit(price, cost decimal.Decimal, quantity int) (amount string, rate string) {
 	qty := decimal.NewFromInt(int64(quantity))
 	amountDec := price.Sub(cost).Mul(qty)
@@ -416,9 +404,8 @@ func calcProfit(price, cost decimal.Decimal, quantity int) (amount string, rate 
 	return util.Money(amountDec), rateDec.StringFixed(2)
 }
 
-// sortItems 按涨跌幅排序。
-// filter=up（涨幅榜）降序、filter=down（跌幅榜）升序；
-// filter=all 时只有显式传 order 才排序，否则保持 SQL 的 created_at DESC 顺序
+// sortItems 按涨跌幅排序：filter=up 降序、down 升序；
+// all 时只有显式传 order 才排序，否则保持 SQL 的 created_at DESC 顺序
 func sortItems(items []WatchItem, filter, order string) {
 	desc := true
 	switch filter {
@@ -435,8 +422,8 @@ func sortItems(items []WatchItem, filter, order string) {
 		return
 	}
 
-	// 先把涨跌幅解析成 decimal：比较器每次比较都 NewFromString 会把
-	// 解析成本乘以 O(n log n)，而且 sort.Slice 不稳定，同涨跌幅的顺序会随机
+	// 先解析成 decimal：比较器里每次 NewFromString 会把成本乘到 O(n log n)，
+	// 且 sort.Slice 不稳定，同涨跌幅的顺序会随机
 	pcts := make([]decimal.Decimal, len(items))
 	for i, it := range items {
 		v, err := decimal.NewFromString(it.ChangePct)
@@ -463,8 +450,8 @@ func countUp(items []WatchItem) int {
 	return n
 }
 
-// countDown 只数真正下跌的（涨跌幅 < 0）。
-// 原来用 !Up 把平盘（0%）也算进了下跌，与前端涨跌榜口径不一致
+// countDown 只数真正下跌的（涨跌幅 < 0）；
+// 此前用 !Up 把平盘（0%）也算进下跌，与前端涨跌榜口径不一致
 func countDown(items []WatchItem) int {
 	n := 0
 	for _, it := range items {
@@ -478,15 +465,15 @@ func countDown(items []WatchItem) int {
 	return n
 }
 
-// 业务上限。DB 列是 numeric(18,4) / int，超范围的错误要到写库才暴露、
-// 返回的是 500；在入口按 400 挡掉，前端拿到的约束也更明确
+// 业务上限。DB 列是 numeric(18,4) / int，超范围要等写库才暴露且返回 500；
+// 在入口按 400 挡掉，前端拿到的约束也更明确
 var (
 	maxCostPrice    = decimal.NewFromInt(100000000) // 1 亿
 	maxQuantity     = int64(100000000)              // 1 亿股
 	maxQuantityTemp = maxQuantity
 )
 
-// parseCost 解析成本价：没传返回零值；传了必须是数字、>= 0 且不超上限
+// parseCost 解析成本价：未传返回零值；传了必须是数字、非负且不超上限
 func parseCost(raw *string) (decimal.Decimal, string) {
 	if raw == nil {
 		return zero, ""
@@ -504,7 +491,7 @@ func parseCost(raw *string) (decimal.Decimal, string) {
 	return v, ""
 }
 
-// parseQuantity 解析持股数量：没传为 0；传了不能为负且不超上限
+// parseQuantity 解析持股数量：未传为 0；传了不可为负且不超上限
 func parseQuantity(raw *int) (int, string) {
 	if raw == nil {
 		return 0, ""

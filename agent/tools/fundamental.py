@@ -1,12 +1,11 @@
-"""财务基本面工具（数据源：akshare 东财/新浪，替代原 Tushare）。
+"""财务基本面工具（数据源：akshare 东财/新浪）。
 
 - get_valuation:           东财 stock_value_em（个股估值历史，PE/PB/PS/市值）
 - get_financial_indicator: 新浪 stock_financial_analysis_indicator（报告期财务指标）
-- get_financial_report:    新浪三大报表（利润表 + 现金流量表）+ 上面指标接口的
-                           最新一期，并发组装财报速览卡载荷
+- get_financial_report:    新浪三大报表（利润表 + 现金流量表）+ 指标接口最新一期，并发组装财报速览卡载荷
 
-akshare 是同步 pandas 库：全部经 tools.market.run_ds 丢线程池执行，
-出口统一过 num()/text() 归一（DataFrame 的 numpy 标量/NaN 无法直接进 JSON）。
+akshare 是同步 pandas 库：全部经 tools.market.run_ds 丢线程池执行，出口统一过 num()/text() 归一
+（DataFrame 的 numpy 标量/NaN 无法直接进 JSON）。
 金额口径：报表类为元；估值卡 total_mv/circ_mv 换算成万元（与前端契约一致）。
 """
 import asyncio

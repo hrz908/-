@@ -49,16 +49,10 @@ def _heading_text(line: str) -> str:
 
 
 def chunk_markdown(content: str, chunk_size: int = 512, overlap: int = 64) -> list[dict]:
-    """
-    对 Markdown 内容进行智能分块。
+    """对 Markdown 内容分块：先按标题层级切 section，超长 section 再按段落切，
+    段落仍超长则用滑动窗口（chunk_size / overlap）；最后给每个 chunk 头部注入标题路径。
 
-    策略:
-    1. 优先按 Markdown 标题层级（#, ##, ### 等）切分
-    2. 如果单块超过 chunk_size tokens，按段落进一步切分
-    3. 长度兜底：滑动窗口 (chunk_size / overlap)
-    4. 每个 chunk 头部注入标题路径
-
-    返回: [{"seq": 0, "content": "...", "token_count": N, "metadata": {"heading_path": "..."}}]
+    返回 [{"seq", "content", "token_count", "metadata": {"heading_path"}}]。
     """
     lines = content.split("\n")
 

@@ -26,11 +26,11 @@ import (
 // 提醒防抖锁 TTL（秒）
 const alertLockTTL = 60
 
-// stockNameMax 股票名称长度上限，与列类型 varchar(100) 对应
+// stockNameMax 股票名称长度上限，对应列类型 varchar(100)
 const stockNameMax = 100
 
-// 收盘确认型的生效时刻：A 股 15:00 收盘，收盘前不判定 close 型规则。
-// 取的是服务器本地时间，部署时把服务器时区设为 Asia/Shanghai 即可
+// closeHour 收盘确认型的生效时刻：A 股 15:00 收盘，收盘前不判 close 型规则。
+// 取服务器本地时间，部署时把时区设为 Asia/Shanghai 即可
 const closeHour = 15
 
 /* ===================== 请求 / 响应结构 ===================== */
@@ -53,7 +53,7 @@ type UpdateAlertReq struct {
 	Enabled        *bool   `json:"enabled"`
 }
 
-// AlertItem 提醒规则。current_price / change_percent 来自 Redis，读不到就是 nil
+// AlertItem 提醒规则；current_price / change_percent 来自 Redis，读不到即为 nil
 type AlertItem struct {
 	ID              int64   `json:"id"`
 	StockCode       string  `json:"stock_code"`
@@ -69,21 +69,9 @@ type AlertItem struct {
 	CreatedAt       string  `json:"created_at"`
 }
 
-/* ===================== 各接口的校验点一览 =====================
-| 接口               | 校验点                                  | 失败返回                      |
-|--------------------|-----------------------------------------|-------------------------------|
-| POST   /alerts     | stock_code 缺失或格式非法                | 400 股票代码格式不正确        |
-| POST   /alerts     | condition_type 不在枚举内                | 400 条件类型不合法            |
-| POST   /alerts     | threshold 非法或超出该类取值范围         | 400 阈值不合法                |
-| POST   /alerts     | 成交量异动但 volume_base 不在 5/10/20    | 400 基准周期不合法            |
-| POST   /alerts     | check_frequency 不在枚举内               | 400 检查频率不合法            |
-| POST   /alerts     | 同用户同股票同条件已有启用规则           | 409 该股票的该条件提醒已存在  |
-| GET    /alerts     | 按 user_id 过滤（可选 stock_code）       | 500 查询提醒失败              |
-| PUT    /alerts/:id | id 非法                                  | 400 规则 id 不合法            |
-| PUT    /alerts/:id | condition_type / threshold 等非法        | 400 对应文案                  |
-| PUT    /alerts/:id | id + user_id 定位不到                    | 404 规则不存在或无权限        |
-| DELETE /alerts/:id | id 非法                                  | 400 规则 id 不合法            |
-| DELETE /alerts/:id | id + user_id 定位不到                    | 404 规则不存在或无权限        |
+/* ===================== 校验约定 =====================
+代码 / 条件类型 / 阈值 / 基准周期 / 频率非法 → 400；规则不属于本人 → 404（不区分「不存在」）；
+同用户同股票同条件重复 → 409。
 =========================================================== */
 
 /* ===================== 新建 ===================== */
@@ -127,18 +115,15 @@ func CreateAlert(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "检查频率不合法")
 		return
 	}
-	// 股票名称长度：列是 varchar(100)，超长时错误来自 DB、返回的是 500，
-	// 在入口按 400 挡掉
+	// 名称列是 varchar(100)，超长时错误来自 DB 且返回 500，在入口按 400 挡掉
 	stockName := strings.TrimSpace(req.StockName)
 	if utf8.RuneCountInString(stockName) > stockNameMax {
 		resp.Fail(c, resp.CodeBadRequest, "股票名称过长")
 		return
 	}
 
-	// 同一用户、同一股票、同一条件类型只允许一条启用规则。
-	// 这里是给用户的友好提示；并发下两个请求可能同时通过检查，
-	// 真正的保证是 (user_id, stock_code, condition_type) 唯一索引，
-	// 冲突时下面的 Create 会返回 409
+	// 同用户 + 同股票 + 同条件只允许一条启用规则。这里只是给用户的友好提示；
+	// 并发下两个请求可能同时通过，真正的保证是唯一索引（冲突时下面的 Create 返回 409）
 	var exist AlertRule
 	err := deps.DB.WithContext(ctx).
 		Where("user_id = ? AND stock_code = ? AND condition_type = ? AND enabled = ?",
@@ -234,8 +219,8 @@ func UpdateAlert(c *gin.Context) {
 		return
 	}
 
-	// 先用 id + user_id 定位：查不到统一 404。
-	// 刻意不区分「不存在」与「不是本人的」，避免被枚举探测他人规则 id
+	// 用 id + user_id 定位，查不到统一 404；刻意不区分「不存在」与「不是本人的」，
+	// 避免被枚举他人规则 id
 	var rule AlertRule
 	if err := deps.DB.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -249,8 +234,7 @@ func UpdateAlert(c *gin.Context) {
 		return
 	}
 
-	// 条件类型的最终值：请求带了就用新的，否则沿用库里的，
-	// 阈值 / 基准周期的校验要跟着最终值走
+	// 条件类型最终值：请求带了用新的，否则沿用库里的；阈值 / 基准周期校验要跟着最终值走
 	condType := rule.ConditionType
 	if req.ConditionType != nil {
 		condType = normalizeCondition(*req.ConditionType)
@@ -280,8 +264,8 @@ func UpdateAlert(c *gin.Context) {
 		}
 		updates["volume_base"] = n
 	} else if condType != CondVolume {
-		// 从成交量切成其它条件时，基准周期必须归 0，
-		// 否则库里留着 20/10/5，与创建时的归一化不一致
+		// 从成交量切成其它条件时基准周期必须归 0，
+		// 否则库里残留 20/10/5，与创建时的归一化不一致
 		updates["volume_base"] = 0
 	}
 	if req.CheckFrequency != nil {
@@ -335,8 +319,7 @@ func UpdateAlert(c *gin.Context) {
 /* ===================== 删除 ===================== */
 
 // DeleteAlert DELETE /api/v1/alerts/:id
-// 采用硬删：表里没有 deleted_at 字段，且规则是用户私有资源，不需要回收站；
-// 如后续要审计，再加 deleted_at 改软删即可
+// 硬删：表无 deleted_at，规则是用户私有资源，不需要回收站；若后续要审计再改软删
 func DeleteAlert(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
@@ -376,11 +359,9 @@ func DeleteAlert(c *gin.Context) {
 
 /* ===================== 刷新后的提醒检查 ===================== */
 
-// checkAlerts 检查该用户的提醒规则，命中就推送提醒（WebSocket 实时推送 +
-// 企业微信应用消息，两条通道并存）。
-// 防重复：SetNX alert:lock:{user_id}:{stock_code}:{condition_type}，TTL 60 秒；
-//
-//	写不进去说明 60 秒内已经推过，直接跳过
+// checkAlerts 检查该用户的提醒规则，命中就推送（WebSocket 实时 + 企业微信应用消息，两条通道并存）。
+// 防重复：SetNX alert:lock:{user_id}:{stock_code}:{condition_type}，TTL 60 秒，
+// 写不进去说明 60 秒内已经推过
 func checkAlerts(userID int64, ctx context.Context) {
 	var rules []AlertRule
 	if err := deps.DB.WithContext(ctx).
@@ -405,7 +386,7 @@ func checkAlerts(userID int64, ctx context.Context) {
 		if snap == nil {
 			continue // 没行情不判
 		}
-		// 收盘确认型：只在收盘后判定，盘中即时型每次刷新都判
+		// 收盘确认型只在收盘后判定，盘中即时型每次刷新都判
 		if r.CheckFrequency == FreqClose && now.Hour() < closeHour {
 			continue
 		}
@@ -421,7 +402,7 @@ func checkAlerts(userID int64, ctx context.Context) {
 				continue
 			}
 			if !ok {
-				continue // 60 秒内已推过，防重复
+				continue // 60 秒内已推过
 			}
 		}
 
@@ -438,11 +419,8 @@ func checkAlerts(userID int64, ctx context.Context) {
 			"time":            now.Format(time.RFC3339),
 		})
 
-		// 额外走企业微信应用消息（@all）：与 WebSocket 提醒并存。
-		// 异步发送，避免同步 HTTP 阻塞行情刷新循环；失败只记日志，
-		// 不影响已完成的 WebSocket 提醒。
-		// 独立 goroutine 不经过 gin 的 Recovery 中间件，必须自带 panic 兜底，
-		// 否则 wecom 包一个 panic 就会击穿整个进程
+		// 企业微信消息与 WS 提醒并存：异步发送避免同步 HTTP 阻塞刷新循环，失败只记日志。
+		// 独立 goroutine 不经过 gin 的 Recovery，必须自带 panic 兜底，否则一次 panic 会击穿整个进程
 		if wecom.Enabled() {
 			content := buildWecomText(snap, r, now)
 			stockCode := r.StockCode
@@ -468,8 +446,7 @@ func checkAlerts(userID int64, ctx context.Context) {
 
 // isHit 判断单条规则是否命中行情快照
 func isHit(r AlertRule, snap *quote.StockSnapshot) bool {
-	// 停牌 / 自建接口返 0 时价格是 0：0 <= 任意正阈值会让「跌破」类规则恒真，
-	// 用户会收到假提醒。没行情就不判
+	// 停牌 / 自建接口返 0 时价格为 0，0 <= 正阈值会让「跌破」类规则恒真，用户会收到假提醒；没行情就不判
 	if snap == nil || snap.Price.IsZero() {
 		return false
 	}
@@ -484,8 +461,8 @@ func isHit(r AlertRule, snap *quote.StockSnapshot) bool {
 		// 前端填的是「跌多少」的正数，比较时取负
 		return snap.ChangePercent.LessThanOrEqual(r.Threshold.Neg())
 	case CondVolume:
-		// 行情快照里没有成交量字段，成交量异动只存规则、暂不自动判触发。
-		// 等 quote 补上成交量与 N 日均量数据后，在这里补上比较逻辑即可
+		// 快照里没有成交量字段，成交量异动只存规则、暂不自动判触发；
+		// 等 quote 补上成交量与 N 日均量后在这里补比较逻辑即可
 		return false
 	default:
 		return false
@@ -494,8 +471,8 @@ func isHit(r AlertRule, snap *quote.StockSnapshot) bool {
 
 /* ===================== 内部工具 ===================== */
 
-// toAlertItem 组装返回项，顺带附上 Redis 里的当前价与涨跌幅；
-// 缓存没命中时这两个字段为 nil，前端据此显示「暂无报价」
+// toAlertItem 组装返回项，附 Redis 里的当前价与涨跌幅；
+// 缓存未命中时这两个字段为 nil，前端据此显示「暂无报价」
 func toAlertItem(r AlertRule, snap *quote.StockSnapshot) AlertItem {
 	item := AlertItem{
 		ID:             r.ID,
@@ -521,7 +498,7 @@ func toAlertItem(r AlertRule, snap *quote.StockSnapshot) AlertItem {
 	return item
 }
 
-// alertLockKey 提醒防抖锁：alert:lock:{user_id}:{stock_code}:{condition_type}
+// alertLockKey 防抖锁键：alert:lock:{user_id}:{stock_code}:{condition_type}，
 // 带上条件类型，同一股票的多条不同条件规则互不干扰
 func alertLockKey(userID int64, r AlertRule) string {
 	return fmt.Sprintf("alert:lock:%d:%s:%s", userID, r.StockCode, r.ConditionType)
@@ -570,8 +547,8 @@ func parseThreshold(condType, raw string) (decimal.Decimal, string) {
 }
 
 // normalizeVolumeBase 只有成交量异动需要基准周期，且必须在 5 / 10 / 20 内；
-// 其他条件一律归 0，避免库里留下无意义的取值。
-// 成交量条件下传 0 表示「用默认值 20 日均量」，不是报错
+// 其他条件一律归 0，避免库里留下无意义取值。
+// 成交量条件下传 0 表示「用默认 20 日均量」，不是报错
 func normalizeVolumeBase(condType string, n int) (int, string) {
 	if condType != CondVolume {
 		return 0, ""
@@ -585,14 +562,13 @@ func normalizeVolumeBase(condType string, n int) (int, string) {
 	return n, ""
 }
 
-// normalizeCondition 条件类型统一小写去空格：与 CheckFrequency 的处理一致，
+// normalizeCondition 条件类型统一小写去空格（与 CheckFrequency 一致），
 // 否则 " price_up" 会被判成非法
 func normalizeCondition(t string) string {
 	return strings.ToLower(strings.TrimSpace(t))
 }
 
-// buildWecomText 组装企业微信文本消息内容。
-// 字段与 WebSocket 推送保持一致；text 类型不渲染 markdown，故用纯文本
+// buildWecomText 组装企业微信文本消息；字段与 WS 推送一致，text 类型不渲染 markdown，故用纯文本
 func buildWecomText(snap *quote.StockSnapshot, r AlertRule, t time.Time) string {
 	name := r.StockName
 	if name == "" {
@@ -608,7 +584,7 @@ func buildWecomText(snap *quote.StockSnapshot, r AlertRule, t time.Time) string 
 	return b.String()
 }
 
-// conditionLabel 条件类型的中文描述，用于企业微信消息文案
+// conditionLabel 条件类型的中文描述，用于企业微信文案
 func conditionLabel(condType string) string {
 	switch condType {
 	case CondPriceUp:

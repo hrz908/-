@@ -6,7 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// 提醒条件枚举：与小程序「新增提醒」弹窗的触发条件一一对应。
+// 提醒条件枚举，与小程序「新增提醒」弹窗的触发条件一一对应；
 // 集中定义，业务代码里不出现魔法字符串
 const (
 	CondPriceUp   = "price_up"   // 价格突破：最新价 >= 阈值
@@ -41,14 +41,13 @@ func ValidVolumeBase(n int) bool {
 	return n == 5 || n == 10 || n == 20
 }
 
-// AlertRule 对应 alert_rule 表。
-// 查询 / 更新 / 删除都必须带 user_id 过滤，防止跨用户操作
+// AlertRule 对应 alert_rule 表；查询 / 更新 / 删除都必须带 user_id 过滤，防跨用户操作
 type AlertRule struct {
 	ID        int64  `gorm:"primaryKey;column:id" json:"id"`
 	UserID    int64  `gorm:"column:user_id;not null;uniqueIndex:uk_alert_user_stock_cond,priority:1;index:idx_alert_user" json:"user_id"`
 	StockCode string `gorm:"column:stock_code;type:varchar(20);not null;uniqueIndex:uk_alert_user_stock_cond,priority:2" json:"stock_code"`
 	// 唯一索引第三段：应用层「先查后建」挡不住并发，
-	// 同一用户同一股票同一条件只允许一条，交给 DB 约束兜底
+	// 同用户同股票同条件只允许一条，交给 DB 约束兜底
 	ConditionType   string          `gorm:"column:condition_type;type:varchar(20);not null;uniqueIndex:uk_alert_user_stock_cond,priority:3" json:"condition_type"`
 	Threshold       decimal.Decimal `gorm:"column:threshold;type:numeric(18,4);not null" json:"threshold"`
 	VolumeBase      int             `gorm:"column:volume_base;default:0" json:"volume_base"` // 仅成交量异动使用，其余为 0

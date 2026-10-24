@@ -1,12 +1,10 @@
-// 对话页：消息收发走 Agent SSE（services/agent.js 单例），流式 token 逐字追加；
-// 纯文本走自绘气泡 + markdown 渲染（utils/markdown.js），行情/K 线这类结构化数据走自绘卡片消息
-// 「新对话」压栈本页新实例：每实例一条独立 session + 独立消息状态，见 onNewChat / NEW_CHAT_URL
+// 对话页：消息收发走 Agent SSE（services/agent.js 单例），token 逐字追加；
+// 纯文本走自绘气泡 + markdown（utils/markdown.js），行情/K线等结构化数据走自绘卡片消息；
+// 「新对话」压栈本页新实例，每实例一条独立 session + 独立消息状态（见 onNewChat / NEW_CHAT_URL）。
 
-// 注意：这里只能用默认导入。「默认 + 命名」混合导入会让 devtools 的
-// SWC 热编译引入 @swc/runtime/_interop_require_wildcard，该运行时在
-// 本项目里不存在，chat.js 会在加载时直接抛错、整个页面的方法全部丢光
-// （表现为 WXML 正常渲染但点击全部无效）。取 session_id 走单例方法
-// agentSocket.freshSessionId()，不要改成 import { generateSessionId }
+// 注意：这里只能用默认导入。「默认 + 命名」混合导入会让 devtools 的 SWC 热编译引入
+// @swc/runtime/_interop_require_wildcard（本项目不存在），chat.js 加载即抛错、页面方法全丢
+//（表现为 WXML 正常渲染但点击全部无效）。session_id 走 agentSocket.freshSessionId()。
 import agentSocket from '../../services/agent';
 import { transcribe, AsrStream } from '../../services/asr';
 import {
@@ -53,25 +51,19 @@ const SEND_TIMEOUT_MS = 45000;
 // 对话列表底部锚点：scroll-into-view 滚动到它即可到达列表末尾
 const CHAT_BOTTOM_ID = 'chat-bottom';
 
-// 输入栏胶囊高度（rpx）：取「两行」时的高度，见 chat.wxss 的 .sender-bar
-//   .sender-bar 内边距 8rpx×2 + 边框 2rpx×2 = 20rpx
-//   .bar-field 内边距 14rpx×2 = 28rpx
-//   .bar-input 两行 88rpx（line-height 44rpx × 2，超出内部滚动）
-//   合计 136rpx；单行时会被 min-height 96rpx 兜住
-// 按最大高度预留，首屏才不会把最后一条消息盖住（onReady 实测后会按真实高度修正）
+// 输入栏胶囊高度（rpx）：按「两行」预估，见 chat.wxss 的 .sender-bar。
+// 首屏按最大高度预留才不会盖住最后一条消息，onReady 实测后会按真实高度修正。
 const SENDER_BAR_RPX = 136;
 // 胶囊上方留白（rpx）：取自 .sender-wrap 的 padding-top（--sp-2）
 const SENDER_PAD_TOP_RPX = 16;
-// 胶囊下方留白（rpx）：取自 .sender-bar 的 margin-bottom（--sp-2），
-// 让胶囊整体离屏幕底边上移一档。与 chatHeight 的估算一起算，
-// 否则首帧会少让出这 8px（onReady 实测后会修正，但首帧会抖一下）
+// 胶囊下方留白（rpx）：取自 .sender-bar 的 margin-bottom（--sp-2）；
+// 必须与 chatHeight 的估算一起算，否则首帧会少让出这 8px
 const SENDER_BAR_MARGIN_BOTTOM_RPX = 16;
-// 卡片外边距：自绘胶囊后没有组件外边距了，只保留底部与安全区之间的这段距离
+// 卡片外边距：自绘胶囊后没有组件外边距了，只保留底部与安全区之间的距离
 const SENDER_MARGIN_TOP_RPX = 0;
 const SENDER_MARGIN_BOTTOM_PX = 12;
-// 对话区底边与输入栏卡片之间的间距（rpx）。
-// 原值 29 里含组件 margin-top 的 24rpx；margin-top 归零后改为 5，
-// 卡片是底部锚定的，这里不同步减的话那段空隙会原样留着
+// 对话区底边与输入栏卡片之间的间距（rpx）：原值 29 含组件 margin-top 的 24rpx，
+// margin-top 归零后改为 5，不同步减会留下那段空隙
 const SENDER_GAP_RPX = 5;
 // 键盘弹起时，输入栏在键盘顶边之上再抬的间距（rpx）。
 // 只按键盘高度上抬的话，胶囊底边正好压在键盘顶边上：机型不同（键盘高度、
@@ -1083,16 +1075,14 @@ Page({
     this.scrollToBottom({ force: true });
     this._armSendWatchdog();
 
-    // 通过 SSE 发送；每次提问开一条独立流，agentSocket 内部负责解析事件。
-    // 传入本页实例的 session_id（后端按它拼 thread_id），并记下本轮 rid：
-    // 回来的事件只渲染本页自己发起的这一轮
+    // 通过 SSE 发送：每次提问开一条独立流；传入本页 session_id（后端据此拼 thread_id），
+    // 并记下本轮 rid，回来的事件只渲染本页发起的这一轮
     this._myReqId = agentSocket.sendMessage(text, this._sessionId);
   },
 
-  // 发送看门狗：sending 只在 done / error 里复位，服务没起、WS 没连上或消息被缓存
-  // 却始终没建立连接时，这两个事件永远不来，sending 就一直为 true，
-  // 之后每次发送都被 sendText 开头那句静默吞掉 —— 表现为「点了发送没反应」。
-  // 收到第一个 token 说明链路活着，立刻撤掉（见 _appendToken）
+  // 发送看门狗：sending 只在 done / error 复位；服务没起或连接始终没建立时这两个事件
+  // 永远不来，sending 一直为 true、后续发送被静默吞掉（表现为「点了发送没反应」）。
+  // 收到第一个 token 即说明链路活着，立刻撤掉（见 _appendToken）
   _armSendWatchdog() {
     this._clearSendWatchdog();
     this._sendWatchdog = setTimeout(() => {
@@ -1518,17 +1508,11 @@ Page({
     this.setData({ drawerOpen: false });
   },
 
-  // 新对话：与菜单项同一套「先收抽屉、动画结束再跳转」的节奏，
-  // 但多一步「先注册、再跳转」——注册成功才压栈新对话页。
-  //
-  // 状态机（加载中 / 成功 / 失败），三态都反馈到按钮上（wxml 按 newChatting 切换）：
-  // - 加载中：newChatting 置 true，按钮转圈 + 文案换「创建中…」，同时挡住连点。
-  //   抽屉不等网络，照旧立即开始收起，点击手感不受注册耗时影响
-  // - 成功（createSession resolve）：等抽屉收起动画结束（onDrawerLeaved）再压栈
-  // - 失败（reject：网关 502 / 网络异常 / 登录失效）：toast 提示并留在原会话，
-  //   不跳转——宁可让用户再点一次，也不要跳进一条没注册的会话
-  // 兜底：注册失败也不影响对话本身，首条消息发出时 Go 网关仍会补注册
-  // （registerSession），这条路径只影响「空会话是否立刻出现在历史列表」
+  // 新对话：先收抽屉、动画结束再跳转，中间多一步「先注册、成功才压栈新对话页」。
+  // 三态都反馈到按钮（wxml 按 newChatting 切换）：创建中挡连点、抽屉照旧立即收起；
+  // 成功等 onDrawerLeaved 再压栈；失败（网关 502 / 网络异常 / 登录失效）toast 并留在原会话，
+  // 宁可让用户再点一次，也不要跳进一条没注册的会话。
+  // 兜底：注册失败不影响对话本身，首条消息发出时 Go 网关仍会 registerSession 补注册。
   onNewChat() {
     if (this.data.newChatting) return; // 连点闸门：一次点击 = 一条会话
     const sid = agentSocket.freshSessionId();

@@ -6,9 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// UserWatchlist 对应 user_watchlist 表。
-// 唯一索引 (user_id, stock_code) 由标签声明，AutoMigrate 时建立，
-// 也是「添加自选股」Upsert 的冲突判定依据
+// UserWatchlist 对应 user_watchlist 表；唯一索引 (user_id, stock_code) 由标签声明、
+// AutoMigrate 建立，也是添加自选 Upsert 的冲突判定依据
 type UserWatchlist struct {
 	ID        int64           `gorm:"primaryKey;column:id" json:"id"`
 	UserID    int64           `gorm:"column:user_id;not null;uniqueIndex:uk_user_stock,priority:1" json:"user_id"`

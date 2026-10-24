@@ -22,13 +22,12 @@ import (
 	"stock-agent-server/internal/upload"
 )
 
-// 昵称长度上限，与小程序侧 NICKNAME_MAX 保持一致。
+// nicknameMax 昵称长度上限，与小程序侧 NICKNAME_MAX 一致；
 // 按字符数算（中文一个字算一个），用 utf8.RuneCountInString 而不是 len
 const nicknameMax = 10
 
-// avatarMaxBytes 头像大小上限 2MB。
-// 加 1KB 余量给 multipart 的头与边界：实际写入的字节数受这个总上限约束，
-// 否则客户端改一下头部的 size 字段就能绕过校验
+// avatarMaxBytes 头像上限 2MB。多出的 1KB 余量给 multipart 头与边界：
+// 实际写入字节数受这个总上限约束，否则客户端改一下头部 size 字段就能绕过校验
 const avatarMaxBytes = 2<<20 + 1024
 
 // avatarPrefix 头像在库中只允许存这个前缀下的站内路径：
@@ -104,14 +103,14 @@ func UpdateProfile(c *gin.Context) {
 }
 
 // UploadAvatar POST /api/v1/user/avatar
-// 小程序用 wx.uploadFile 发 multipart，字段名为 file。
+// 小程序用 wx.uploadFile 发 multipart，字段名为 file；
 // 返回站内相对路径，前端拼上后端基地址即可显示
 func UploadAvatar(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
 
-	// 请求体总大小先卡住：file.Size 来自 multipart 头部，是客户端可控字段，
-	// 真正限制要靠读的时候不超量
+	// 请求体总大小先卡住：file.Size 来自 multipart 头部、客户端可控，
+	// 真正的限制要靠读取时不超量
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, avatarMaxBytes)
 
 	file, err := c.FormFile("file")
@@ -153,7 +152,7 @@ func UploadAvatar(c *gin.Context) {
 
 	if err := deps.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("avatar", rel).Error; err != nil {
 		log.Printf("update avatar failed: user=%d err=%v", userID, err)
-		// 回滚刚落盘的文件，别让磁盘上留一个没人引用的孤儿
+		// 回滚刚落盘的文件，别在磁盘上留一个没人引用的孤儿
 		if rmErr := os.Remove(upload.AvatarPath(name)); rmErr != nil {
 			log.Printf("rollback avatar file failed: name=%s err=%v", name, rmErr)
 		}
@@ -168,7 +167,7 @@ func UploadAvatar(c *gin.Context) {
 	resp.OK(c, gin.H{"avatar_url": rel})
 }
 
-// current 取当前登录用户。取不到（未登录 / 用户不存在）时自行写回响应
+// current 取当前登录用户；取不到（未登录 / 用户不存在）时自行写回响应
 func current(c *gin.Context) (*model.User, bool) {
 	ctx := c.Request.Context()
 	userID := c.GetInt64("user_id")
@@ -203,8 +202,7 @@ func isSafeAvatar(p string) bool {
 	return name != "" && !strings.Contains(name, "/")
 }
 
-// removeAvatarFile 按站内路径删掉磁盘上的头像文件。失败只记日志：
-// 清理是尽力而为，不该让主流程失败
+// removeAvatarFile 按站内路径删磁盘上的头像文件；清理是尽力而为，失败只记日志、不影响主流程
 func removeAvatarFile(rel string) {
 	if !isSafeAvatar(rel) {
 		return

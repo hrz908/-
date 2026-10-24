@@ -9,12 +9,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// tokenTTL 登录 token 有效期（默认 7 天，由 Init 按配置覆盖）
+// tokenTTL 登录 token 有效期，默认 7 天，由 Init 按配置覆盖
 var tokenTTL = 7 * 24 * time.Hour
 
 var jwtSecret = []byte("please-change-me")
 
-// Init 注入密钥与有效期，main 启动时调用一次
+// Init 注入密钥与有效期，main 启动时调用一次。
 func Init(secret string, ttl time.Duration) {
 	if secret != "" {
 		jwtSecret = []byte(secret)
@@ -25,7 +25,6 @@ func Init(secret string, ttl time.Duration) {
 }
 
 // ParseToken 解析并校验 JWT，返回 user_id。
-// 契约与提示词一致：parseToken(tokenStr) (int64, error)
 func ParseToken(tokenStr string) (int64, error) {
 	if tokenStr == "" {
 		return 0, errors.New("empty token")
@@ -50,7 +49,7 @@ func ParseToken(tokenStr string) (int64, error) {
 	}
 }
 
-// SignToken 签发 JWT（登录接口用）
+// SignToken 签发 JWT（登录接口用）。
 func SignToken(userID int64) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{

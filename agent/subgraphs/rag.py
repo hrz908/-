@@ -1,15 +1,13 @@
 r"""RAG 混合检索子图（RAG 漏斗）。
 
 流程: hybrid_retrieve -> sufficiency_check --(命中)--> generate_with_citations -> END
-                                          \--(不足)--> escalate(设 intent=stock_agent) -> END
+                                         \--(不足)--> escalate(设 intent=stock_agent) -> END
 
-sufficiency_check 两级判定：
-1. 阈值闸: 最高分 < RAG_THRESHOLD 或有效片段 < 2 -> 未命中；
-2. LLM 判读: 过阈值的片段交给小模型判断「能否回答」（prompts/rag_judge.xml），
-   避免主题相似但答非所问（问实时股价却检索到投教文章）。
-未命中时把 intent 改成 "stock_agent"，由主图条件边重路由到炒股 agent 子图。
-generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发射 sources 事件
-（数据格式 {"docs": [{title, chunk_id, score}]}，与前端和 Go 事件协议一致）。
+sufficiency_check 两级判定：阈值闸（最高相似度 < RAG_THRESHOLD 或有效片段 < 2 即未命中）；
+过阈值后再交小模型判读「能否回答」（prompts/rag_judge.xml），避免主题相似但答非所问
+（问实时股价却检索到投教文章）。未命中时置 intent=stock_agent，由主图重路由到炒股 agent 子图。
+generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发 sources 事件
+（{"docs":[{title, chunk_id, score}]}，与前端和 Go 事件协议一致）。
 """
 import logging
 from datetime import datetime
@@ -71,7 +69,7 @@ async def _judge_can_answer(query: str, retrieved: list) -> bool:
     """LLM 判读检索片段能否回答用户问题。
 
     判官缺席（模型异常 / 结构化输出失败）时按「能」处理，退回纯阈值口径：
-    宁可沿用原行为出引用回答，也不因为判读故障把所有问题都甩给取数 agent。
+    宁可沿用原行为出引用回答，也不因判读故障把所有问题都甩给取数 agent。
     """
     sep = chr(10) * 2
     passages = sep.join(
@@ -94,16 +92,12 @@ async def _judge_can_answer(query: str, retrieved: list) -> bool:
 
 
 async def sufficiency_check(state: dict) -> dict:
-    """判断检索是否充分。不足则升级 intent=stock_agent 让主图重路由。
+    """判断检索是否充分，不足则置 intent=stock_agent 让主图重路由。
 
-    两级判定（LangGraph 架构 §4.2）：
-    1. 阈值闸（便宜）：最高相似度 < RAG_THRESHOLD 或有效片段 < 2 -> 未命中；
-    2. LLM 判读（准）：过阈值的片段交给小模型判断「能否回答问题」，避免主题
-       相似但答非所问（问实时股价却检索到投教文章）。
-    判读异常按「命中」处理，退回纯阈值口径，不阻断链路。
-    用余弦相似度 similarity 而非 RRF 融合分 score 来判定：
-    score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），无法衡量相关性；
-    similarity 才与 RAG_THRESHOLD 同尺度（bge-m3 的 query↔chunk 相关命中约 0.2~0.5）。
+    两级判定：阈值闸（便宜）——最高相似度 < RAG_THRESHOLD 或有效片段 < 2 即未命中；
+    LLM 判读（准）——过阈值的片段交小模型判「能否回答」，判读异常按命中处理、不阻断链路。
+    用 similarity 而非 RRF 融合分 score 判定：score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），
+    无法衡量相关性；similarity 才与 RAG_THRESHOLD 同尺度（bge-m3 相关命中约 0.2~0.5）。
     """
     retrieved = state.get("retrieved", []) or []
     top_sim = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)
@@ -152,13 +146,13 @@ async def generate_with_citations(state: dict) -> dict:
         "score": c.get("score", 0.0),
     } for c in citations]})
 
-    # 带上最近对话历史（复用 recent_turns 统一口径，跳过当前问题避免重复），让回答衔接上下文
+    # 带上最近历史让回答衔接上下文（复用 recent_turns 统一口径，跳过当前问题避免重复）
     messages = [SystemMessage(content=prompt)]
     messages.extend(recent_turns(state, 6, query=query))
     messages.append(HumanMessage(content=state.get("query", "") or query))
 
     llm = get_llm(streaming=True, temperature=0.3)
-    # 流式生成：节点内 astream 逐块生成，用 stream writer 显式发 token 事件
+    # 流式生成：逐块 emit token，同时累加成完整 AIMessage 写回 state
     parts = []
     async for chunk in llm.astream(messages):
         if isinstance(chunk.content, str) and chunk.content:

@@ -12,9 +12,9 @@ import (
 	"stock-agent-server/internal/domain/stockcode"
 )
 
-// QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出
-// 开高低、涨跌额、量额、换手率、市值、PE/PB、状态与时间，供行情详情页
-// 与 Agent 同业对比工具使用（全部来自腾讯当日快照，无需额外数据源）
+// QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出开高低、涨跌额、量额、
+// 换手率、市值、PE/PB、状态与时间，供行情详情页与 Agent 同业对比工具使用
+// （全部来自腾讯当日快照，无需额外数据源）。
 type QuoteDetail struct {
 	Code          string          `json:"code"`
 	Name          string          `json:"name"`
@@ -36,8 +36,8 @@ type QuoteDetail struct {
 }
 
 // FetchDetail 拉单只股票的完整行情。
-// 配置了自建行情源时降级复用 FetchOne（自建接口只约定了 4 个字段），
-// 缺的量额等字段置零；内置腾讯源则直接解析全字段
+// 配置了自建行情源时降级复用 FetchOne（自建接口只约定 4 个字段），缺的量额等字段置零；
+// 内置腾讯源则直接解析全字段。
 func FetchDetail(ctx context.Context, code string) (*QuoteDetail, error) {
 	if quoteAPIBase != "" {
 		snap, err := FetchOne(ctx, code)
@@ -149,8 +149,7 @@ func parseTencentDetails(body string) []*QuoteDetail {
 	return out
 }
 
-// formatQuoteTime 把腾讯的紧凑时间串（20261020150003）转成可读格式；
-// 长度不符时原样返回，不做臆测
+// formatQuoteTime 把紧凑时间串（20261020150003）转成可读格式；长度不符时原样返回，不做臆测。
 func formatQuoteTime(raw string) string {
 	if len(raw) != 14 {
 		return raw
@@ -161,9 +160,8 @@ func formatQuoteTime(raw string) string {
 // shanghaiLoc A 股行情时间基准时区
 var shanghaiLoc = time.FixedZone("CST", 8*3600)
 
-// marketStatus 按交易时段粗判市场状态：仅覆盖常规时段
-// （周一至五 9:30-11:30 / 13:00-15:00），不含节假日日历——
-// 详情页展示用，精确到「是否交易时段」已足够，不值得为此维护节假日表
+// marketStatus 按交易时段粗判市场状态（周一至五 9:30-11:30 / 13:00-15:00），不含节假日日历：
+// 详情页只需区分「是否交易时段」，不值得为此维护节假日表。
 func marketStatus(now time.Time) string {
 	t := now.In(shanghaiLoc)
 	if wd := t.Weekday(); wd == time.Saturday || wd == time.Sunday {

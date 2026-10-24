@@ -1,8 +1,8 @@
 """纯对话子图：单节点流式生成，无工具、无检索。
 
-用 prompts/chat.xml 作为 system，携带最近对话历史，直接流式产出回答。
+用 prompts/chat.xml 作 system、携带最近历史直接流式产出；
 token 在 astream 循环里显式 emit("token", ...) 经 main.py 的 custom 模式透传，
-不再依赖 LangGraph 的 messages 流模式（避免双重发射）。
+不依赖 LangGraph 的 messages 流模式（避免双重发射）。
 """
 from datetime import datetime
 
@@ -25,8 +25,7 @@ async def llm_stream(state: dict) -> dict:
     msgs = [SystemMessage(content=system)] + history
 
     llm = get_llm(streaming=True, temperature=0.7)
-    # 流式生成：节点内 astream 逐块生成，用 stream writer 显式发 token 事件
-    #（main.py 的 custom 模式透传），同时累加成完整 AIMessage 写回 state
+    # 流式生成：逐块 emit token（经 custom 模式透传），同时累加成完整 AIMessage 写回 state
     parts = []
     async for chunk in llm.astream(msgs):
         if isinstance(chunk.content, str) and chunk.content:

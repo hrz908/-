@@ -8,9 +8,8 @@ import (
 	"stock-agent-server/internal/hook"
 )
 
-// subscribe 保证「行情已更新」事件只订阅一次。
-// Register 理论上只会在启动时调用一次，这里加 Once 是防止误调用导致
-// 同一条提醒被检查两遍（配合 SetNX 才不会推重）
+// subscribe 保证「行情已更新」事件只订阅一次。Register 理论只在启动时调用一次，
+// 加 Once 是防误调用导致同一条提醒被检查两遍（配合 SetNX 才不会推重）
 var subscribe sync.Once
 
 func subscribeOnce() {

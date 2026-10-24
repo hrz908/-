@@ -26,9 +26,8 @@ type Body struct {
 	Data    any    `json:"data"`
 }
 
-// Resp 即提示词约定的 resp(c, code, msg, data)。
-// 中间件和 Handler 都复用它，保证返回结构始终一致；
-// 是否中断请求由调用方决定（中间件里自行 c.Abort()）
+// Resp 统一响应入口，中间件与 Handler 共用，保证结构一致；
+// 是否中断请求由调用方决定（中间件里自行 c.Abort()）。
 func Resp(c *gin.Context, code int, msg string, data any) {
 	c.JSON(Status(code), Body{Code: code, Message: msg, Data: data})
 }
@@ -37,14 +36,13 @@ func OK(c *gin.Context, data any) { Resp(c, CodeOK, "ok", data) }
 
 func Fail(c *gin.Context, code int, msg string) { Resp(c, code, msg, nil) }
 
-// JSONBytes 序列化统一响应体。
-// 用于「同一份响应既要写缓存、又要返回」的场景（如股票搜索），
-// 保证缓存内容与真实响应逐字节一致，避免两边各写一份结构漂移
+// JSONBytes 序列化统一响应体，用于「同一份响应既写缓存又返回」的场景（如股票搜索），
+// 保证缓存内容与真实响应逐字节一致，避免两边结构漂移。
 func JSONBytes(code int, msg string, data any) ([]byte, error) {
 	return json.Marshal(Body{Code: code, Message: msg, Data: data})
 }
 
-// Status 业务码 → HTTP 状态码；code=0 一律 200
+// Status 业务码 → HTTP 状态码；code=0 一律 200。
 func Status(code int) int {
 	switch code {
 	case CodeOK:

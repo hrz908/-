@@ -1,14 +1,13 @@
 // Package model 存放跨模块共享的数据模型。
 //
-// User 同时被「登录」（按 openid 建号）和「用户资料」（读写昵称头像）两个
-// 模块使用。放在这里而不是其中任何一个 module 里，是为了避免模块之间互相
-// import（README 的分层约定：module/xxx 是业务，不横向依赖）
+// User 同时被「登录」（按 openid 建号）与「用户资料」（读写昵称头像）两个模块使用；
+// 放在这里避免模块之间横向 import（README 分层约定：module/xxx 是业务，不横向依赖）
 package model
 
 import "time"
 
 // User 对应 users 表：一个微信用户一行，openid 唯一。
-// 微信不提供微信号（wx.login 只给 openid），所以这里不存 wechat_id
+// 微信不提供微信号（wx.login 只给 openid），故不存 wechat_id
 type User struct {
 	ID        int64     `gorm:"primaryKey;column:id"`
 	OpenID    string    `gorm:"column:openid;type:varchar(64);not null;uniqueIndex"`

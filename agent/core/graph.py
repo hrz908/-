@@ -12,7 +12,7 @@ post -> END
 
 route_by_intent 是纯函数，仅读取 state["intent"]，异常/未知一律回退 clarify。
 
-意图口径（LangGraph 架构 2026-10-23）：
+意图口径：
 - stock      : 一切股票问题，统一先进 RAG 漏斗，命中带引用直接作答；
 - stock_agent: 内部意图，rag 两级判定（阈值 + LLM 判读）未命中时写入，
                由 route_after_rag 重路由到炒股 agent 子图（MCP 工具取数）；
@@ -40,7 +40,7 @@ def route_after_guardrail(state: dict) -> Literal['clarify', 'rewrite']:
 
 
 def route_by_intent(state: dict) -> Literal['stock', 'chat', 'off_topic', 'clarify']:
-    """纯函数路由：按 intent 分派到对应子图/节点；未知一律回退 clarify。"""
+    """纯函数路由：按 intent 分派；未知一律回退 clarify。"""
     intent = state.get('intent', '')
     return intent if intent in _CLASSIFY_INTENTS else 'clarify'
 

@@ -1,5 +1,5 @@
-// 包名取 authapi：与 internal/auth（JWT 签发/解析）区分开，
-// 这个包是「登录接口」这个业务模块
+// 包名取 authapi，与 internal/auth（JWT 签发/解析）区分开，
+// 这个包是「登录接口」业务模块
 package authapi
 
 import (
@@ -28,17 +28,15 @@ type LoginResp struct {
 	UserID   int64  `json:"user_id"`
 	Nickname string `json:"nickname"`
 	Avatar   string `json:"avatar"`
-	// 是不是本次刚建的号。前端靠它分流：
-	// false 且已有资料 → 直接登录、不打扰用户；
-	// true → 才引导用户去补头像昵称
+	// IsNew 是否本次刚建的号，前端据此分流：
+	// false 且已有资料 → 直接登录不打扰；true → 才引导补头像昵称
 	IsNew bool `json:"is_new"`
 }
 
 // Login POST /api/v1/auth/login
-// 只做身份认证：code → openid → 查/建用户 → 签发 JWT，并把库里已有的资料一并返回。
-// 不接收 nickname/avatar：头像昵称是微信的用户权限数据，得先拿到身份、
-// 确认库里确实没有，才值得让用户去授权；每次登录都重选一遍纯属打扰。
-// 补齐资料走 PUT /user/profile（那时已经有 token 了）
+// 只做身份认证：code → openid → 查/建用户 → 签发 JWT，并回传库里已有资料。
+// 不接收 nickname/avatar：那是微信的用户权限数据，得先拿到身份、确认库里没有才值得让用户授权；
+// 补齐资料走 PUT /user/profile（那时已有 token）
 func Login(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -79,7 +77,7 @@ func Login(c *gin.Context) {
 }
 
 // openIDOf code → openid。
-// 配了 AppID/Secret 就走微信；没配就退化为固定演示账号，
+// 配了 AppID/Secret 就走微信；没配则退化为固定演示账号，
 // 保证本地没接微信时也能把链路（登录 → 建号 → 存资料）跑通
 func openIDOf(code string) (string, error) {
 	if wechat.Enabled() {
@@ -90,16 +88,15 @@ func openIDOf(code string) (string, error) {
 		return session.OpenID, nil
 	}
 	// 演示账号：所有人共用同一个 openid，方便本地联调。
-	// 注意这与旧实现（把 code 哈希成 uid）不同——旧做法每次登录都是一个新账号，
-	// 资料会丢；改成固定 openid 后同一个演示账号的资料能留住。
-	// prod 环境由 main 强制要求配置微信凭据，不会走到这里
+	// 旧实现把 code 哈希成 uid，每次登录都是新账号、资料会丢；
+	// prod 环境由 main 强制要求微信凭据，不会走到这里
 	return "demo", nil
 }
 
 // findOrCreateUser 按 openid 查用户，没有就建（返回 isNew=true）。
-// 已有的用户原样返回，一个字段都不动——重复登录不该改动用户自己设好的资料。
-// 新建时昵称先用默认值占位：真正的值要等用户在前端授权后再由 PUT /user/profile 覆盖，
-// 默认值同时是前端判断「资料还没完善」的依据（与前端的 DEFAULT_NICKNAME 保持一致）
+// 已有用户原样返回、一个字段都不动——重复登录不该改动用户自己设好的资料。
+// 新建时昵称用默认值占位，真正的值等用户授权后由 PUT /user/profile 覆盖，
+// 该默认值同时是前端判断「资料未完善」的依据（与前端 DEFAULT_NICKNAME 一致）
 func findOrCreateUser(ctx context.Context, openid string) (*model.User, bool, error) {
 	var u model.User
 	err := deps.DB.WithContext(ctx).Where("openid = ?", openid).First(&u).Error
@@ -109,9 +106,8 @@ func findOrCreateUser(ctx context.Context, openid string) (*model.User, bool, er
 		return &u, false, nil
 
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		// 并发首次登录时两个请求都会走到这里：用 OnConflict DoNothing 让
-		// 后到者静默跳过（撞 uk_users_openid），再查一次拿回已有行，
-		// 否则它会拿到一个 500
+		// 并发首次登录时两个请求都会走到这里：用 OnConflict DoNothing 让后到者静默跳过
+		// （撞 uk_users_openid），再查一次拿回已有行，否则它会拿到 500
 		nu := model.User{OpenID: openid, Nickname: "微信用户"}
 		if err := deps.DB.WithContext(ctx).
 			Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "openid"}}, DoNothing: true}).

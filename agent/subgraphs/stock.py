@@ -6,21 +6,19 @@ r"""炒股 agent 子图（有界 ReAct 循环，经 MCP 工具集 / 直连工具
        └────────────────────────────────────────────────────┘
     tool_call --(无 tool_calls / 已达轮次上限)--> synthesize --> END
 
-tool_execute 执行完工具后回到 tool_call，让模型看到工具结果再决定「继续调」还是
-「收尾作答」。这样才能完成「先 symbol_search 拿代码、再用代码 get_quote/get_valuation」
-的多跳链路。轮次由 _MAX_TOOL_ROUNDS 封顶，避免无限循环。
+tool_execute 完回到 tool_call，让模型看到结果再决定「继续调」还是「收尾作答」，
+以完成「先 symbol_search 拿代码、再用代码 get_quote/get_valuation」的多跳链路；
+轮次由 _MAX_TOOL_ROUNDS 封顶，避免无限循环。
 
-- tool_call: LLM 绑定工具，决定是否/如何调用工具（streaming=False，不外泄推理 token）。
-- tool_execute: 并发执行本轮所有 tool_calls（每个工具已内置超时 + 重试 + 失败降级），
-  每个工具调用前后发射 tool_start / tool_end 事件，产出 ToolMessage；
-  tool_results 跨轮累加（读取已有 + 本轮），保证 synthesize 能看到全部工具数据。
-- synthesize: 用 prompts/stock.xml + 累计 tool_results 流式生成最终回答，
+- tool_call: LLM 决定是否/如何调工具（streaming=False，不外泄推理 token）。
+- tool_execute: 并发执行本轮所有 tool_calls（工具内置超时 + 重试 + 降级），
+  每个调用前后发 tool_start / tool_end 事件；tool_results 跨轮累加，synthesize 能看到全部数据。
+- synthesize: 用 prompts/stock.xml + 累计 tool_results 流式生成回答，
   并把行情/K线/估值等结构化数据以 card/table 事件独立发射。
 
-工具源（LangGraph 架构 2026-10-23）：数据工具经 tools/mcp_loader 优先从
-MCP Server（FastMCP stdio）加载，失败自动回退进程内直连；另挂
-search_knowledge_base（知识库检索）供模型在循环中补充研报/概念检索。
-结构化卡片发射前过 pydantic 校验（subgraphs/cards.py），失败降级为纯文本。
+工具源：数据工具经 tools/mcp_loader 优先从 MCP Server 加载，失败自动回退进程内直连；
+另挂 search_knowledge_base 供模型补充研报/概念检索。
+卡片发射前过 pydantic 校验（subgraphs/cards.py），失败降级为纯文本。
 """
 import asyncio
 import json
@@ -45,12 +43,10 @@ from tools.rag_tool import search_knowledge_base
 
 logger = logging.getLogger("stocka.agent")
 
-# 工具调用系统提示已抽到 prompts/stock_toolcall.xml（与 chat/rag/router 同目录统一管理），
-# 由 render("stock_toolcall.xml") 注入 tool_call 节点，不在代码里硬编码长文本。
+# 工具调用系统提示在 prompts/stock_toolcall.xml，由 render() 注入 tool_call 节点，不在代码里硬编码
 
-# 多跳工具调用的轮次上限：tool_execute 每完成一轮就回到 tool_call，
-# 最多允许 _MAX_TOOL_ROUNDS 轮工具执行，超过则强制进入 synthesize，防止无限循环。
-# 3 轮足够覆盖「搜代码 -> 查行情 -> 查估值/资金流」这类常见链式取数。
+# 多跳轮次上限：tool_execute 每轮回到 tool_call，超过即强制 synthesize，防无限循环；
+# 3 轮足够覆盖「搜代码 -> 查行情 -> 查估值/资金流」这类链式取数
 _MAX_TOOL_ROUNDS = 3
 
 # 单条消息允许进入 tool_call 上下文的最大字符数（见 _current_run_messages）
@@ -58,8 +54,7 @@ _MAX_MSG_CHARS = 2000
 # synthesize 里塞进提示词的工具结果上限（字符）
 _MAX_TOOL_CHARS = 6000
 
-# 工具名 -> 中文标签（tool_start 事件用，前端展示“正在获取xx”）。
-# Tushare 增强工具也要给标签，否则前端只能显示原始工具名
+# 工具名 -> 中文标签（tool_start 事件用，前端展示「正在获取 xx」）；未登记的退回原始工具名
 _TOOL_LABELS = {
     "get_quote": "实时行情",
     "symbol_search": "股票搜索",
@@ -272,15 +267,14 @@ def _pending_nudge(state: dict) -> str:
     )
 
 
-# 有些模型（实测 DeepSeek-V3 经 SiliconFlow）有一定概率不填 tool_calls 字段，
-# 而是把函数调用写进正文：
+# 有些模型（实测 DeepSeek-V3 经 SiliconFlow）不填 tool_calls，而把函数调用写进正文：
 #     function
 #     get_quote
 #     ```json
 #     {"code":"SH600519"}
 #     ```
-# 这种「文本形态的工具调用」在图里等于没调工具：取数不会发生，
-# 回答最后变成「没取到数据」的兜底文案。这里把它还原成真正的 tool_call。
+# 这种「文本形态的工具调用」在图里等于没调工具：取数不会发生、回答退化成兜底文案，
+# 这里把它还原成真正的 tool_call。
 _TEXT_TOOL_RE = re.compile(r"function\s*\n?\s*([A-Za-z_][A-Za-z0-9_]*)")
 _TEXT_TOOL_RE2 = re.compile(r"(?:^|\n)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\n\s*\{")
 # JSON 前缀里最后一个标识符（用来找工具名）
@@ -793,9 +787,8 @@ def _no_data_fallback(state: dict, tool_results: list) -> str:
     return ""
 
 
-# 英文缩写单独匹配：改写步骤常把「估值水平」缩成「PE 和 PB」，
-# 而中文关键词表里没有这些缩写，只看中文关键词会漏判（实测漏判后模型会自己
-# 编一个失败原因，把 Tushare 的「频率超限(1次/分钟)」说成「每小时限1次」）。
+# 英文缩写单独匹配：改写步骤常把「估值水平」缩成「PE 和 PB」，中文关键词表里没有这些缩写，
+# 只看中文关键词会漏判（漏判后模型会自己编失败原因，把「频率超限(1次/分钟)」说成「每小时限1次」）。
 _DATA_ABBR_RE = re.compile(r"(?<![A-Za-z])(PE|PB|PS|ROE|EPS|TTM)(?![A-Za-z])")
 
 
@@ -910,7 +903,7 @@ async def synthesize(state: dict) -> dict:
     # 同样防超限：用户要长区间 K 线时这段 JSON 会很大，截尾保留取数结论足够作答
     if len(tr_text) > _MAX_TOOL_CHARS:
         tr_text = tr_text[:_MAX_TOOL_CHARS] + "\n…[工具结果已截断]"
-    # 失败原因单独点名：把 Tushare 原文丢给模型，它会把「频率超限(1次/分钟)」
+    # 失败原因单独点名：直接把原文丢给模型，它会把「频率超限(1次/分钟)」
     # 转述成「每小时限1次」这种假细节，这里给一句准确的中文说明让它照着转述
     reason = _failure_reason(tool_results)
     if reason:

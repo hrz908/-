@@ -1,7 +1,7 @@
 """提示词渲染与路由结果解析。
 
-render: 用「定向替换」而非 str.format 填充 {var}，避免模板里出现的花括号被误解析。
-parse_route: 解析分类节点输出的 XML（失败时兜底解析 JSON，再失败降级 clarify）。
+render: 用「定向替换」而非 str.format 填充 {var}，避免模板里的花括号被误解析。
+parse_route: 解析分类节点输出的 XML（失败兜底 JSON，再失败降级 clarify）。
 """
 import os
 import re
@@ -13,7 +13,7 @@ _PROMPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pr
 
 @lru_cache(maxsize=None)
 def load_template(name: str) -> str:
-    """读取 prompts 目录下的模板文件（带缓存）。name 如 'router.xml'。"""
+    """读取 prompts 目录下的模板（带缓存），name 如 'router.xml'。"""
     with open(os.path.join(_PROMPT_DIR, name), "r", encoding="utf-8") as f:
         return f.read()
 
@@ -35,10 +35,7 @@ def extract(tag: str, text: str):
 
 
 def parse_route(text: str) -> dict:
-    """解析路由输出，返回 {intent, confidence, reason, entities}。
-
-    优先按 XML 解析；非法/缺失时尝试 JSON；都失败降级 clarify（parse_failed）。
-    """
+    """解析路由输出 {intent, confidence, reason, entities}：优先 XML，其次 JSON，都失败降级 clarify。"""
     intent = extract("intent", text)
     if intent in {"stock", "chat", "off_topic", "clarify"}:
         try:

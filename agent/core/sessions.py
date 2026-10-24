@@ -1,21 +1,14 @@
 """会话注册表与 checkpoint 生命周期维护。
 
-背景（2026-10-24，历史对话抽屉改造）：
-前端「历史对话」需要人类可读的会话列表（标题 + 最近活跃时间），而
-LangGraph checkpointer 只有 thread_id、没有标题，且「新对话」要在首条
-消息之前就出现在列表里——因此由本模块维护一张 chat_sessions 注册表：
-
+「历史对话」需要人类可读的会话列表（标题 + 最近活跃），而 LangGraph checkpointer 只有 thread_id、
+没有标题，「新对话」又要在首条消息之前就出现在列表里——故由本模块维护 chat_sessions 注册表：
 - register（「新对话」按钮）：立即插一行占位（auto_title=true，标题「新对话」）；
-- upsert（每轮 run，由 Go 网关代理时调用）：标题替换为首条真实问题，
-  之后只更新 updated_at（标题保留首次提问，便于识别）；
+- upsert（每轮 run，由 Go 网关代理调用）：标题替换为首条真实问题，之后只更新 updated_at；
 - list / delete：历史列表读取与删除（删除联动清 checkpoints 与 Redis 摘要）。
 
-「checkpoint 无限增长」的三道闸都经这里/邻模块闭环：
-1. 消息侧裁剪：nodes/guardrail.py 每轮把 messages 裁到窗口内（blob 有界）；
-2. 版本侧裁剪：checkpointer.prune_thread_checkpoints 每轮 run 前删旧版本、
-   补回最新一份（行数有界，PostgresSaver 自身不回收旧版本）；
-3. 会话级兜底：本模块在 upsert 后淘汰单用户超过 SESSION_KEEP_MAX 的旧会话
-   （删注册行 + adelete_thread + Redis 摘要），用户也可在抽屉里手动删除。
+「checkpoint 无限增长」的三道闸在此闭环：guardrail 每轮把 messages 裁到窗口内（blob 有界）；
+prune_thread_checkpoints 每轮 run 前删旧版本、补回最新一份（行数有界）；
+本模块在 upsert 后淘汰单用户超过 SESSION_KEEP_MAX 的旧会话（删注册行 + adelete_thread + 摘要）。
 """
 import logging
 import re
@@ -61,7 +54,7 @@ def thread_id_of(user_id: str, session_id: str) -> str:
 
 
 async def ensure_sessions_table() -> None:
-    """建表（幂等）。启动时建一次；之后每个入口只做一次布尔判断。"""
+    """建表（幂等）：启动建一次，之后各入口只做一次布尔判断。"""
     global _ensured
     if _ensured:
         return
@@ -85,9 +78,8 @@ async def _ensure() -> None:
 async def upsert_session(user_id: str, session_id: str, title: str, auto_title: bool = False) -> None:
     """注册/刷新会话。auto_title=true 表示这是「新对话」占位行。
 
-    标题口径：占位行（或空标题）才会被真实提问替换；已有真实标题的会话
-    只更新 updated_at——历史列表里显示的一直是首次提问，不会跟着最新
-    一轮乱变。任何失败都只记日志：注册是旁路，绝不能阻断对话本身。
+    标题口径：只有占位行（或空标题）会被真实提问替换，已有真实标题的只更新 updated_at，
+    历史列表始终显示首次提问、不跟着最新一轮乱变。任何失败只记日志——注册是旁路，不能阻断对话。
     """
     try:
         await _ensure()
@@ -115,7 +107,7 @@ async def upsert_session(user_id: str, session_id: str, title: str, auto_title: 
 
 
 async def list_sessions(user_id: str, limit: int = SESSION_LIST_MAX) -> list:
-    """按最近活跃倒序列出会话（不含消息体，消息在切会话时按需拉取）。"""
+    """按最近活跃倒序列出会话（不含消息体，切会话时按需拉取）。"""
     await _ensure()
     async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
         async with conn.cursor() as cur:
@@ -144,9 +136,9 @@ async def list_sessions(user_id: str, limit: int = SESSION_LIST_MAX) -> list:
 async def session_messages(user_id: str, session_id: str) -> list:
     """从最新 checkpoint 取纯文本对话（切会话/恢复上下文用）。
 
-    只保留 human / ai 纯文本消息：ToolMessage（JSON 载荷）与带 tool_calls
-    的 AIMessage 对前端没有意义，还会破坏消息配对。结构化卡片不持久化
-    （checkpoint 里只有文本），恢复的会话以文本气泡呈现。
+    只保留 human / ai 纯文本：ToolMessage（JSON 载荷）与带 tool_calls 的 AIMessage
+    对前端没有意义、还会破坏消息配对。结构化卡片不持久化（checkpoint 只有文本），
+    恢复的会话以文本气泡呈现。
     """
     from core.checkpointer import get_checkpointer
 
@@ -170,7 +162,7 @@ async def session_messages(user_id: str, session_id: str) -> list:
 
 
 async def delete_session(user_id: str, session_id: str) -> bool:
-    """删除会话：注册行 + checkpoints + Redis 滚动摘要。返回是否删过。"""
+    """删除会话：注册行 + checkpoints + Redis 滚动摘要；返回是否删过。"""
     await _ensure()
     async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
         async with conn.cursor() as cur:
@@ -185,7 +177,7 @@ async def delete_session(user_id: str, session_id: str) -> bool:
 
 
 async def _drop_thread(thread_id: str) -> None:
-    """清掉一个 thread 的 checkpoint 与滚动摘要。失败只记日志。"""
+    """清掉一个 thread 的 checkpoint 与滚动摘要，失败只记日志。"""
     try:
         from core.checkpointer import get_checkpointer
 
@@ -203,10 +195,10 @@ async def _drop_thread(thread_id: str) -> None:
 
 
 async def _evict_old_sessions(user_id: str) -> None:
-    """单用户会话数超上限时淘汰最旧的（按 updated_at）。
+    """单用户会话数超上限时按 updated_at 淘汰最旧的。
 
-    没有这道闸，会话数本身也会无限增长。限额取足（默认 50），
-    正常使用永远碰不到；碰到的场景是脚本/误用。
+    没有这道闸，会话数本身也会无限增长。限额取足（默认 50），正常使用碰不到；
+    碰到的场景是脚本 / 误用。
     """
     async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
         async with conn.cursor() as cur:

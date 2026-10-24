@@ -1,7 +1,7 @@
 """子图公共能力：结构化事件（card/table）发射。
 
-结构化数据（行情卡片、K线表格）必须走独立的 custom 事件，绝不混入 token 流。
-用 langgraph 的 stream writer 发射；writer 不可用时静默降级（不阻断生成）。
+结构化数据（行情卡片、K线表格）必须走独立的 custom 事件，绝不混入 token 流；
+用 langgraph 的 stream writer 发射，writer 不可用时静默降级（不阻断生成）。
 """
 from typing import Any
 

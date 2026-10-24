@@ -41,8 +41,8 @@ func postFile(r *gin.Engine, body []byte) *httptest.ResponseRecorder {
 	return rec
 }
 
-// fakeUpstream：模拟 OpenAI 兼容的 /audio/transcriptions。
-// 校验鉴权头与 model 字段，再把收到的音频原样回给断言用
+// fakeUpstream 模拟 OpenAI 兼容的 /audio/transcriptions：
+// 校验鉴权头与 model 字段，并把收到的音频原样回给断言用
 func fakeUpstream(t *testing.T, status int, text string, got *string, gotAuth *string, gotModel *string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

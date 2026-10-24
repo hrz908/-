@@ -1,6 +1,6 @@
-"""LLM 工厂：统一走 OpenAI 兼容接口，通过 config 里的 base_url / api_key 配置。
+"""LLM 工厂：统一走 OpenAI 兼容接口，base_url / api_key 由 config 提供。
 
-大模型 (get_llm) 用于最终回答生成，小模型 (get_small_llm) 用于改写、分类等轻量任务。
+大模型（get_llm）用于最终回答生成，小模型（get_small_llm）用于改写、分类等轻量任务。
 """
 from langchain_openai import ChatOpenAI
 
@@ -8,11 +8,10 @@ from config import LLM_TIMEOUT, LLM_MODEL, OPENAI_API_BASE, OPENAI_API_KEY, SMAL
 
 
 def get_llm(streaming: bool = True, temperature: float = 0.7) -> ChatOpenAI:
-    """主力对话模型：默认开启流式，温度略高以保证回答自然。
+    """主力对话模型：默认流式，温度略高以保证回答自然。
 
-    timeout 是单次请求的硬上限：上游卡死时工具链有 8s 兜底，
-    但 LLM 生成之前没有兜底，整个事件流会被无限期挂住（Go 网关侧
-    runTimeout 到点砍流，用户只看到断流没有解释）。
+    timeout 是单次请求硬上限：工具链有 8s 兜底，LLM 生成之前没有，
+    不设会让整个事件流无限期挂住（Go 网关 runTimeout 到点砍流，用户只看到断流、没有解释）。
     """
     return ChatOpenAI(
         model=LLM_MODEL,
@@ -37,7 +36,7 @@ def get_small_llm(streaming: bool = False, temperature: float = 0.0) -> ChatOpen
 
 
 def estimate_tokens(text: str) -> int:
-    """粗略估算 token 数：优先 tiktoken，失败则按字符数估算。"""
+    """粗略估算 token 数：优先 tiktoken，失败按字符数估算。"""
     if not text:
         return 0
     try:
@@ -59,12 +58,11 @@ def count_message_tokens(messages: list) -> int:
 
 
 def is_context_overflow(exc: Exception) -> bool:
-    """判断异常是不是「上下文超长」。
+    """判断异常是否为「上下文超长」。
 
-    上游 OpenAI 兼容接口在输入超限时返回 400，例如：
+    上游 OpenAI 兼容接口输入超限时返回 400，例如：
       'number of input tokens (301046) has exceeded max_seq_len (163840) limit'
-    这类错误一旦冒泡出去，整条回答就是空的（只剩一个 error 事件），
-    所以必须识别出来并就地降级，而不是让整个请求失败。
+    这类错误冒泡出去整条回答就是空的（只剩一个 error 事件），必须识别后就地降级。
     """
     msg = str(exc).lower()
     return (

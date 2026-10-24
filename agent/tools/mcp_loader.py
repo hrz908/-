@@ -1,16 +1,13 @@
 """股票工具源加载器：MCP Server（FastMCP，stdio 子进程）优先，进程内直连兜底。
 
-设计（LangGraph 架构 §4.4 / 开放问题 1）：
-- 取数工具统一由 mcp/stock_server.py 以 MCP 协议暴露（stdio 子进程，
-  与 agent 同镜像、同环境变量），langchain-mcp-adapters 负责加载成 BaseTool；
-- 任何一步失败（未装 adapters / 子进程起不来 / 列工具为空）都整段回退到
-  tools.get_tools() 的进程内 @tool 直连——工具名、参数、{"ok": ...} 返回契约
-  三者完全一致，上层 stock 子图无感知；
-- 会话在进程生命周期内只建立一次（子进程里 akshare 导入较重，避免每轮请求
-  重复拉起），main.py 退出时调 close_mcp_tools() 收尾。
+- 取数工具统一由 mcp/stock_server.py 以 MCP 协议暴露（与 agent 同镜像、同环境变量），
+  langchain-mcp-adapters 负责加载成 BaseTool；
+- 任何一步失败（未装 adapters / 子进程起不来 / 列工具为空）都整段回退 tools.get_tools() 的进程内直连，
+  工具名、参数、{"ok": ...} 返回契约完全一致，上层 stock 子图无感知；
+- 会话在进程生命周期内只建立一次（子进程里 akshare 导入较重，避免每轮请求重复拉起），
+  main.py 退出时调 close_mcp_tools() 收尾。
 
-版本注意：mcp python-sdk 必须钉在 1.x——2.x 移除了 RequestContext，
-langchain-mcp-adapters 0.3.x 一导入就炸（requirements.txt 已锁定）。
+版本注意：mcp python-sdk 必须钉 1.x——2.x 移除了 RequestContext，langchain-mcp-adapters 0.3.x 一导入就炸。
 """
 import json
 import logging
@@ -26,7 +23,7 @@ _state = None
 
 
 async def aload_stock_tools() -> list:
-    """返回股票工具集（进程级缓存）。MCP 不可用时自动回退直连，绝不抛异常。"""
+    """返回股票工具集（进程级缓存）；MCP 不可用时自动回退直连，绝不抛异常。"""
     global _state
     if _state is not None:
         return _state[1]
@@ -50,12 +47,11 @@ async def aload_stock_tools() -> list:
 
 
 async def _load_via_mcp():
-    """拉起 stock MCP Server（stdio）并加载工具；失败抛异常由上层兜底。
+    """拉起 stock MCP Server（stdio）并加载工具，失败抛异常由上层兜底。
 
-    adapters 0.3.x 明确禁止把 MultiServerMCPClient 当 async 上下文管理器使用
-    （直接 NotImplementedError），官方推荐的持久会话写法是 client.session() +
-    load_mcp_tools()：会话手动保持到进程退出，避免每次工具调用重拉子进程。
-    返回的 close 是可调用的异步收尾函数。
+    adapters 0.3.x 明确禁止把 MultiServerMCPClient 当 async 上下文管理器使用（直接 NotImplementedError），
+    官方推荐的持久会话写法是 client.session() + load_mcp_tools()：会话保持到进程退出，
+    避免每次工具调用重拉子进程。返回的 close 是异步收尾函数。
     """
     from langchain_mcp_adapters.client import MultiServerMCPClient
     from langchain_mcp_adapters.tools import load_mcp_tools
@@ -91,7 +87,7 @@ async def _load_via_mcp():
 def _wrap_mcp_tool(t):
     """把 MCP 工具包成返回 {"ok": ...} dict 的工具，与直连模式契约对齐。
 
-    adapters 返回的 BaseTool.ainvoke 产出 MCP content（JSON 字符串或结构），
+    adapters 的 BaseTool.ainvoke 产出 MCP content（JSON 字符串或结构），
     stock 子图的 tool_execute / synthesize 只认 dict 信封，这里统一归一。
     """
     from langchain_core.tools import StructuredTool
@@ -114,9 +110,8 @@ def _wrap_mcp_tool(t):
 def _as_envelope(res):
     """把 MCP 返回归一成 {"ok": ..., "data"/"error": ...} 信封。
 
-    adapters 0.3.x 的返回形状依调用路径而变（实测）：
-    - 成功：MCP content 列表 [{"type": "text", "text": '{"ok": true, ...}'}]；
-    - 失败/部分路径：已解析好的 dict 信封。
+    adapters 0.3.x 的返回形状依调用路径而变（实测）：成功是 content 列表
+    [{"type":"text","text":'{"ok": true,...}'}]，部分路径已是解析好的 dict 信封。
     这里统一拆到文本层再解析 JSON，保证与直连工具的返回契约完全一致。
     """
     text = _extract_text(res)

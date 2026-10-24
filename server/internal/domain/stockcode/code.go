@@ -28,8 +28,8 @@ var (
 	}
 )
 
-// NormalizeCode 统一成「市场前缀 + 6 位数字」。
-// 兼容小程序里带空格的展示格式（"SH 600519"），也允许只传 6 位数字
+// NormalizeCode 统一成「市场前缀 + 6 位数字」；
+// 兼容小程序带空格的展示格式（"SH 600519"），也允许只传 6 位数字
 func NormalizeCode(raw string) (string, bool) {
 	c := strings.ToUpper(strings.Join(strings.Fields(raw), ""))
 	if codeRe.MatchString(c) {

@@ -32,9 +32,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// 生产环境的安全底线：密钥还是默认值等于人人可伪造 token；
-	// 微信凭据缺失会让所有用户共用一个演示账号，数据全部串号。
-	// dev 下两者都允许（本地联调方便），prod 一律拒绝启动
+	// prod 安全底线：JWT 密钥仍是默认值等于人人可伪造 token；
+	// 微信凭据缺失会让所有用户共用一个演示账号、数据串号。
+	// dev 两者都允许（本地联调方便），prod 一律拒绝启动
 	if cfg.Env == "prod" {
 		if cfg.JWTSecret == "" || cfg.JWTSecret == "please-change-me" {
 			log.Fatal("JWT_SECRET 未设置或仍是默认值，禁止以 prod 启动")
@@ -69,8 +69,7 @@ func main() {
 		cfg.HTTP.QuoteFetchLimit, cfg.HTTP.QuoteBatchSize, cfg.HTTP.QuoteMgetChunk)
 	// 小程序凭据：两个都有值时登录走微信 code2session，否则退化为演示账号
 	wechat.Init(cfg.WechatAppID, cfg.WechatSecret, cfg.HTTP.WechatTimeout)
-	// 企业微信自建应用凭据：三项齐全时，命中的提醒会额外推送给企业成员（@all），
-	// 与小程序内的 WebSocket 提醒并存；未配置则只走 WebSocket
+	// 企业微信凭据：三项齐全时，命中的提醒会额外推给企业成员（@all），与小程序内 WS 提醒并存
 	wecom.Init(cfg.WeComCorpID, cfg.WeComSecret, cfg.WeComAgentID, cfg.HTTP.WecomTimeout)
 	// 行情提醒 WS hub 连接上限（每用户 / 全局）
 	ws.Configure(cfg.Hub.MaxPerUser, cfg.Hub.MaxTotal)
@@ -78,8 +77,8 @@ func main() {
 		log.Fatalf("init upload dir: %v", err)
 	}
 
-	// Agent 网关：注入 Redis（三道限流闸门）与 Python Agent 服务地址及运行参数。
-	// 必须在 router.New 之前完成，否则路由 handler 取到的 limiter/proxy 为 nil
+	// Agent 网关：注入 Redis（三道限流闸门）与服务地址、运行参数。
+	// 必须在 router.New 之前完成，否则路由 handler 取到的 limiter / proxy 为 nil
 	agent.Init(rdb, agent.Options{
 		BaseURL:          cfg.AgentBaseURL,
 		QPS:              cfg.Agent.QPS,
@@ -94,21 +93,21 @@ func main() {
 
 	// 语音转文字：同样要在 router.New 之前注入，否则 handler 读到空配置
 	asr.Init(cfg.ASRBaseURL, cfg.ASRAPIKey, cfg.ASRModel, cfg.HTTP.ASRTimeout)
-	// 实时语音识别：腾讯云 WebSocket 凭据与连接闸门（未配置时该路由返回 503）
+	// 实时语音识别：腾讯云凭据与连接闸门（未配置时该路由返回 503）
 	asr.InitStream(cfg.TencentASR.AppID, cfg.TencentASR.SecretID, cfg.TencentASR.SecretKey,
 		cfg.TencentASR.Engine, cfg.TencentASR.MaxConns)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,
 		Handler: router.New(cfg),
-		// 不设超时的话，慢速发送请求头的连接可以长期占住资源（Slowloris）
+		// 不设超时的话，慢速发送请求头的连接可长期占住资源（Slowloris）
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
 		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
-	// ListenAndServe 的错误经通道回传：goroutine 里 log.Fatalf 会跳过 defer、
+	// ListenAndServe 的错误经通道回传：在 goroutine 里 log.Fatalf 会跳过 defer、
 	// 绕过优雅关闭路径（连接池 / Redis 客户端都不会收尾）
 	serverErr := make(chan error, 1)
 	go func() {
@@ -129,7 +128,7 @@ func main() {
 	defer cancel()
 
 	// 长连接先关：srv.Shutdown 不会等待被 hijack 的 WebSocket，
-	// 不主动关会一直等到上面 5 秒超时才被硬断
+	// 不主动关会一直等到上面的超时才被硬断
 	ws.CloseAll()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {

@@ -1,10 +1,9 @@
 """图状态定义与共享工具。
 
-AgentState 贯穿整张主图与子图。约定：
-- messages: 用 add_messages reducer 自动累加（含 human / ai / tool）。
-- tool_results: 用 operator.add reducer 跨轮追加；子图节点只返回「本轮新增」，
-  由 reducer 拼接到已有列表，避免手写 prev + 的脆弱逻辑。
-- 其余字段（rewritten / intent / retrieved / cards / citations / entities 等）为覆盖式写入。
+AgentState 贯穿主图与子图，约定：
+- messages 用 add_messages 累加（human / ai / tool）；
+- tool_results 用 operator.add 跨轮追加，子图节点只返回「本轮新增」，避免手写 prev + 的脆弱逻辑；
+- 其余字段（rewritten / intent / retrieved / cards / citations / entities 等）覆盖式写入。
 所有节点只写自己负责的字段，避免相互踩踏。
 """
 import operator
@@ -65,12 +64,10 @@ def initial_state(user_id: str, thread_id: str, query: str) -> AgentState:
 def recent_turns(state: dict, limit: int = 6, query: str = None) -> list:
     """取最近 limit 条「纯文本」对话轮次，供 LLM 上下文。
 
-    统一剔除：
-    - ToolMessage（json 载荷，进对话会触发上游 max_seq_len 报错）；
-    - 带 tool_calls 的 AIMessage（残缺配对会让上游接口报错）。
-    - 若传入 query，则额外跳过内容等于当前问题的人类消息，避免调用方再单独追加时重复。
-    末尾的当前轮若存在也被排除（排除最后一条），保证上下文口径一致。
-    mcp / rag / chat 三个子图共用同一份逻辑，避免各自实现导致行为漂移。
+    统一剔除 ToolMessage（json 载荷进对话会触发上游 max_seq_len 报错）
+    与带 tool_calls 的 AIMessage（残缺配对会让上游接口报错）；
+    传入 query 时额外跳过内容等于当前问题的人类消息，避免调用方追加时重复。
+    末尾的当前轮一并排除，保证上下文口径一致；mcp / rag / chat 三个子图共用。
     """
     msgs = list(state.get("messages", []))
     body = msgs[:-1] if msgs else []  # 排除末尾当前轮

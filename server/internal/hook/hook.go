@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// QuoteUpdatedFunc 的回调签名：某用户的一批行情刷新完成后触发
+// QuoteUpdatedFunc 回调签名：某用户的一批行情刷新完成后触发。
 type QuoteUpdatedFunc func(userID int64, ctx context.Context)
 
 var (
@@ -14,20 +14,17 @@ var (
 	quoteUpdated []QuoteUpdatedFunc
 )
 
-// RegisterQuoteUpdated 注册「行情刷新完成」的钩子。
-// 用钩子而不是直接调用，是为了让业务模块之间零依赖：
-// watchlist 只管刷新行情，谁关心刷新后要做什么由谁自己注册
+// RegisterQuoteUpdated 注册「行情刷新完成」钩子。
+// 用钩子而非直接调用，让业务模块零依赖：刷新方只管刷新，关心方自己注册。
 func RegisterQuoteUpdated(fn QuoteUpdatedFunc) {
 	mu.Lock()
 	defer mu.Unlock()
 	quoteUpdated = append(quoteUpdated, fn)
 }
 
-// EmitQuoteUpdatedAsync 异步触发。
-// 提醒检查里有 DB 查询、Redis SetNX、WebSocket 推送，全部同步跑完才返回
-// 会明显拖慢 refresh 的响应；异步后请求先返回，检查在后台完成。
-// 用 context.WithoutCancel 脱离请求 ctx——请求结束原 ctx 即被取消，
-// 直接传会让检查中途死掉
+// EmitQuoteUpdatedAsync 异步触发：提醒检查含 DB 查询、Redis SetNX、WS 推送，
+// 同步跑完会明显拖慢 refresh 的响应。
+// 用 WithoutCancel 脱离请求 ctx，否则请求结束 ctx 被取消会让检查中途死掉。
 func EmitQuoteUpdatedAsync(userID int64, ctx context.Context) {
 	fns := funcs()
 	if len(fns) == 0 {
@@ -41,14 +38,14 @@ func EmitQuoteUpdatedAsync(userID int64, ctx context.Context) {
 	}()
 }
 
-// funcs 拷贝一份再遍历：注册与触发解耦，避免边遍历边注册
+// funcs 拷贝一份再遍历，避免边遍历边注册
 func funcs() []QuoteUpdatedFunc {
 	mu.Lock()
 	defer mu.Unlock()
 	return append([]QuoteUpdatedFunc(nil), quoteUpdated...)
 }
 
-// safeRun 单个钩子 panic 不影响其它钩子，避免一个模块拖垮整条刷新链路
+// safeRun 隔离单个钩子的 panic，避免一个模块拖垮整条刷新链路
 func safeRun(fn QuoteUpdatedFunc, userID int64, ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {

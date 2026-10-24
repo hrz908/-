@@ -1,17 +1,14 @@
 """数据源基础层：akshare + baostock 的统一异步包装。
 
-卡片数据源已从 Tushare REST 切换为 akshare + baostock（2026-10-23）：
 两者都是同步、pandas 体系的 Python 库，接入约定：
 - 一律经 run_ds / run_bs 丢进线程池执行，绝不阻塞 asyncio 事件循环；
 - baostock 维护一条全局 socket 连接且非线程安全：懒登录 + 互斥锁串行化，
   登录失败在首次调用时抛错、由 call_tool_safe 降级；
-- akshare 各接口返回 DataFrame，列名是中文且值常见 numpy 标量 / NaN /
-  带逗号的字符串：所有出口必须经 num()/text() 归一成 JSON 安全的原生类型。
+- akshare 返回 DataFrame，列名是中文且值常见 numpy 标量 / NaN / 带逗号的字符串：
+  所有出口必须经 num()/text() 归一成 JSON 安全的原生类型。
 
-代码格式对照（换源最容易踩的坑）：
-- baostock:  sh.600519
-- 东财 akshare: 600519（6 位裸代码，部分接口另要 market="sh"/"sz"）
-- Tushare（前端卡片 note 展示用）: 600519.SH
+代码格式对照（换源最容易踩的坑）：baostock 用 sh.600519；东财 akshare 用 600519
+（部分接口另要 market="sh"/"sz"）；前端卡片 note 展示用 600519.SH。
 """
 import asyncio
 import math
@@ -22,8 +19,8 @@ from functools import partial
 _bs_lock = threading.Lock()
 _bs_logged_in = False
 
-# 浏览器 UA：akshare 抓东财/新浪页面用 python-requests 默认 UA，
-# 偶发被 WAF 直接断连；进程级补一次默认 UA（不覆盖调用方显式 headers）
+# 浏览器 UA：akshare 用 requests 默认 UA 抓东财/新浪页面偶发被 WAF 直接断连，
+# 进程级补一次默认 UA（不覆盖调用方显式 headers）
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 

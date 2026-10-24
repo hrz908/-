@@ -1,19 +1,19 @@
 """FastAPI 入口：以 ndjson 流式吐出 Agent 事件。
 
 事件类型：
-- token : {"event":"token","data":{"delta":"..."}}         仅来自回答生成节点
-- card  : {"event":"card","data":{"type":..,"payload":..}}  结构化卡片
-- table : {"event":"table","data":{"type":..,"payload":..}} 结构化表格
-- sources: 引用来源（RAG，{"docs": [{title, chunk_id, score}]}）
-- tool_start / tool_end: 工具调用进度（MCP 子进程 / 进程内直连）
-- error : {"event":"error","data":{"message":"..."}}
-- done  : {"event":"done","data":{"thread_id":..,"usage":{..}}}
+- token   : {"event":"token","data":{"delta":"..."}}          仅来自回答生成节点
+- card    : {"event":"card","data":{"type":..,"payload":..}}   结构化卡片
+- table   : {"event":"table","data":{"type":..,"payload":..}}  结构化表格
+- sources : RAG 引用来源，{"docs":[{title, chunk_id, score}]}
+- tool_start / tool_end : 工具调用进度（MCP 子进程 / 进程内直连）
+- error   : {"event":"error","data":{"message":"..."}}
+- done    : {"event":"done","data":{"thread_id":..,"usage":{..}}}
 
-会话历史接口（2026-10-24，供小程序「历史对话」抽屉，经 Go 网关转发）：
-- GET    /sessions?user_id=                     会话列表（标题 + 最近活跃）
-- POST   /sessions                              注册新对话占位 / 每轮 run upsert
-- GET    /sessions/{sid}/messages?user_id=      恢复某会话的纯文本消息
-- DELETE /sessions/{sid}?user_id=               删除会话（注册行 + checkpoints + 摘要）
+会话历史接口（供小程序「历史对话」抽屉，经 Go 网关转发）：
+- GET    /sessions?user_id=                 会话列表（标题 + 最近活跃）
+- POST   /sessions                          注册新对话占位 / 每轮 run upsert
+- GET    /sessions/{sid}/messages?user_id=  恢复某会话的纯文本消息
+- DELETE /sessions/{sid}?user_id=           删除会话（注册行 + checkpoints + 摘要）
 所有接口都校验 thread_id 归属（default:user:session），防越权访问他人会话。
 
 运行: uvicorn main:app --host 0.0.0.0 --port 8000
@@ -49,9 +49,9 @@ logger = logging.getLogger("stocka.agent")
 
 
 def _check_ownership(user_id: str, session_id: str) -> str:
-    """校验 session_id 合法性并拼出 thread_id；非法一律 400。
+    """校验 session_id 合法性并拼出 thread_id，非法一律 400。
 
-    Go 网关的 user_id 来自 JWT（不可伪造），这里再做一层防御：
+    Go 网关的 user_id 来自 JWT（不可伪造），这里再补一层防御：
     thread_id 必须等于 default:{user_id}:{session_id}，从结构上杜绝
     用他人 session_id 读写别人会话的可能。
     """
@@ -105,8 +105,8 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
     config = {"configurable": {"thread_id": thread_id}}
     try:
         graph = await get_graph()
-        # 每轮 run 前裁掉该线程的历史 checkpoint 版本（PostgresSaver 不回收旧版本，
-        # 不裁则单线程行数随 run 数线性增长）。失败静默，不影响本轮对话
+        # 每轮 run 前裁掉该线程的历史 checkpoint 版本：PostgresSaver 不回收旧版本，
+        # 不裁则单线程行数随 run 数线性增长；失败静默，不影响本轮对话
         await prune_thread_checkpoints(thread_id)
         inp = initial_state(user_id=user_id, thread_id=thread_id, query=query)
         inp["messages"] = [HumanMessage(content=query)]
@@ -116,10 +116,10 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             stream_mode=["messages", "custom", "updates"],
             subgraphs=True,
         ):
-            # subgraphs=True 时每个 item 是 (namespace, mode, data) 三元组：
+            # subgraphs=True 时 item 是 (namespace, mode, data) 三元组：只有带上它，
             # stock/rag/chat 子图内部的 token 与 card/table/tool 事件才会冒泡到父流，
-            # 否则子图被当成单个节点、内部事件全部丢失（前端只收到 done）。
-            # 同时兼容不含命名空间的 (mode, data) 二元组与单模式裸 data。
+            # 否则子图被当成单个节点、内部事件全丢（前端只收到 done）；
+            # 同时兼容不含命名空间的 (mode, data) 二元组与单模式裸 data
             if isinstance(item, tuple) and len(item) == 3:
                 _ns, mode, data = item
             elif isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
@@ -127,13 +127,13 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
             else:  # 兜底：单模式
                 mode, data = "messages", item
 
-            # token 事件由生成节点（chat/rag/stock/refuse/clarify）在 astream 循环里
-            # 显式 emit("token", ...) 经 custom 模式透传，避免与 messages 模式重复。
+            # token 由生成节点（chat/rag/stock/refuse/clarify）在 astream 循环里
+            # 显式 emit("token", ...) 经 custom 模式透传，避免与 messages 模式重复
             if mode == "custom":
                 # data 已是 {"event":..,"data":..}（由 subgraphs.emit 产出），直接透传
                 if isinstance(data, dict) and "event" in data:
-                    # 首个对用户可见的事件即 TTFT（首 token 或首张卡片），
-                    # 审计字段 ttft_ms 之前从未赋值（恒 NULL），这里补上
+                    # 首个对用户可见的事件即 TTFT（首 token 或首张卡片）；
+                    # 该审计字段此前恒为 NULL，在此补齐
                     if ttft_ms is None:
                         ttft_ms = int((time.monotonic() - t0) * 1000)
                     yield json.dumps(data, ensure_ascii=False) + "\n"
@@ -155,7 +155,7 @@ async def event_generator(thread_id: str, query: str, user_id: str) -> AsyncGene
 
     finally:
         total_ms = int((time.monotonic() - t0) * 1000)
-        # 审计落库：从 checkpointer 里的最终 state 提取字段，失败不阻断 done
+        # 审计落库：从 checkpointer 的最终 state 提取字段，失败不阻断 done
         try:
             intent = confidence = None
             tool_calls = 0
@@ -212,7 +212,7 @@ class SessionUpsert(BaseModel):
 
 @app.get("/sessions")
 async def get_sessions(user_id: str):
-    """会话列表：按最近活跃倒序。user_id 由 Go 网关从 JWT 解析后注入。"""
+    """会话列表：按最近活跃倒序；user_id 由 Go 网关从 JWT 解析后注入。"""
     if not (user_id or "").strip():
         raise HTTPException(status_code=400, detail="invalid user_id")
     return {"sessions": await list_sessions(user_id.strip())}

@@ -11,28 +11,26 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 小程序端握手时无法自定义请求头，因此不做浏览器式同源校验；
-// 上线时建议改成 Origin 白名单
+// 小程序端握手无法自定义请求头，故不做同源校验；上线建议改成 Origin 白名单
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 const (
 	// writeTimeout 单次写超时：只连不读的慢客户端不能把推送方无限期挂住
-	// （推送是在 refresh 的 goroutine 里同步发起的）
+	// （推送在 refresh 的 goroutine 里同步发起）
 	writeTimeout = 5 * time.Second
 
-	// readTimeout 读空闲超时，配合 pong 续期使用。
-	// 移动端网络切换后 TCP 可能进入半开状态：没有超时的话连接条目与
-	// goroutine 会一起泄漏，Push 还会一直往死连接写
+	// readTimeout 读空闲超时，配合 pong 续期：移动端切网后 TCP 可能半开，
+	// 没有超时则连接条目与 goroutine 一起泄漏，Push 还会一直往死连接写
 	readTimeout = 60 * time.Second
 
-	// maxMessageSize 读上限。本连接只读不发，4KB 足够
+	// maxMessageSize 读上限，本连接只读不发，4KB 足够
 	maxMessageSize = 4096
 )
 
-// 连接上限（由 Configure 按配置注入，默认档即迁移前硬编码值 + 新增全局上限）：
-// 只有每用户上限时，海量不同账号仍能把进程级连接数打满，需要全局兜底
+// 连接上限（由 Configure 注入）：只有每用户上限时，
+// 海量不同账号仍能打满进程级连接数，需全局兜底
 var (
 	maxConnsPerUser = 5
 	maxConnsTotal   = int64(2048)
@@ -49,8 +47,8 @@ func Configure(perUser, maxTotal int) {
 	}
 }
 
-// conn 包一层：gorilla/websocket 明确不支持并发写同一连接，
-// 推送、关闭都走这把锁，否则并发推送会写坏帧甚至 panic
+// conn 包装连接：gorilla/websocket 不支持并发写同一连接，
+// 推送与关闭都走这把锁，否则会写坏帧甚至 panic
 type conn struct {
 	ws *websocket.Conn
 	mu sync.Mutex
@@ -71,7 +69,7 @@ func (c *conn) close() {
 	_ = c.ws.Close()
 }
 
-// hub 连接中心：同一账号可能开多个页面/设备，用集合存连接
+// hub 连接中心：同一账号可能开多个页面 / 设备，用集合存连接
 type hub struct {
 	mu    sync.Mutex
 	conns map[int64]map[*conn]struct{}
@@ -123,8 +121,8 @@ func (u *hub) list(userID int64) []*conn {
 	return out
 }
 
-// CloseAll 关闭全部连接。优雅关闭时用：
-// srv.Shutdown 不会等待被 hijack 的长连接，不主动关会一直等到超时才退出
+// CloseAll 关闭全部连接：srv.Shutdown 不会等待被 hijack 的长连接，
+// 不主动关会一直等到超时才退出
 func (u *hub) CloseAll() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -140,8 +138,7 @@ func (u *hub) CloseAll() {
 // CloseAll 关闭全部连接（优雅关闭用）
 func CloseAll() { h.CloseAll() }
 
-// Push 给指定用户推消息（提示词约定里的 pushToUser）。
-// 写失败的连接直接摘掉，避免坏连接一直占着
+// Push 给指定用户推消息；写失败的连接直接摘掉，避免坏连接一直占位
 func Push(userID int64, msg map[string]any) {
 	for _, c := range h.list(userID) {
 		if err := c.writeJSON(msg); err != nil {
@@ -152,9 +149,8 @@ func Push(userID int64, msg map[string]any) {
 	}
 }
 
-// Serve GET /api/v1/ws
-// user_id 由鉴权中间件注入；握手不能带自定义请求头，token 走 ?token= 兜底
-// （该兜底只对 /ws 一个路由开放，见 router）
+// Serve 处理 GET /api/v1/ws。user_id 由鉴权中间件注入；
+// 握手无法带自定义头，token 走 ?token= 兜底（该兜底只对 /ws 路由开放，见 router）。
 func Serve(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
@@ -175,8 +171,7 @@ func Serve(c *gin.Context) {
 	}()
 
 	// 只读：客户端消息无业务用途，读到错误即视为断开。
-	// 读超时靠 pong 续期：客户端（或中间网络设备）的 pong 回应会刷新 deadline，
-	// 长时间没有回应就会被判为半开连接，最终走完 deferred 清理
+	// 读超时靠 pong 续期，长时间无回应即判半开连接，最终走完 deferred 清理
 	raw.SetReadLimit(maxMessageSize)
 	_ = raw.SetReadDeadline(time.Now().Add(readTimeout))
 	raw.SetPongHandler(func(string) error {

@@ -1,9 +1,8 @@
-// 实时语音识别：小程序按住说话时把录音分片（mp3 帧）通过 WebSocket 直传网关，
-// 网关转发腾讯云实时语音识别（wss://asr.cloud.tencent.com），并把中间结果实时回传。
+// 实时语音识别：小程序按住说话时把录音分片（mp3 帧）经 WebSocket 直传网关，
+// 网关转发腾讯云实时识别（wss://asr.cloud.tencent.com）并回传中间结果。
 //
-// 选腾讯云的原因：它的实时识别支持 mp3 编码（voice_format=8），而微信录音器的
-// onFrameRecorded 官方只保证 mp3 分片可用；换成只收 PCM 的上游就得在服务端解码，
-// 复杂度和延迟都更高。密钥只留在服务端，小程序只拿到鉴权后的网关连接。
+// 选腾讯云是因为它支持 mp3 编码（voice_format=8），而微信 onFrameRecorded 官方只保证 mp3 分片可用；
+// 换成只收 PCM 的上游就得在服务端解码，复杂度与延迟都更高。密钥只留在服务端。
 package asr
 
 import (
@@ -35,11 +34,11 @@ const (
 	tencentASRHost = "asr.cloud.tencent.com"
 	tencentASRPath = "/asr/v2/"
 
-	// 单条连接最多接收的音频字节数：60 秒 mp3（48kbps）约 360KB，留足余量
+	// 单条连接音频上限：60s mp3（48kbps）约 360KB，留足余量
 	streamMaxBytes = 4 << 20
-	// 单条连接最长存活时间：与小程序录音上限一致，再留一点收尾时间
+	// 单条连接最长存活时间，与小程序录音上限一致，略留收尾时间
 	streamMaxSeconds = 90
-	// 单次写超时：防止慢客户端把转发 goroutine 挂死
+	// 单次写超时，防慢客户端挂死转发 goroutine
 	streamWriteWait = 5 * time.Second
 	// 上游连接建立超时
 	streamDialTimeout = 10 * time.Second
@@ -51,7 +50,7 @@ var (
 	streamSecretKey string
 	streamEngine    string
 
-	// 进程内连接闸门：全局并发上限 + 每用户只允许一条（一次按住对应一条）
+	// 进程内连接闸门：全局并发上限 + 每用户仅一条（一次按住对应一条）
 	streamGlobalSem chan struct{}
 	streamUserMu    sync.Mutex
 	streamUsers     = map[int64]struct{}{}
@@ -65,7 +64,7 @@ var (
 )
 
 // InitStream 注入腾讯云实时识别配置，必须在 router.New 之前调用。
-// 未配置凭据时路由直接返回 503，小程序会回退成整段上传识别。
+// 未配置凭据时路由返回 503，小程序回退为整段上传识别。
 func InitStream(appID, secretID, secretKey, engine string, maxConns int) {
 	streamAppID = strings.TrimSpace(appID)
 	streamSecretID = strings.TrimSpace(secretID)
@@ -84,11 +83,9 @@ func streamConfigured() bool {
 	return streamAppID != "" && streamSecretID != "" && streamSecretKey != ""
 }
 
-// ServeStream GET /api/v1/ws/asr?token=
-// 上行：二进制帧 = mp3 音频分片；文本帧 {"type":"end"} 结束、{"type":"cancel"} 取消。
-// 下行：{"type":"partial","text":...} 中间结果、{"type":"final","text":...} 终稿、
-//
-//	{"type":"error","message":...} 异常。
+// ServeStream 处理 GET /api/v1/ws/asr?token=。
+// 上行：二进制帧为 mp3 分片；文本帧 {"type":"end"} 结束、{"type":"cancel"} 取消。
+// 下行：{"type":"partial"|"final","text":...} 与 {"type":"error","message":...}。
 func ServeStream(c *gin.Context) {
 	if !streamConfigured() {
 		c.JSON(http.StatusServiceUnavailable,
@@ -129,7 +126,7 @@ func ServeStream(c *gin.Context) {
 	}
 	defer client.Close()
 
-	// 每次连接一个全新的 voice_id：腾讯云要求断开后不得复用
+	// 每次连接都用新 voice_id：腾讯云要求断开后不得复用
 	voiceID := uuid.NewString()
 	upCtx, cancelDial := context.WithTimeout(context.Background(), streamDialTimeout)
 	upstream, _, err := websocket.DefaultDialer.DialContext(upCtx,
@@ -149,15 +146,14 @@ func ServeStream(c *gin.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 两条泵各自只写一条连接：client→upstream 写上游，upstream→client 写客户端，
-	// 不存在 gorilla「同一连接并发写」的问题
+	// 两条泵各自只写一条连接，规避 gorilla「同一连接并发写」限制
 	errc := make(chan error, 2)
 	go func() { errc <- pumpAudio(ctx, client, upstream) }()
 	go func() { errc <- pumpResults(ctx, upstream, client) }()
 
 	err = <-errc
 	cancel()
-	// 关连接让另一条泵从阻塞的 ReadMessage / WriteMessage 里醒来
+	// 关连接唤醒另一条泵，避免其阻塞在 ReadMessage / WriteMessage
 	_ = client.Close()
 	_ = upstream.Close()
 	select {
@@ -170,7 +166,7 @@ func ServeStream(c *gin.Context) {
 	}
 }
 
-// pumpAudio 把小程序的分片原样转发给腾讯云；收到 end 后发 {"type":"end"}。
+// pumpAudio 把小程序分片原样转发给腾讯云，收到 end 后补发 {"type":"end"}。
 func pumpAudio(ctx context.Context, client, upstream *websocket.Conn) error {
 	total := 0
 	ended := false
@@ -220,7 +216,7 @@ func pumpAudio(ctx context.Context, client, upstream *websocket.Conn) error {
 	}
 }
 
-// pumpResults 读腾讯云的识别结果，聚合成「已定稿句 + 当前句」的完整文本回传。
+// pumpResults 读腾讯云识别结果，按「已定稿句 + 当前句」拼成完整文本回传。
 func pumpResults(ctx context.Context, upstream, client *websocket.Conn) error {
 	tr := &transcript{finals: map[int]string{}}
 	for {
@@ -229,7 +225,7 @@ func pumpResults(ctx context.Context, upstream, client *websocket.Conn) error {
 		}
 		mt, data, err := upstream.ReadMessage()
 		if err != nil {
-			// 上游异常断开：告诉客户端，让它回退整段识别，别静默丢结果
+			// 上游异常断开要告知客户端，让它回退整段识别，别静默丢结果
 			writeStreamError(client, "实时识别连接中断")
 			return err
 		}
@@ -267,7 +263,7 @@ func writeStreamError(conn *websocket.Conn, message string) {
 	_ = conn.WriteJSON(map[string]any{"type": "error", "message": message})
 }
 
-// tencentResult 腾讯云实时识别返回体（只取用到的字段）。
+// tencentResult 腾讯云返回体（只取用到的字段）。
 type tencentResult struct {
 	Code    int              `json:"code"`
 	Message string           `json:"message"`
@@ -281,8 +277,7 @@ type tencentSentence struct {
 	VoiceTextStr string `json:"voice_text_str"`
 }
 
-// transcript 把逐句结果拼成完整文本：
-// slice_type=1 是当前句的非稳态结果（会被覆盖），slice_type=2 是稳态结果（定稿）。
+// transcript 逐句拼接：slice_type=1 为当前句非稳态结果（会被覆盖），2 为定稿。
 type transcript struct {
 	finals  map[int]string
 	current string
@@ -314,9 +309,9 @@ func (t *transcript) text() string {
 	return b.String()
 }
 
-// buildStreamURL 生成带签名的腾讯云实时识别地址。
-// 签名原文 = "asr.cloud.tencent.com/asr/v2/<appid>?<除 signature 外参数按字典序拼接>"
-// 再对原文做 HmacSHA1(secretKey) + base64；最终 URL 里的值统一 URL 编码。
+// buildStreamURL 生成带签名的腾讯云实时识别地址：
+// 签名原文为 "asr.cloud.tencent.com/asr/v2/<appid>?<除 signature 外参数按字典序拼接>"，
+// 再做 HmacSHA1(secretKey) + base64，最终 URL 参数统一编码。
 func buildStreamURL(appID, secretID, secretKey, engine, voiceID string, now time.Time, nonce int64) string {
 	params := map[string]string{
 		"secretid":          secretID,

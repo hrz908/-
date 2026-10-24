@@ -1,21 +1,18 @@
-// Agent SSE 服务：管理与后端的 AI 对话流式连接。
-// 与其它 services 同一套约定：页面只调这里，不直接碰 wx.request。
+// Agent SSE 服务：管理与后端的 AI 对话流式连接，页面只调这里，不直接碰 wx.request。
 //
 // 协议（与 server/internal/agent/sse_agent.go 约定）：
-//   上行：POST { query, session_id }，鉴权走 Header Bearer（握手可带自定义头）
-//   下行：text/event-stream，每帧 event: <type>\ndata: <json>\n\n，type ∈
-//     token / card / table / status / tool_start / tool_end / sources / error / ping / done
+//   上行：POST { query, session_id }，Header Bearer 鉴权
+//   下行：text/event-stream，每帧 event: <type>\ndata: <json>\n\n，
+//         type ∈ token / card / table / status / tool_start / tool_end / sources / error / ping / done
 //
-// 端到端真流式：网关把 agent 的 ndjson 逐行转成 SSE 帧并每帧 Flush，
-// 小程序这边用 wx.request(enableChunked) 增量收包、增量 UTF-8 解码、即时解析并派发，
-// 不做任何攒批缓冲。SSE 是「每问一请求」模型，无持久连接，故 connect() 为兼容 no-op。
+// 端到端真流式：网关把 ndjson 逐行转 SSE 并逐帧 Flush，小程序用 wx.request(enableChunked)
+// 增量收包、增量 UTF-8 解码、即时派发，不做攒批。SSE 为「每问一请求」，无持久连接，connect() 是兼容 no-op。
 
 import { apiBase, agentSsePath } from '../config';
 import { getToken } from '../utils/request';
 
-// 生成唯一 session_id：后端按它（拼成 thread_id）区分多轮会话上下文。
-// 页面层经 freshSessionId() 取用：每个对话页实例持有独立 session，
-// 新对话页压栈后与旧页互不串上下文（原来只有单例自己生成，多实例会共用一条会话）
+// 生成 session_id：后端据此拼 thread_id 区分上下文；页面经 freshSessionId() 取用，
+// 每个对话页实例一条独立会话（多实例共享单例也不会串上下文）
 function generateSessionId() {
   return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
@@ -24,7 +21,7 @@ class AgentSSE {
   constructor() {
     this.task = null; // 当前 wx.request task
     this.sessionId = generateSessionId();
-    // 「发起轮」计数：每次 sendMessage +1，请求级事件全部打上 __rid，
+    // 发起轮计数：每次 sendMessage +1，请求级事件全部打 __rid，
     // 页面只渲染自己发起的那一轮（多对话页实例共享单例时的防串话闸门）
     this._reqId = 0;
     // 最近一次被 _abort 掐断的轮次：abort 触发的 fail 归属那一轮，
@@ -32,27 +29,25 @@ class AgentSSE {
     this._killedRid = null;
     this.listeners = {}; // event -> [callback]
     this._buffer = ''; // 已解码、待切分 SSE 帧的文本
-    this._pending = new Uint8Array(0); // 未凑齐 UTF-8 字符的字节残留（多字节被分帧截断时）
+    this._pending = new Uint8Array(0); // 未凑齐 UTF-8 字符的字节残留
     this._isSSE = false; // 响应头是否为 text/event-stream
     this._chunkSeen = false; // 是否收到过分块（用于不支持 onChunkReceived 时的整段兜底）
-    this._ended = false; // 是否已收到 done（区分「正常结束」与「异常结束」）
+    this._ended = false; // 是否已收到 done
   }
 
-  // 兼容旧调用：SSE 为每问一请求，无持久连接，这里直接 no-op
+  // 兼容旧调用：SSE 每问一请求，无持久连接
   connect() {}
 
-  // 供页面层生成新 session_id：只生成、不动单例的在途流与默认 session
-  // （区别于 newSession：那个会 abort 在途请求并改写单例默认值）。
-  // 每个对话页实例在 onLoad 时取一条，新对话页压栈后各自独立
+  // 只生成 session_id，不动单例的在途流与默认 session
+  //（区别于 newSession：那个会 abort 在途请求并改写默认值）
   freshSessionId() {
     return generateSessionId();
   }
 
-  // 发送一条用户提问并开启一条独立的 SSE 流。
-  // sessionId 由页面层传入（每个对话页实例一条独立会话）；不传则用单例默认值。
-  // 返回本轮 rid：页面凭它过滤事件，只渲染自己发起的那一轮
+  // 发送提问并开启一条独立 SSE 流；sessionId 由页面传入（不传用单例默认值），
+  // 返回本轮 rid，页面凭它过滤事件
   sendMessage(query, sessionId) {
-    // 上一轮若仍在流（理论上发送态会挡住，这里兜底），先中止避免两条流交错
+    // 上一轮若仍在流（理论上发送态会挡住），先中止避免两条流交错
     this._abort();
     this._buffer = '';
     this._pending = new Uint8Array(0);
@@ -82,7 +77,7 @@ class AgentSSE {
           return;
         }
         // 兜底：部分环境 onChunkReceived 不触发，整段响应在 success 里给，
-        // 这里收尾解析一遍（仅当没有逐块解析过，避免重复派发）
+        // 仅在没逐块解析过时收尾解析一遍，避免重复派发
         if (!this._chunkSeen && res && res.data) {
           this._buffer += this._decodeChunk(new Uint8Array(res.data));
           this._drain();
@@ -91,7 +86,7 @@ class AgentSSE {
       fail: (err) => {
         this.task = null;
         // abort 造成的失败归属「被掐断的那一轮」：新对话页发送时 abort 旧流，
-        // 这条 error 应打给旧页（大多已在栈里隐藏），新页面不该弹连接异常
+        // 这条 error 应打给旧页，新页面不该弹连接异常
         const msg = (err && err.errMsg) || '';
         const rid = msg.indexOf('abort') !== -1 ? this._killedRid : null;
         this._emit('error', {
@@ -122,8 +117,8 @@ class AgentSSE {
     return this._reqId;
   }
 
-  // 增量 UTF-8 解码：把新字节拼到残留字节后，尽可能多地解出完整字符，
-  // 剩下不完整的多字节开头留在 _pending，等下一帧补齐（解决中文被分帧截断）
+  // 增量 UTF-8 解码：新字节拼到残留字节后尽量多解出完整字符，
+  // 不完整的多字节开头留到 _pending（解决中文被分帧截断）
   _decodeChunk(bytes) {
     const all = new Uint8Array(this._pending.length + bytes.length);
     all.set(this._pending, 0);
@@ -193,7 +188,7 @@ class AgentSSE {
     try {
       data = JSON.parse(dataStr);
     } catch (e) {
-      // 解析失败保留原文，交给上层判断（正常事件 data 都是合法 JSON）
+      // 解析失败保留原文，交给上层判断
     }
     this._handleEvent({ event, data });
   }
@@ -238,9 +233,8 @@ class AgentSSE {
   }
 
   _emit(event, data) {
-    // 请求级事件统一打上「发起轮」戳：多对话页实例共享单例时，
-    // 页面只渲染自己发起的那一轮（data 里显式带了 __rid 则以它为准，
-    // 供 abort 失败归属被掐断的那轮使用）。disconnected 是连接级事件，不打戳
+    // 请求级事件统一打「发起轮」戳；data 里显式带了 __rid 则以它为准
+    //（供 abort 失败归属被掐断的那轮）。disconnected 是连接级事件，不打戳
     const tagged = event === 'disconnected' ? data : this._tag(data);
     const cbs = this.listeners[event] || [];
     cbs.forEach((cb) => {
@@ -252,7 +246,7 @@ class AgentSSE {
     });
   }
 
-  // 给事件数据补 __rid（当前发起轮）；非对象数据包一层，保证页面侧取戳不炸
+  // 给事件数据补 __rid；非对象数据包一层，保证页面侧取戳不炸
   _tag(data) {
     const rid = this._reqId || 0;
     if (data && typeof data === 'object') {
@@ -266,7 +260,7 @@ class AgentSSE {
   // 中止当前流（发送新提问 / 新建会话 / 断开时调用）
   _abort() {
     if (this.task) {
-      // 记下被掐断的是哪一轮：abort 触发的 fail 要把 error 归属这一轮，
+      // 记下被掐断的轮次：abort 触发的 fail 要把 error 归属这一轮，
       // 而不是让随后新起的那一轮误弹「连接异常」
       this._killedRid = this._reqId;
       try {
@@ -278,7 +272,7 @@ class AgentSSE {
     }
   }
 
-  // 主动断开：中止在途请求（SSE 无持久连接，无需关闭 socket）
+  // 主动断开：中止在途请求（SSE 无持久连接，无需关 socket）
   disconnect() {
     this._abort();
   }

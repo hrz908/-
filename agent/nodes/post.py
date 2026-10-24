@@ -1,11 +1,11 @@
 """收尾节点：滚动摘要、免责声明、用量统计；另提供 agent_runs 审计落库能力。
 
 在主图末尾（子图之后、END 之前）执行：
-1. messages token 数超阈值 -> 用小模型滚动摘要，写入 Redis（按 thread_id）。
-2. 涉及个股判断 -> 在最后一条 assistant 消息末尾追加免责声明（按 id 覆盖更新）。
+1. messages token 超阈值 → 小模型滚动摘要，写入 Redis（按 thread_id）；
+2. 涉及个股判断 → 在最后一条 assistant 消息末尾追加免责声明（按 id 覆盖更新）；
 3. 统计 usage 写回 state。
 log_agent_run 供 main.py 在 done 事件前调用，把一轮运行写入 agent_runs 审计表。
-所有步骤都容错，任何一步失败都不阻断响应。
+所有步骤容错，任何一步失败都不阻断响应。
 """
 import logging
 
@@ -20,7 +20,7 @@ logger = logging.getLogger("stocka.agent")
 
 _DISCLAIMER = "\n\n> 以上信息仅供参考，不构成任何投资建议。市场有风险，投资需谨慎。"
 
-# 个股相关意图：这些场景的回答需要挂免责声明
+# 个股相关意图：这些回答需要挂免责声明。
 # stock = 经 RAG 漏斗直接作答；stock_agent = 漏斗未命中后由炒股 agent 取数作答
 _STOCK_INTENTS = {"stock", "stock_agent"}
 
@@ -47,7 +47,7 @@ def _collect_usage(messages: list) -> dict:
 
 
 async def _roll_summary(state: dict) -> None:
-    """超阈值时做滚动摘要写 Redis。失败静默。"""
+    """超阈值时做滚动摘要写 Redis；失败静默。"""
     messages = state.get("messages", [])
     if count_message_tokens(messages) <= SUMMARY_TOKEN_LIMIT:
         return
@@ -86,7 +86,7 @@ async def log_agent_run(
     tool_calls: int = 0,
     error_code: str = None,
 ) -> None:
-    """写一行 agent_runs 审计记录。失败只记日志，绝不阻断响应流。"""
+    """写一行 agent_runs 审计记录；失败只记日志，绝不阻断响应流。"""
     try:
         async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
             await conn.execute(
@@ -112,7 +112,7 @@ async def post(state: dict) -> dict:
     messages = list(state.get("messages", []))
     updates: dict = {"usage": _collect_usage(messages)}
 
-    # 2. 免责声明：涉及个股时，追加到最后一条 assistant 消息（按 id 覆盖）
+    # 2. 免责声明：涉及个股时追加到最后一条 assistant 消息（按 id 覆盖）
     intent = state.get("intent", "")
     if intent in _STOCK_INTENTS:
         for m in reversed(messages):

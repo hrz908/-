@@ -8,14 +8,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// redisPingTimeout 启动探活超时。
-// 不能沿用 main 的 signal context：Redis 挂起时会一直拖住启动流程。
-// 与 postgres.go 里的 pingTimeout 同名会冲突，加前缀区分
+// redisPingTimeout 启动探活超时；不复用 main 的 signal context，
+// 避免 Redis 挂起时拖住启动。与 postgres.go 的 pingTimeout 同名会冲突，故加前缀。
 const redisPingTimeout = 3 * time.Second
 
-// NewRedis 建立 Redis 连接。poolSize > 0 时显式设置连接池大小
-// （<= 0 用 go-redis 默认值 10×CPU）。
-// Redis 在本项目只承担缓存与限流，连不上不阻断启动，业务侧自行降级
+// NewRedis 建立 Redis 连接；poolSize > 0 时显式设置池大小（<= 0 用 go-redis 默认 10×CPU）。
+// Redis 在本项目只承担缓存与限流，连不上不阻断启动，业务侧自行降级。
 func NewRedis(_ context.Context, addr, password string, db, poolSize int) *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,

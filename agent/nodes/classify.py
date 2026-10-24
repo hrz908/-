@@ -1,19 +1,16 @@
 """分类节点：意图路由。
 
-用 small_llm + prompts/router.xml 输出意图与置信度，优先走结构化输出
-（with_structured_output），失败时回退 XML + parse_route。confidence < 0.6
-强制降级为 clarify（宁可反问，不可乱答）。解析失败一律 clarify。
+用 small_llm + prompts/router.xml 输出意图与置信度：优先 with_structured_output，
+失败回退 XML + parse_route；confidence < 0.6 强制降级 clarify（宁可反问，不可乱答），解析失败一律 clarify。
 
-意图三分（LangGraph 主图，2026-10-23 起）：
-- stock: 一切股票相关问题，统一先进 RAG 漏斗——检索知识库命中则带引用作答，
-  未命中由主图把 intent 改写成 stock_agent 重路由进炒股 agent（工具取数）。
-- chat: 闲聊寒暄，直接陪聊，不挂工具。
-- off_topic: 与股票无关的正经话题，走固定话术婉拒（nodes/refuse.py）。
+意图三分：
+- stock: 一切股票相关问题，统一先进 RAG 漏斗——命中带引用作答，未命中由主图改写成 stock_agent 重路由；
+- chat: 闲聊寒暄，直接陪聊，不挂工具；
+- off_topic: 与股票无关的正经话题，走固定话术婉拒（nodes/refuse.py）；
 - clarify: 问题含糊或低置信度，反问澄清。
 
-关键词兜底先行（agent-graph 规则 1）：行情/报价/K线/涨跌/估值/财报/资金类
-问句命中即确定性判为 stock——既省一次路由 LLM 调用，也防 LLM 把取数问句
-判错；漏斗不会拿无关文档硬答，因为 rag 子图还有 LLM 判读把门。
+关键词兜底先行：行情/报价/K线/涨跌/估值/财报/资金类问句命中即确定性判为 stock，
+既省一次路由 LLM 调用，也防 LLM 把取数问句判错；漏斗不会拿无关文档硬答——rag 子图还有 LLM 判读把门。
 """
 import re
 from datetime import datetime
@@ -29,8 +26,7 @@ _CONF_MIN = 0.6
 
 # 数据类关键词：中文/混合词直接子串匹配（大小写不敏感，先 lower 再比）
 _MCP_KEYWORDS_SUBSTR = (
-    # 行情 / 价格类（含 agent-graph 规则 1 点名的「成交量」一族）。
-    # 查询先 lower 再匹配，所以「日K/周K/月K」要写成小写形式
+    # 行情 / 价格类（含「成交量」一族）；查询先 lower 再匹配，故「日K/周K/月K」写成小写形式
     "行情", "报价", "价格", "股价", "多少钱", "啥价", "涨跌", "涨幅", "收盘", "开盘",
     "最高", "最低", "k线", "日k", "周k", "月k", "年k", "走势",
     "成交量", "成交额", "换手", "量比", "振幅",
@@ -40,16 +36,15 @@ _MCP_KEYWORDS_SUBSTR = (
     # 资金 / 榜单 / 同业对比 / 资讯类
     "资金", "主力", "龙虎榜", "流入", "流出",
     "同业", "同行", "竞品", "对比", "新闻", "动态", "消息",
-    # 注意：北向/南向/融资融券已移除——对应工具 2026-10-22 下线，
+    # 注意：北向/南向/融资融券已移除——对应工具已下线，
     # 关键词留在表里会把这些问句路由进 MCP 却无工具可调（死路由）
 )
 # 短英文指标整词匹配（词边界），防止 "apple" 命中 "pe"、"space" 命中 "ps"
 _MCP_KEYWORDS_WORD = re.compile(r"(?<![a-zA-Z])(pe|pb|ps)(?![a-zA-Z])", re.IGNORECASE)
 
-# 指代不明的问句：「那个股票怎么样」「这只股票如何」——rewrite 无法消解
-# （无历史上下文）时原样进入分类。实测路由 LLM 会把这类问句判成 stock，
-# 白跑一轮漏斗后给出「没有数据」的答案（R-03）。这里加确定性护栏：
-# 命中指代模式、不带 6 位代码、且是短问句 -> 直接 clarify 反问。
+# 指代不明的问句：「那个股票怎么样」「这只股票如何」——rewrite 无历史可消解时原样进入分类。
+# 实测路由 LLM 会判成 stock，白跑一轮漏斗后给出「没有数据」（R-03）。这里加确定性护栏：
+# 命中指代模式、不带 6 位代码、且是短问句 → 直接 clarify 反问。
 _VAGUE_REF_RE = re.compile(r"(那个|这只|这个|那只|这只|这支|那支|这只股|那只股|这个股|那个股)(只|个|支)?(股|股票)?")
 _VAGUE_MAX_LEN = 24
 
@@ -77,7 +72,7 @@ class _RouteDecision(BaseModel):
 
 
 async def _route_decision(prompt: str) -> dict:
-    """意图判定：优先用结构化输出（with_structured_output），失败回退 XML 解析。
+    """意图判定：优先结构化输出（with_structured_output），失败回退 XML 解析。
 
     两条路径都收敛到同一个 dict 形态（intent / confidence / entities），
     保证下游状态写入口径一致；任一路径异常都安全降级为 clarify。
@@ -99,7 +94,7 @@ async def _route_decision(prompt: str) -> dict:
         }
     except Exception:  # noqa: BLE001 - 结构化不可用（模型/版本）时退回 XML
         pass
-    # 回退路径：沿用 XML + parse_route，保证兼容性与健壮性
+    # 回退路径：沿用 XML + parse_route，保证兼容性
     try:
         resp = await small.ainvoke([HumanMessage(content=prompt)])
         r = parse_route(resp.content or "")
@@ -113,7 +108,7 @@ async def _route_decision(prompt: str) -> dict:
 
 
 def _hit_data_keyword(query: str) -> bool:
-    """数据类问句 -> True。短英文指标用词边界，中文/混合词用子串。"""
+    """数据类问句 -> True；短英文指标用词边界，中文/混合词用子串。"""
     q = (query or "").lower()
     if any(k in q for k in _MCP_KEYWORDS_SUBSTR):
         return True
@@ -127,13 +122,12 @@ async def classify(state: dict) -> dict:
 
     query = state.get("rewritten") or state.get("query", "") or ""
 
-    # 关键词兜底先行：命中数据词 -> 确定性判为 stock（漏斗内部再决定查文档还是取数），
-    # 不再消耗一次 small_llm 调用，也不给 LLM 判错的机会
+    # 关键词兜底先行：命中数据词即确定性 stock（漏斗内部再决定查文档还是取数），
+    # 省一次 small_llm 调用，也不给 LLM 判错的机会
     if _hit_data_keyword(query):
         return {"intent": "stock", "confidence": 1.0, "entities": {}}
 
-    # 指代不明兜底：「那个股票怎么样」无历史可消解时直接 clarify，
-    # 不让路由 LLM 猜（实测会判成 stock，白跑漏斗）
+    # 指代不明兜底：「那个股票怎么样」无历史可消解时直接 clarify，不让路由 LLM 猜
     if _is_vague_reference(query):
         return {"intent": "clarify", "confidence": 0.9, "entities": {}}
 

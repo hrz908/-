@@ -15,9 +15,8 @@ import (
 	"stock-agent-server/internal/resp"
 )
 
-// 会话历史网关接口的测试（2026-10-24）。
-// 用 httptest 起一个假的 Python Agent，验证「鉴权后取 user_id → 转发 → 统一响应体」
-// 这条链路本身，不依赖真实的 Postgres / Redis / LangGraph。
+// 会话历史网关接口的测试：用 httptest 起假 Python Agent，
+// 验证「鉴权取 user_id → 转发 → 统一响应体」链路，不依赖真实 Postgres / Redis / LangGraph。
 
 // upstream 记录假 Agent 收到的最后一次请求，供断言转发参数
 type upstream struct {

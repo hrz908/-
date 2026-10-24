@@ -1,13 +1,9 @@
-// Package config 统一配置层：基于 spf13/viper 的三层优先级——
+// Package config 统一配置层，优先级：环境变量 > config.yaml（可选）> 内置默认值。
 //
-//	环境变量  >  config.yaml（可选）  >  内置默认值
-//
-// 迁移说明（原实现为纯 os.Getenv）：
-//   - 兼容旧环境变量名：键名采用扁平 snake_case 且开启 SetEnvKeyReplacer(".","_")、
-//     无前缀 AutomaticEnv，ADDR / DSN / JWT_SECRET / REDIS_ADDR 等既有变量原样生效；
-//   - 原先散落在各包的 30+ 个硬编码常量（限流、超时、连接池、批量参数、WS 闸门等）
-//     全部上收为本包字段，main 启动时统一注入，运行期不再改档；
-//   - config.yaml 缺失不算错误（只剩默认值 + 环境变量也能跑），解析错误才 fail-fast。
+// 键名为扁平 snake_case，配合 SetEnvKeyReplacer(".", "_") 与无前缀 AutomaticEnv，
+// 旧环境变量（ADDR / DSN / JWT_SECRET / REDIS_ADDR…）原样生效。
+// 原先散落在各包的硬编码常量（限流、超时、连接池、批量参数、WS 闸门等）全部上收为本包字段，
+// main 启动时统一注入，运行期不再改档。
 package config
 
 import (
@@ -37,12 +33,12 @@ type DBConfig struct {
 	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time"`
 }
 
-// RedisConfig Redis 客户端参数。PoolSize <= 0 时用 go-redis 默认值（10×CPU）。
+// RedisConfig Redis 客户端参数；PoolSize <= 0 时用 go-redis 默认值（10×CPU）。
 type RedisConfig struct {
 	PoolSize int `mapstructure:"pool_size"`
 }
 
-// RateLimitConfig 限流档位（全部为每分钟次数，Redis 滑动窗口）。
+// RateLimitConfig 限流档位（每分钟次数，Redis 滑动窗口）。
 type RateLimitConfig struct {
 	IPPerMin     int64 `mapstructure:"ip_per_min"`     // 全局按 IP
 	LoginPerMin  int64 `mapstructure:"login_per_min"`  // 登录接口
@@ -55,8 +51,8 @@ type AgentConfig struct {
 	QPS              int           `mapstructure:"qps"`               // 单用户每秒令牌数
 	Concurrent       int           `mapstructure:"concurrent"`        // 单用户并发运行数
 	DailyQuota       int           `mapstructure:"daily_quota"`       // 单用户每日配额
-	ProxyConcurrency int           `mapstructure:"proxy_concurrency"` // 打到 Python Agent 的并发上限
-	WSMaxConns       int           `mapstructure:"ws_max_conns"`      // 进程内 Agent WS 连接上限
+	ProxyConcurrency int           `mapstructure:"proxy_concurrency"` // 打向 Python Agent 的并发上限
+	WSMaxConns       int           `mapstructure:"ws_max_conns"`      // 进程内 WS 连接上限
 	RunTimeout       time.Duration `mapstructure:"run_timeout"`       // 单次运行整体超时
 	TTFTTimeout      time.Duration `mapstructure:"ttft_timeout"`      // 首字节等待上限
 	MaxLineMB        int           `mapstructure:"max_line_mb"`       // ndjson 单行上限（MB）
@@ -81,8 +77,8 @@ type HubConfig struct {
 	MaxTotal   int `mapstructure:"max_total"`
 }
 
-// TencentASRConfig 腾讯云实时语音识别（WebSocket）凭据。
-// 三项凭据缺一不可；未配置时 /ws/asr 返回 503，小程序自动回退整段上传识别。
+// TencentASRConfig 腾讯云实时语音识别凭据；三项缺一不可，
+// 未配置时 /ws/asr 返回 503，小程序自动回退整段上传识别。
 type TencentASRConfig struct {
 	AppID     string `mapstructure:"app_id"`
 	SecretID  string `mapstructure:"secret_id"`
@@ -91,7 +87,7 @@ type TencentASRConfig struct {
 	MaxConns  int    `mapstructure:"max_conns"`
 }
 
-// Config 运行期配置。顶层键保持与旧环境变量同名（addr/dsn/jwt_secret…），
+// Config 运行期配置。顶层键与旧环境变量同名（addr/dsn/jwt_secret…），
 // 分组键经 replacer 映射为下划线环境变量（server.read_timeout -> SERVER_READ_TIMEOUT）。
 type Config struct {
 	Addr          string        `mapstructure:"addr"` // HTTP 监听地址
@@ -103,19 +99,19 @@ type Config struct {
 	RedisDB       int           `mapstructure:"redis_db"`
 
 	QuoteAPI     string `mapstructure:"quote_api"`     // 行情接口基地址；为空时用内置腾讯源
-	WechatAppID  string `mapstructure:"wechat_appid"`  // 小程序 appid；与 Secret 同时为空时，dev 下登录退化为演示账号
+	WechatAppID  string `mapstructure:"wechat_appid"`  // 与 Secret 同时为空时，dev 下登录退化为演示账号
 	WechatSecret string `mapstructure:"wechat_secret"` //
 	WeComCorpID  string `mapstructure:"wecom_corp_id"` // 企业微信企业 ID（corpid）
 	WeComSecret  string `mapstructure:"wecom_secret"`
 	WeComAgentID int    `mapstructure:"wecom_agent_id"`
 
 	UploadDir    string `mapstructure:"upload_dir"`
-	Env          string `mapstructure:"env"`           // dev（默认）/ prod。prod 下强制要求 JWT_SECRET 与微信凭据
-	AllowOrigins string `mapstructure:"allow_origins"` // CORS 允许的 Origin，逗号分隔；* 表示全部（默认）
+	Env          string `mapstructure:"env"`           // dev（默认）/ prod；prod 强制校验 JWT_SECRET 与微信凭据
+	AllowOrigins string `mapstructure:"allow_origins"` // CORS Origin，逗号分隔，* 表示全部
 
-	AgentBaseURL string `mapstructure:"agent_base_url"` // Python Agent 服务基地址，网关反向代理到该地址的 /run/stream
-	ASRBaseURL   string `mapstructure:"asr_base_url"`   // 语音转文字上游基地址（OpenAI 兼容的 /audio/transcriptions）
-	ASRAPIKey    string `mapstructure:"asr_api_key"`    // 上游密钥；为空时 /asr/transcribe 直接返回「未配置」
+	AgentBaseURL string `mapstructure:"agent_base_url"` // Python Agent 基地址，网关代理到其 /run/stream
+	ASRBaseURL   string `mapstructure:"asr_base_url"`   // 语音转文字上游（OpenAI 兼容 /audio/transcriptions）
+	ASRAPIKey    string `mapstructure:"asr_api_key"`    // 上游密钥；为空时 /asr/transcribe 返回「未配置」
 	ASRModel     string `mapstructure:"asr_model"`      // 上游 ASR 模型名
 
 	TencentASR TencentASRConfig `mapstructure:"tencent_asr"` // 腾讯云实时语音识别（流式）
@@ -130,15 +126,14 @@ type Config struct {
 	WatchlistMaxItems int             `mapstructure:"watchlist_max_items"`
 }
 
-// Load 读取配置：默认值打底 -> 可选 config.yaml -> 环境变量覆盖。
-// 非法 int / duration 直接启动失败（与旧 envInt 的 fail-fast 策略一致），
-// 不允许配置错误静默回退、把问题藏到运行期。
+// Load 读取配置：默认值打底 → 可选 config.yaml → 环境变量覆盖。
+// 非法 int/duration 直接启动失败，不允许静默回退把问题藏到运行期。
 func Load() Config {
 	// 本地开发兜底：把 server/.env 注入进程环境（真实环境变量优先，文件缺失不报错）
 	loadDotEnv(".env")
 	setDefaults()
 
-	// 无前缀 + 点转下划线：既有环境变量名（ADDR、REDIS_ADDR、JWT_SECRET…）原样兼容
+	// 无前缀 + 点转下划线，兼容既有环境变量名（ADDR、REDIS_ADDR、JWT_SECRET…）
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
@@ -146,10 +141,9 @@ func Load() Config {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	if err := viper.ReadInConfig(); err != nil {
-		// 配置文件缺失是正常形态（默认值 + 环境变量即可运行），其余解析错误必须暴露。
-		// 注意：viper v1.x 返回的是 ConfigFileNotFoundError 值类型而非指针，
-		// 用 *ConfigFileNotFoundError 做 errors.As 永远匹配不上——会把「没写配置文件」
-		// 误判成致命错误（本地无 config.yaml 时直接起不来）。
+		// 配置文件缺失属正常形态，其余解析错误必须暴露。
+		// 注意 viper v1.x 返回的是 ConfigFileNotFoundError 值类型，
+		// 用指针做 errors.As 永远匹配不上，会把「没写配置文件」误判成致命错误。
 		var notFound viper.ConfigFileNotFoundError
 		if !errors.As(err, &notFound) {
 			log.Fatalf("read config: %v", err)
@@ -161,18 +155,16 @@ func Load() Config {
 		log.Fatalf("unmarshal config: %v", err)
 	}
 
-	// ASR 密钥回退 OPENAI_API_KEY：ASR 与 LLM 通常是同一家上游、同一把钥匙，
-	// 只配一次就能用（想单独控制额度再显式设 ASR_API_KEY）
+	// ASR 密钥回退 OPENAI_API_KEY：两者多同一上游同一把钥匙，配一次即可
 	if cfg.ASRAPIKey == "" {
 		cfg.ASRAPIKey = os.Getenv("OPENAI_API_KEY")
 	}
 	return cfg
 }
 
-// setDefaults 注册全部配置项的内置默认值（取值即迁移前的硬编码常量）。
+// setDefaults 注册全部默认值（取值即迁移前的硬编码常量）。
 func setDefaults() {
 	d := viper.SetDefault
-	// 顶层
 	d("addr", ":8080")
 	d("dsn", "postgres://postgres:postgres@localhost:5432/stock_agent?sslmode=disable")
 	d("redis_addr", "127.0.0.1:6379")
@@ -183,8 +175,7 @@ func setDefaults() {
 	d("quote_api", "")
 	d("wechat_appid", "")
 	d("wechat_secret", "")
-	// 企业微信自建应用凭据：默认值即用户提供的三个 ID，开箱可用；
-	// 生产环境建议用环境变量覆盖，尤其是 secret（敏感，勿提交到公开仓库）
+	// 企业微信自建应用凭据：默认可用，生产建议用环境变量覆盖（secret 敏感，勿入公开仓库）
 	d("wecom_corp_id", "wwb79b9d374733e09e")
 	d("wecom_secret", "2XyncvexPia7u-EIUr3xGerRrbluXw-oRmvdTW23NaA")
 	d("wecom_agent_id", 1000002)
@@ -192,43 +183,36 @@ func setDefaults() {
 	d("env", "dev")
 	d("allow_origins", "*")
 	d("agent_base_url", "http://127.0.0.1:8000")
-	// 语音转文字：默认指向硅基流动（与 Python agent 同一家上游）；
-	// 密钥没有默认值——不配就直接不可用，避免静默拿到空识别结果
+	// 语音转文字默认指向硅基流动；密钥无默认值，不配即不可用，避免静默拿到空结果
 	d("asr_base_url", "https://api.siliconflow.cn/v1")
 	d("asr_api_key", "")
 	d("asr_model", "FunAudioLLM/SenseVoiceSmall")
 
-	// 腾讯云实时语音识别（小程序按住说话的分片流式识别）：
-	// 走 wss://asr.cloud.tencent.com，密钥只在服务端，绝不下发到小程序包
+	// 腾讯云实时语音识别：走 wss://asr.cloud.tencent.com，密钥只在服务端，不下发到小程序包
 	d("tencent_asr.app_id", "")
 	d("tencent_asr.secret_id", "")
 	d("tencent_asr.secret_key", "")
 	d("tencent_asr.engine", "16k_zh")
 	d("tencent_asr.max_conns", 64)
 
-	// HTTP 服务器（原 main.go 硬编码）
 	d("server.read_header_timeout", 5*time.Second)
 	d("server.read_timeout", 15*time.Second)
 	d("server.write_timeout", 15*time.Second)
 	d("server.idle_timeout", 60*time.Second)
 	d("server.shutdown_timeout", 5*time.Second)
 
-	// PostgreSQL 连接池（原 db/postgres.go 硬编码）
 	d("db.max_open_conns", 25)
 	d("db.max_idle_conns", 25)
 	d("db.conn_max_lifetime", 5*time.Minute)
 	d("db.conn_max_idle_time", 5*time.Minute)
 
-	// Redis
 	d("redis.pool_size", 0)
 
-	// 限流（原 router.go / auth/route.go / 本层新增）
 	d("ratelimit.ip_per_min", 100)
 	d("ratelimit.login_per_min", 10)
 	d("ratelimit.market_per_min", 120)
 	d("ratelimit.asr_per_min", 10)
 
-	// Agent 网关（原 agent 包硬编码）
 	d("agent.qps", 2)
 	d("agent.concurrent", 3)
 	d("agent.daily_quota", 500)
@@ -238,7 +222,6 @@ func setDefaults() {
 	d("agent.ttft_timeout", 8*time.Second)
 	d("agent.max_line_mb", 4)
 
-	// 上游 HTTP（原各包硬编码）
 	d("http.quote_timeout", 3*time.Second)
 	d("http.search_timeout", 5*time.Second)
 	d("http.wechat_timeout", 5*time.Second)
@@ -249,10 +232,8 @@ func setDefaults() {
 	d("http.quote_batch_size", 20)
 	d("http.quote_mget_chunk", 100)
 
-	// WS hub（原 ws/hub.go 硬编码 + 新增全局上限）
 	d("hub.max_per_user", 5)
 	d("hub.max_total", 2048)
 
-	// 自选股上限（原 watchlist/handler.go 硬编码）
 	d("watchlist_max_items", 200)
 }

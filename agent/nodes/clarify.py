@@ -1,8 +1,7 @@
 """澄清 / 降级节点。
 
-两种入口：
-- intent == "clarify"：问题含糊或低置信度，反问用户补全关键信息。
-- state["error"] 非空（如护栏拦截）：给出安全的降级回复，不进入任何工具/检索链路。
+两种入口：intent == "clarify"（问题含糊或低置信度，反问补全信息）；
+state["error"] 非空（如护栏拦截，给出安全降级回复，不进入任何工具/检索链路）。
 统一产出一条 AIMessage，随后进入 post 收尾。
 """
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -22,7 +21,7 @@ _CLARIFY_SYSTEM = (
 
 
 async def clarify(state: dict) -> dict:
-    # 护栏拦截：直接安全降级，不调模型。固定文案必须 emit 成 token，
+    # 护栏拦截：直接安全降级，不调模型。固定文案必须 emit 成 token——
     # main.py 只透传 custom 事件，光返回 AIMessage 前端拿不到任何文字
     if state.get("error") == "guardrail_blocked":
         emit("token", {"delta": _BLOCK_REPLY})

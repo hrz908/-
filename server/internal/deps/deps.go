@@ -5,8 +5,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// 提示词里「可直接使用的全局变量」集中放在这里，main 启动时注入一次，
-// 业务包统一通过 deps.DB / deps.RDB 访问，避免到处传参
+// 全局依赖集中在此，main 启动时注入一次；
+// 业务包统一通过 deps.DB / deps.RDB 访问，避免层层传参
 var (
 	DB  *gorm.DB
 	RDB *redis.Client

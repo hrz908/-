@@ -19,18 +19,10 @@ async def process_file(
     embedder: Embedder,
     redis_client: redis.Redis,
 ) -> bool:
-    """
-    处理单个文件，返回是否实际执行了入库（False 表示跳过）。
+    """处理单个文件，返回是否实际入库（False 表示跳过）。
 
-    流程:
-    1. Redis SETNX lock:ingest:{path} (TTL 300s) 去重锁
-    2. 加载文档内容
-    3. 计算 content_hash
-    4. 检查幂等（store.transactional_upsert 返回 None 表示无变化）
-    5. 分块
-    6. 嵌入
-    7. 单事务写入：upsert doc -> delete old chunks -> insert new chunks
-    8. 释放锁
+    流程：Redis 去重锁 -> 加载 -> content_hash -> 分块 -> 嵌入 -> 单事务写入 -> 释放锁；
+    transactional_upsert 返回 None 表示内容无变化（幂等跳过）。
     """
     p = Path(path)
     if not p.exists():
@@ -64,11 +56,11 @@ async def process_file(
             logger.warning("文档内容为空，跳过: %s", path)
             return False
 
-        # 3. 计算 content_hash
+        # content_hash 用于幂等比对
         doc_hash = content_hash(content)
         title = p.stem
 
-        # 4 & 5. 分块
+        # 分块
         chunks = chunk_markdown(content, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         if not chunks:
             logger.warning("分块结果为空，跳过: %s", path)

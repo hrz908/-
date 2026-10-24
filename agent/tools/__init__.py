@@ -1,17 +1,12 @@
 """工具层公共能力：安全 HTTP 调用 + Go 网关响应解包。
 
-call_tool_safe 统一封装「8s 超时 + 重试 1 次 + 失败降级」，
-任何工具的网络/解析异常都不会冒泡到图里，而是返回 {"ok": False, "error": ...}。
-go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive），自行解 Go 信封。
+call_tool_safe 统一封装「8s 超时 + 重试 1 次 + 失败降级」，工具的网络/解析异常不会冒泡到图里，
+而是返回 {"ok": False, "error": ...}；go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive）并自解 Go 信封。
 
-数据源结构（2026-10-23 起）：
-- Go 网关（实时行情/搜索）：get_quote / symbol_search / get_peer_compare
-- akshare（东财/新浪）：估值 / 资金流 / 财报 / 资讯 / 龙虎榜 / 机构研报
-- baostock：历史日 K（15 个交易日窗口）
-三者都不需要 token，工具全部无条件注册（原 Tushare 的积分门控已删除）。
-2026-10-23 起本函数同时是 MCP 工具源（mcp/stock_server.py 经
- tools/mcp_loader.py 加载）的兜底来源：MCP 子进程失败时整段回退到这里，
-工具名 / 参数 / 返回契约保持一致。
+数据源：Go 网关（实时行情/搜索）、akshare（东财/新浪：估值/资金流/财报/资讯/龙虎榜/研报）、
+baostock（历史日 K），均免 token，工具全部无条件注册。
+本模块同时是 MCP 工具源（mcp/stock_server.py 经 tools/mcp_loader.py 加载）的兜底来源：
+MCP 子进程失败时整段回退到这里，工具名 / 参数 / 返回契约保持一致。
 """
 import asyncio
 from typing import Any, Callable, Awaitable, Optional
@@ -85,9 +80,9 @@ def _auth_headers() -> dict:
 
 
 async def go_get(path: str, params: Optional[dict] = None) -> dict:
-    """GET Go 网关，自动拼 base_url、带鉴权头、解包 { code, data } 信封。
+    """GET Go 网关：拼 base_url、带鉴权头、解包 { code, data } 信封。
 
-    返回统一结构：{"ok": True, "data": ...} 或 {"ok": False, "error": ...}。
+    返回 {"ok": True, "data": ...} 或 {"ok": False, "error": ...}；
     HTTP 层异常（非 2xx / 网络错误）仍抛出，由 call_tool_safe 兜底降级重试。
     """
     client = get_http_client()
@@ -104,10 +99,10 @@ async def go_get(path: str, params: Optional[dict] = None) -> dict:
 
 
 def to_ts_code(code: str) -> str:
-    """把股票代码转成 Tushare 风格的 ts_code 格式（600519 -> 600519.SH）。
+    """股票代码 -> Tushare 风格 ts_code（600519 -> 600519.SH）。
 
-    Tushare 数据源已下线，但前端卡片 note 与 LLM 上下文仍用这个展示格式。
-    兼容项目里出现的多种写法："600519"、"SH600519"、"600519.SH"。
+    Tushare 数据源已下线，但前端卡片 note 与 LLM 上下文仍用这个展示格式；
+    兼容 "600519" / "SH600519" / "600519.SH" 多种写法。
     """
     c = (code or "").strip().upper()
     if "." in c:
@@ -126,9 +121,9 @@ def to_ts_code(code: str) -> str:
 
 
 def take_latest(rows: Any, key: str = "trade_date", limit: int = 30) -> list:
-    """取按日期倒序的前 N 行（工具层统一的「只要最近若干条」出口）。
+    """按日期倒序取前 N 行（工具层统一的「只要最近若干条」出口）。
 
-    数据源不保证返回顺序，这里显式按日期字段排序后再截断，
+    数据源不保证返回顺序，这里显式按日期排序后再截断，
     保证拿到的永远是「最近 N 条」而不是「随机 N 条」。
     """
     if not isinstance(rows, list):
