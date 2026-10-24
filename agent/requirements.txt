@@ -9,7 +9,8 @@ psycopg[binary,pool]>=3.2.0
 redis>=5.0.0
 pydantic>=2.0.0
 httpx>=0.27.0
-jinja2>=3.1.0
+# jinja2 曾用于渲染 prompts/*.xml，但 core/template.py 实际用的是 str.replace +
+# 正则的「定向替换」，全仓零 import，已移除以减小镜像
 tiktoken>=0.7.0
 # ===== 行情数据源（卡片数据，2026-10-23 起替代 Tushare REST）=====
 # akshare：东财/新浪公开接口（估值/资金流/财报/资讯/龙虎榜），免 token
