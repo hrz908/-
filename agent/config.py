@@ -17,10 +17,20 @@ TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "8.0"))
 # LLM 单次请求超时（秒）：约束单次请求的完成时间；不设的话上游卡死会挂住整条事件流
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 # RAG 相关度阈值：针对余弦相似度（不是 RRF 融合分）。
-# 0.2 是按 bge-m3 的 query↔chunk 命中区间（约 0.22~0.5）定的；换 Qwen3-Embedding
-# 后相似度分布不同，需按实际召回重标；
-# 语料/模型变化时需重新校准——阈值过高会让 RAG 恒 escalate 到 mcp、从不生成引用回答
+# 仅当重排关闭时生效。Qwen3 向量空间的地板值很高（无关 query 与语料的平均相似度
+# 也有 0.56，实测相关/无关的 top 相似度完全重叠），单靠它只能做粗筛，
+# 所以默认走重排分判定，见下面的 RERANK_THRESHOLD。
 RAG_THRESHOLD = float(os.getenv("RAG_THRESHOLD", "0.2"))
+
+# ===== 重排（交叉编码器，直接给 query↔chunk 打相关性分）=====
+# 开启后 retriever 取 RERANK_CANDIDATES 个候选送 /v1/rerank，按重排分排序并截断到 k；
+# 命中闸也换成重排分（实测相关 ~0.99、无关 0，可干净切分）
+RERANK_ENABLED = os.getenv("RERANK_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "Qwen/Qwen3-Reranker-0.6B")
+# 送重排的候选数：太小漏召回，太大徒增延迟（重排是逐对推理）
+RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "20"))
+RERANK_THRESHOLD = float(os.getenv("RERANK_THRESHOLD", "0.5"))
+RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "8"))
 # Go 网关地址（工具调用回现有后端获取行情）
 GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 # 调 Go 网关受保护接口用的服务间 token（Agent 作为可信内部服务）

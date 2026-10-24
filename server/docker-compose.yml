@@ -62,8 +62,13 @@ services:
       SMALL_MODEL: ${SMALL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       EMBED_MODEL: ${EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
       EMBED_DIM: ${EMBED_DIM:-1536}
-      # RAG 相关性阈值（对余弦相似度设阈，非 RRF 分）；换 embedding 模型后需重新校准
+      # RAG 相关性阈值（对余弦相似度设阈，非 RRF 分）；仅在重排关闭时生效
       RAG_THRESHOLD: ${RAG_THRESHOLD:-0.2}
+      # 重排：命中闸改用交叉编码器分数（余弦地板值太高，切不开相关/无关）
+      RERANK_ENABLED: ${RERANK_ENABLED:-true}
+      RERANK_MODEL: ${RERANK_MODEL:-Qwen/Qwen3-Reranker-0.6B}
+      RERANK_CANDIDATES: ${RERANK_CANDIDATES:-20}
+      RERANK_THRESHOLD: ${RERANK_THRESHOLD:-0.5}
       # Agent 工具回调 Go 网关：容器内 127.0.0.1 指向自身，
       # 必须用 host.docker.internal 才能访问跑在宿主机上的 Go server
       GO_SERVER_URL: ${GO_SERVER_URL:-http://host.docker.internal:8080}

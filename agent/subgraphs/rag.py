@@ -3,7 +3,8 @@ r"""RAG 混合检索子图（RAG 漏斗）。
 流程: hybrid_retrieve -> sufficiency_check --(命中)--> generate_with_citations -> END
                                          \--(不足)--> escalate(设 intent=stock_agent) -> END
 
-sufficiency_check 两级判定：阈值闸（最高相似度 < RAG_THRESHOLD 或有效片段 < 2 即未命中）；
+sufficiency_check 两级判定：阈值闸（重排分 < RERANK_THRESHOLD 或有效片段 < 2 即未命中；
+重排关闭时回退余弦相似度 < RAG_THRESHOLD）；
 过阈值后再交小模型判读「能否回答」（prompts/rag_judge.xml），避免主题相似但答非所问
 （问实时股价却检索到投教文章）。未命中时置 intent=stock_agent，由主图重路由到炒股 agent 子图。
 generate_with_citations: 用 prompts/rag.xml 生成带 [n] 引用的回答，并发 sources 事件
@@ -19,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from core.llm import get_llm, get_small_llm
 from core.state import AgentState, recent_turns
-from config import RAG_THRESHOLD
+from config import RAG_THRESHOLD, RERANK_THRESHOLD
 from rag.retriever import build_retriever
 from core.template import render
 from subgraphs import emit
@@ -50,6 +51,8 @@ async def hybrid_retrieve(state: dict) -> dict:
         "chunk_id": str(d.metadata.get("id", "")),
         "score": d.metadata.get("score", 0.0),
         "similarity": d.metadata.get("similarity", 0.0),
+        # 重排关闭时为 None，命中闸回退到 similarity
+        "rerank_score": d.metadata.get("rerank_score"),
     } for d in docs]
     return {"retrieved": retrieved}
 
@@ -94,14 +97,19 @@ async def _judge_can_answer(query: str, retrieved: list) -> bool:
 async def sufficiency_check(state: dict) -> dict:
     """判断检索是否充分，不足则置 intent=stock_agent 让主图重路由。
 
-    两级判定：阈值闸（便宜）——最高相似度 < RAG_THRESHOLD 或有效片段 < 2 即未命中；
+    两级判定：阈值闸（便宜）——最高分低于阈值或有效片段 < 2 即未命中；
     LLM 判读（准）——过阈值的片段交小模型判「能否回答」，判读异常按命中处理、不阻断链路。
-    用 similarity 而非 RRF 融合分 score 判定：score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），
-    无法衡量相关性；similarity 才与 RAG_THRESHOLD 同尺度（取值区间随 embedding 模型变化）。
+    分数优先用 rerank_score（交叉编码器，绝对可分），重排关闭时回退 similarity
+    （余弦在向量空间里有很高的地板值，只能做粗筛，不能做精确判定）。
     """
     retrieved = state.get("retrieved", []) or []
-    top_sim = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)
-    if len(retrieved) < _MIN_CHUNKS or top_sim < RAG_THRESHOLD:
+    if any(r.get("rerank_score") is not None for r in retrieved):
+        top_score = max((r.get("rerank_score") or 0.0 for r in retrieved), default=0.0)
+        threshold = RERANK_THRESHOLD
+    else:
+        top_score = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)
+        threshold = RAG_THRESHOLD
+    if len(retrieved) < _MIN_CHUNKS or top_score < threshold:
         return {"intent": "stock_agent"}
     query = state.get("rewritten") or state.get("query", "") or ""
     if await _judge_can_answer(query, retrieved):

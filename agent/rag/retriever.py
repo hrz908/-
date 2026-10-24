@@ -1,4 +1,5 @@
-"""混合检索器：pgvector 向量召回 + PostgreSQL 全文检索，RRF(k=60) 融合。"""
+"""混合检索器：pgvector 向量召回 + PostgreSQL 全文检索，RRF(k=60) 融合，可选重排。"""
+import logging
 from typing import List
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun, AsyncCallbackManagerForRetrieverRun
@@ -8,7 +9,18 @@ from langchain_openai import OpenAIEmbeddings
 
 import psycopg
 
-from config import DATABASE_URL, OPENAI_API_BASE, OPENAI_API_KEY, EMBED_MODEL, EMBED_DIM
+from config import (
+    DATABASE_URL,
+    OPENAI_API_BASE,
+    OPENAI_API_KEY,
+    EMBED_MODEL,
+    EMBED_DIM,
+    RERANK_ENABLED,
+    RERANK_CANDIDATES,
+)
+from rag.reranker import rerank_scores
+
+logger = logging.getLogger("stocka.agent")
 
 # 混合检索 SQL（RRF k=60）——保留 $n 占位形式作为规范文档，
 # 执行时经 _to_psycopg 转成 psycopg 的 %s 位置参数。
@@ -77,8 +89,10 @@ class HybridRetriever(BaseRetriever):
     async def _run_search(self, query: str) -> List[Document]:
         emb = await self._get_embedder().aembed_query(query)
         vl = _vec_literal(emb)
+        # 重排需要更大的候选池：SQL 多取一些，重排后再截到 k；
         # $1 出现 3 次、$2 一次、$3 一次，按出现顺序绑定 5 个参数
-        params = (vl, vl, vl, query, self.k)
+        limit = max(self.k, RERANK_CANDIDATES) if RERANK_ENABLED else self.k
+        params = (vl, vl, vl, query, limit)
         sql = _to_psycopg(SEARCH_SQL)
         async with await psycopg.AsyncConnection.connect(DATABASE_URL) as conn:
             async with conn.cursor() as cur:
@@ -95,8 +109,18 @@ class HybridRetriever(BaseRetriever):
                     "similarity": float(similarity) if similarity is not None else 0.0,
                 },
             ))
+        # 重排：RRF 只保证"两路都命中"，不保证真相关；交叉编码器直接判 query↔正文
+        if RERANK_ENABLED and docs:
+            try:
+                scores = await rerank_scores(query, [d.page_content for d in docs])
+                for d, s in zip(docs, scores):
+                    d.metadata["rerank_score"] = s
+                docs.sort(key=lambda d: d.metadata.get("rerank_score", 0.0), reverse=True)
+            except Exception as e:  # noqa: BLE001 - 重排是增强项，挂了不能拖垮检索
+                logger.warning("重排失败，回退 RRF 排序: %s", e)
+
         # 融合结果后处理：去噪、去重、控多样性（详见 _clean_docs）
-        return _clean_docs(docs)
+        return _clean_docs(docs)[: self.k]
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
