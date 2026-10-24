@@ -11,15 +11,6 @@
   position: relative;
 }
 
-/* ===== 导航栏 ===== */
-.nav-left {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 88rpx;
-  height: 88rpx;
-}
-
 /* ===== 对话区 ===== */
 /* 高度由 JS 精算并固定为像素值：不随视口变化抖动，也不会被子元素撑开 */
 .chat-wrap {

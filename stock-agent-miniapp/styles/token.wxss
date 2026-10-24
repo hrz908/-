@@ -129,27 +129,6 @@ page {
    .navbar / .tabs 私有类，二者各自隔离互不影响，改组件时不要混引。
    ============================================================= */
 
-/* ---- 居中与截断：排版八条第 1/2/4 条的唯一标准写法 ---- */
-.flex-center {                       /* 垂直 + 水平居中 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ellipsis {                          /* 单行截断三件套 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.clamp-2 {                           /* 两行截断 */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-
-/* ---- flex 子项截断生效的前提 ---- */
-.min-w0 { min-width: 0; }
-
 /* ---- 导航栏：88rpx + 安全区 + flex 垂直居中（第 3 条） ---- */
 .navbar {
   position: relative;
@@ -159,53 +138,6 @@ page {
   padding-top: env(safe-area-inset-top);
   background: var(--bg);
 }
-.navbar__title {                     /* 标题视口绝对居中，有返回键也不跳动 */
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 60%;
-  font-size: var(--fs-title);
-  font-weight: 600;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---- 行情行：112rpx 行高 + 发丝分割线（第 5/8 条） ---- */
-.list-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 112rpx;
-  padding: 0 var(--sp-3);
-  border-bottom: var(--hairline);
-}
-.list-row__name {                    /* 左列：flex:1 + min-width:0 是截断生效前提 */
-  flex: 1;
-  min-width: 0;
-}
-.list-row__price  {                  /* 数字列定宽右对齐，保证竖向成线 */
-  width: 160rpx;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-.list-row__change {
-  width: 140rpx;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-
-/* ---- 大数字：等宽 + 右对齐降级（tabular-nums 真机不生效的兜底） ---- */
-.num-hero {
-  font-size: var(--fs-hero);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-
 /* ---- 容器与按钮（shadcn 组件对应物） ---- */
 .card {
   background: var(--surface);
@@ -214,47 +146,8 @@ page {
   padding: var(--sp-3);
   box-shadow: var(--shadow-card);
 }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: var(--fs-aux);
-  border-radius: var(--r-tag);
-  padding: 4rpx 12rpx;
-}
-.btn-primary {                       /* 近黑底白字 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 88rpx;                 /* 第 7 条：热区 ≥88rpx */
-  background: var(--ink);
-  color: var(--primary-fg);
-  border-radius: var(--r-card);
-  font-size: var(--fs-body);
-  font-weight: 600;
-}
-.btn-outline {                       /* 白底描边 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 88rpx;
-  background: transparent;
-  color: var(--ink);
-  border: var(--hairline);
-  border-radius: var(--r-card);
-  font-size: var(--fs-body);
-}
-
-/* ---- 语义文字色 ---- */
-.text-muted { color: var(--ink-2); font-size: var(--fs-aux); }
-.price-up   { color: var(--up); }
-.price-down { color: var(--down); }
-.price-flat { color: var(--flat); }
-
-/* ---- 标签页：gap 管间距，子项等分带截断（第 6 条） ---- */
+/* ---- 标签页：gap 管间距（第 6 条） ---- */
 .tabs { display: flex; gap: var(--sp-3); }
-.tabs__item { flex: 1; min-width: 0; }
 
 /* ---- 卡片消息外层：chat 主页面与卡片画廊测试页共用。
        调卡片间距只改这里，两边自动同步（约定见 DESIGN.md「卡片画廊」节） ---- */

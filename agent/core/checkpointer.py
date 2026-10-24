@@ -32,11 +32,6 @@ async def get_checkpointer() -> AsyncPostgresSaver:
     return _checkpointer
 
 
-def make_thread_id(tenant: str, user_id: str, session_id: str) -> str:
-    """多租户 thread_id 拼装：tenant:user:session。"""
-    return f"{tenant}:{user_id}:{session_id}"
-
-
 async def close_checkpointer() -> None:
     """进程退出时释放连接池。"""
     global _pool, _checkpointer

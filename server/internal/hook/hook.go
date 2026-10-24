@@ -23,13 +23,6 @@ func RegisterQuoteUpdated(fn QuoteUpdatedFunc) {
 	quoteUpdated = append(quoteUpdated, fn)
 }
 
-// EmitQuoteUpdated 同步触发所有已注册的钩子（在调用方 goroutine 内跑完）
-func EmitQuoteUpdated(userID int64, ctx context.Context) {
-	for _, fn := range funcs() {
-		safeRun(fn, userID, ctx)
-	}
-}
-
 // EmitQuoteUpdatedAsync 异步触发。
 // 提醒检查里有 DB 查询、Redis SetNX、WebSocket 推送，全部同步跑完才返回
 // 会明显拖慢 refresh 的响应；异步后请求先返回，检查在后台完成。

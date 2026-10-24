@@ -91,10 +91,6 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/v1/stock/quote?code=SH600519
 Authorization: Bearer {{token}}
 
-### 日 K（聊天页 kline_table 的数据来源）
-GET {{host}}/api/v1/stock/kline?code=SH600519&days=10
-Authorization: Bearer {{token}}
-
-### 搜索股票代码
-GET {{host}}/api/v1/stock/search?keyword=茅台
+### 搜索股票代码（模糊联想：代码前缀 / 汉字名 / 拼音缩写）
+GET {{host}}/api/v1/stocks/search?q=茅台&limit=5
 Authorization: Bearer {{token}}

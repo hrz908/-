@@ -8,7 +8,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 SMALL_MODEL = os.getenv("SMALL_MODEL", "gpt-4o-mini")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
-EMBED_DIM = 1024
 
 # 工具超时
 TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "8.0"))

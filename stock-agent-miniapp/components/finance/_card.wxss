@@ -51,46 +51,6 @@
   word-break: break-word;
 }
 
-/* 头部右侧标签组（异动 / 需关注等），可放多个 */
-.fcard-tags {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--sp-1);
-}
-
-/* 悬浮标签：默认中性；hot=异动（红）；gold=需关注（金）。
-   max-width + 三件套防止长标签溢出卡外（--minw 前缀避免与 flex:none 冲突） */
-.ftag {
-  max-width: 240rpx;
-  padding: 4rpx 12rpx;
-  border-radius: var(--r-tag);
-  border: var(--hairline);
-  background: var(--surface-2);
-  font-size: var(--fs-min);
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 浅底上的标签统一淡色底 + 同色系淡描边；
-   金色强调在白底上对比度不足，--accent 已随主题切蓝，这里跟着走 token */
-.ftag--hot {
-  border-color: var(--up-border);
-  color: var(--up);
-  background: var(--up-tint);
-}
-
-/* 「需关注」标签：琥珀系（--warn）。原先用 --accent 蓝，
-   既超出「强调色只做链接」的收口，又与 event-card 的需关注圆点（琥珀）不一致 */
-.ftag--gold {
-  border-color: var(--warn-border);
-  color: var(--warn);
-  background: var(--warn-tint);
-}
-
 /* 数据栅格：一条顶部分隔线 + 两行三列（设计稿 3 列 × 2 行） */
 .fgrid {
   display: flex;

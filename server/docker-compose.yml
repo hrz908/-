@@ -63,9 +63,6 @@ services:
       EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
       # RAG 相关性阈值（对余弦相似度设阈，非 RRF 分）；bge-m3 默认 0.2，可经 .env 调
       RAG_THRESHOLD: ${RAG_THRESHOLD:-0.2}
-      # Tushare Pro 数据增强 token（财务/资金流/龙虎榜/北向/资讯/历史K线）；
-      # 为空时这些工具不注册，agent 仅用 Go 网关行情
-      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
       # Agent 工具回调 Go 网关：容器内 127.0.0.1 指向自身，
       # 必须用 host.docker.internal 才能访问跑在宿主机上的 Go server
       GO_SERVER_URL: ${GO_SERVER_URL:-http://host.docker.internal:8080}
@@ -98,7 +95,6 @@ services:
       OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-BAAI/bge-m3}
-      EMBED_DIM: ${EMBED_DIM:-1024}
     volumes:
       - ingestdata:/data/docs
     depends_on:

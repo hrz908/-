@@ -1,17 +1,14 @@
 """向量嵌入器：支持 FlagEmbedding (bge-m3) 和 OpenAI 兼容 API 降级。"""
 import hashlib
-import json
 import logging
 import struct
 from typing import Optional
 
-import numpy as np
 import redis
 
 from config import (
     REDIS_URL,
     EMBED_MODEL,
-    EMBED_DIM,
     EMBED_CACHE_TTL,
     EMBED_BATCH_SIZE,
     OPENAI_API_BASE,
@@ -130,7 +127,7 @@ class Embedder:
             is_query: 是否为查询（部分模型区分 query/doc）
 
         Returns:
-            嵌入向量列表，每个向量维度为 EMBED_DIM
+            嵌入向量列表（维度由所用模型决定，bge-m3 为 1024）
         """
         if not texts:
             return []
@@ -181,13 +178,3 @@ class Embedder:
         if len(result) != len(texts):
             logger.warning("嵌入结果数量不匹配: expected %d, got %d", len(texts), len(result))
         return result
-
-    def embed_single(self, text: str, is_query: bool = False) -> list[float]:
-        """嵌入单条文本"""
-        vecs = self.embed([text], is_query=is_query)
-        return vecs[0] if vecs else []
-
-    @property
-    def dimension(self) -> int:
-        """返回嵌入维度"""
-        return EMBED_DIM

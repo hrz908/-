@@ -5,7 +5,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 WATCH_DIR = os.getenv("WATCH_DIR", "./data/docs")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
-EMBED_DIM = int(os.getenv("EMBED_DIM", "1024"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "512"))  # tokens
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "64"))
 

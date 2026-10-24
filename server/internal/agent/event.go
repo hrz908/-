@@ -9,18 +9,14 @@ type Event struct {
 }
 
 // 预定义事件类型常量。与 Python Agent 侧约定一致，
-// 网关只做透传，不解释 data 的具体结构（card/table 等由前端渲染）。
+// 网关只做透传，不解释 data 的具体结构。
+//
+// 事件词表（除下列两个常量外均只作为字符串透传，网关不构造也不判断）：
+// token / tool_start / tool_end / card / table / sources / ping / done。
+// 与前端约定的完整清单见 agent/app/main.py 顶部注释。
 const (
-	EventStatus    = "status"     // 运行状态提示（如「正在思考…」）
-	EventToken     = "token"      // 流式文本增量
-	EventToolStart = "tool_start" // 工具调用开始
-	EventToolEnd   = "tool_end"   // 工具调用结束
-	EventCard      = "card"       // 卡片类结构化结果
-	EventTable     = "table"      // 表格类结构化结果
-	EventSources   = "sources"    // 引用来源
-	EventError     = "error"      // 错误（结构化，绝不断连）
-	EventPing      = "ping"       // 应用层心跳
-	EventDone      = "done"       // 本次运行结束
+	EventStatus = "status" // 运行状态提示（如「正在思考…」）
+	EventError  = "error"  // 错误（结构化，绝不断连）
 )
 
 // ErrorData 错误事件的数据载荷。

@@ -9,8 +9,8 @@
 Docker/Linux 无此问题，生产仍用 `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 （见 Dockerfile），不需要本脚本。
 
-用法（agent/ 目录下）：
-    .venv/Scripts/python.exe -X utf8 dev_server.py [--port 8000]
+用法（在 agent/ 目录下，必须走 -m 才能让 `app.main` 可导入）：
+    .venv/Scripts/python.exe -X utf8 -m app.dev_server [--port 8000]
 """
 import asyncio
 import selectors
