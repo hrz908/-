@@ -207,7 +207,8 @@ Ingest 文档入库服务
   DATABASE_URL    PostgreSQL 连接串
   REDIS_URL       Redis 连接串
   WATCH_DIR       监听目录 (默认: ./data/docs)
-  EMBED_MODEL     嵌入模型 (默认: BAAI/bge-m3)
+  EMBED_MODEL     嵌入模型 (默认: Qwen/Qwen3-Embedding-4B)
+  EMBED_DIM       输出维度 (默认: 1536，须与数据库 vector(N) 一致)
   CHUNK_SIZE      分块大小 tokens (默认: 512)
   CHUNK_OVERLAP   分块重叠 tokens (默认: 64)
 """)

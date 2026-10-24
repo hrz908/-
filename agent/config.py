@@ -7,14 +7,18 @@ OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 SMALL_MODEL = os.getenv("SMALL_MODEL", "gpt-4o-mini")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "Qwen/Qwen3-Embedding-4B")
+# 输出维度：Qwen3 系列支持 dimensions 降维。1536 是保住 HNSW 索引的上限内取值
+# —— pgvector 对 vector 类型的 HNSW 索引硬限 2000 维，2048/2560 直接报错
+EMBED_DIM = int(os.getenv("EMBED_DIM", "1536"))
 
 # 工具超时
 TOOL_TIMEOUT = float(os.getenv("TOOL_TIMEOUT", "8.0"))
 # LLM 单次请求超时（秒）：约束单次请求的完成时间；不设的话上游卡死会挂住整条事件流
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 # RAG 相关度阈值：针对余弦相似度（不是 RRF 融合分）。
-# bge-m3 的 query↔chunk 相关命中实测约 0.22~0.5，故默认 0.2；
+# 0.2 是按 bge-m3 的 query↔chunk 命中区间（约 0.22~0.5）定的；换 Qwen3-Embedding
+# 后相似度分布不同，需按实际召回重标；
 # 语料/模型变化时需重新校准——阈值过高会让 RAG 恒 escalate 到 mcp、从不生成引用回答
 RAG_THRESHOLD = float(os.getenv("RAG_THRESHOLD", "0.2"))
 # Go 网关地址（工具调用回现有后端获取行情）

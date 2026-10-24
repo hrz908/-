@@ -8,7 +8,7 @@ from langchain_openai import OpenAIEmbeddings
 
 import psycopg
 
-from config import DATABASE_URL, OPENAI_API_BASE, OPENAI_API_KEY, EMBED_MODEL
+from config import DATABASE_URL, OPENAI_API_BASE, OPENAI_API_KEY, EMBED_MODEL, EMBED_DIM
 
 # 混合检索 SQL（RRF k=60）——保留 $n 占位形式作为规范文档，
 # 执行时经 _to_psycopg 转成 psycopg 的 %s 位置参数。
@@ -69,6 +69,8 @@ class HybridRetriever(BaseRetriever):
                 model=EMBED_MODEL,
                 openai_api_base=OPENAI_API_BASE,
                 openai_api_key=OPENAI_API_KEY,
+                # 必须显式指定：Qwen3-4B 默认输出 2560 维，与库里的 1536 不匹配
+                dimensions=EMBED_DIM,
             )
         return self.embedder
 

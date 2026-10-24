@@ -97,7 +97,7 @@ async def sufficiency_check(state: dict) -> dict:
     两级判定：阈值闸（便宜）——最高相似度 < RAG_THRESHOLD 或有效片段 < 2 即未命中；
     LLM 判读（准）——过阈值的片段交小模型判「能否回答」，判读异常按命中处理、不阻断链路。
     用 similarity 而非 RRF 融合分 score 判定：score 是排名函数（量级 ~1/(60+rk)，最大约 0.033），
-    无法衡量相关性；similarity 才与 RAG_THRESHOLD 同尺度（bge-m3 相关命中约 0.2~0.5）。
+    无法衡量相关性；similarity 才与 RAG_THRESHOLD 同尺度（取值区间随 embedding 模型变化）。
     """
     retrieved = state.get("retrieved", []) or []
     top_sim = max((r.get("similarity", 0.0) for r in retrieved), default=0.0)

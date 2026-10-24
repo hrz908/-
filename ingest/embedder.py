@@ -14,15 +14,20 @@ from config import (
     OPENAI_API_BASE,
     OPENAI_API_KEY,
     OPENAI_EMBED_MODEL,
+    EMBED_DIM,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def _cache_key(model: str, text: str) -> str:
-    """Redis 缓存 key: emb:{model}:{content_hash}"""
+    """Redis 缓存 key: emb:{model}:{dim}:{content_hash}
+
+    维度必须进 key：同一模型可用 dimensions 输出不同维度，
+    不隔离会命中错维度缓存，写 pgvector 时维度校验直接失败。
+    """
     h = hashlib.sha256(text.encode()).hexdigest()[:16]
-    return f"emb:{model}:{h}"
+    return f"emb:{model}:{EMBED_DIM}:{h}"
 
 
 def _serialize_vector(vec: list[float]) -> bytes:
@@ -113,6 +118,7 @@ class Embedder:
             resp = self._openai_client.embeddings.create(
                 model=OPENAI_EMBED_MODEL,
                 input=batch,
+                dimensions=EMBED_DIM,
             )
             batch_vecs = [item.embedding for item in resp.data]
             all_vecs.extend(batch_vecs)
@@ -127,7 +133,8 @@ class Embedder:
             is_query: 是否为查询（部分模型区分 query/doc）
 
         Returns:
-            嵌入向量列表（维度由所用模型决定，bge-m3 为 1024）
+            嵌入向量列表（维度由 EMBED_DIM 决定，Qwen3-Embedding-4B 默认 2560，
+            本项目固定 1536 以保住 HNSW 索引）
         """
         if not texts:
             return []

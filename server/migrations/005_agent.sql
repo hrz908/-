@@ -6,7 +6,9 @@
 --
 -- 说明：
 --   tsv 使用 'simple' 配置（本地镜像未装 zhparser，中文分词交由上层处理）
---   embedding 维度固定 1024（对齐 BAAI/bge-m3 等主流 embedding 模型输出）
+--   embedding 维度固定 1536（Qwen3-Embedding-4B + dimensions=1536）；
+--   上限卡在 2000：pgvector 对 vector 类型的 HNSW 索引超 2000 维直接拒绝，
+--   故 2048/2560 都要么删索引、要么换 halfvec，这里取 1536 保住 HNSW
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -33,7 +35,7 @@ CREATE TABLE chunks (
   token_count INT,
   metadata    JSONB DEFAULT '{}'::jsonb,
   tsv         tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED,
-  embedding   vector(1024) NOT NULL,
+  embedding   vector(1536) NOT NULL,
   UNIQUE (document_id, seq)
 );
 
