@@ -9,7 +9,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"stock-agent-server/internal/stock"
+	"stock-agent-server/internal/domain/stockcode"
 )
 
 // QuoteDetail 单只股票的完整行情快照：比 StockSnapshot 多出

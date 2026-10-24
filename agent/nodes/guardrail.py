@@ -10,7 +10,7 @@ import re
 from langchain_core.messages import ToolMessage
 from langgraph.types import Overwrite
 
-from llm import count_message_tokens
+from core.llm import count_message_tokens
 
 # 常见注入/越权话术（中英），大小写不敏感
 _INJECTION_PATTERNS = [

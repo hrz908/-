@@ -14,7 +14,7 @@ import (
 	"stock-agent-server/internal/hook"
 	"stock-agent-server/internal/quote"
 	"stock-agent-server/internal/resp"
-	"stock-agent-server/internal/stock"
+	"stock-agent-server/internal/domain/stockcode"
 	"stock-agent-server/internal/util"
 )
 

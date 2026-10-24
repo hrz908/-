@@ -25,13 +25,13 @@ GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 GO_SERVER_TOKEN = os.getenv("GO_SERVER_TOKEN", "")
 
 # ===== MCP 工具源（炒股 agent 取数工具，LangGraph 架构 2026-10-23）=====
-# 取数工具可由 mcp_servers/stock_server.py（FastMCP，stdio 子进程）暴露；
+# 取数工具可由 mcp/stock_server.py（FastMCP，stdio 子进程）暴露；
 # 加载失败自动回退进程内直连（tools.get_tools），上层无感知。
 # 注意 mcp python-sdk 必须钉 1.x（2.x 与 langchain-mcp-adapters 0.3.x 不兼容）
 STOCK_MCP_ENABLED = os.getenv("STOCK_MCP_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
 STOCK_MCP_SERVER_PATH = os.getenv(
     "STOCK_MCP_SERVER_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_servers", "stock_server.py"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp", "stock_server.py"),
 )
 
 # 数据源说明（2026-10-23 起）：

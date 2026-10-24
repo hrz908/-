@@ -9,7 +9,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from config import REDIS_URL
-from llm import get_small_llm
+from core.llm import get_small_llm
 
 _SYSTEM = (
     "你是查询改写器。根据对话历史，把用户最新的问题改写成一个"

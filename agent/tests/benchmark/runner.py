@@ -92,7 +92,7 @@ def _tool_digest(tool_results: list, max_chars: int = 1200) -> list:
 
 async def run_case_inproc(case: Case, graph, run_id: str) -> dict:
     """进程内跑一个用例（含多轮），返回结构化结果。"""
-    from state import initial_state
+    from core.state import initial_state
     from langchain_core.messages import HumanMessage
 
     thread_id = f"bench-{run_id}-{case.id}"
@@ -315,7 +315,7 @@ async def run_batch(cases: list, mode: str = "inproc", run_id: str = None,
 
     if mode == "inproc":
         from langgraph.checkpoint.memory import MemorySaver
-        from graph import build_graph
+        from core.graph import build_graph
         graph = build_graph(MemorySaver())
 
     async def _one(case: Case):

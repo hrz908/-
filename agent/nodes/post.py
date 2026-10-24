@@ -14,7 +14,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import AIMessage, HumanMessage
 
 from config import DATABASE_URL, REDIS_URL, SUMMARY_TOKEN_LIMIT
-from llm import get_small_llm, count_message_tokens
+from core.llm import get_small_llm, count_message_tokens
 
 logger = logging.getLogger("stocka.agent")
 

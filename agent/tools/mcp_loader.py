@@ -1,7 +1,7 @@
 """股票工具源加载器：MCP Server（FastMCP，stdio 子进程）优先，进程内直连兜底。
 
 设计（LangGraph 架构 §4.4 / 开放问题 1）：
-- 取数工具统一由 mcp_servers/stock_server.py 以 MCP 协议暴露（stdio 子进程，
+- 取数工具统一由 mcp/stock_server.py 以 MCP 协议暴露（stdio 子进程，
   与 agent 同镜像、同环境变量），langchain-mcp-adapters 负责加载成 BaseTool；
 - 任何一步失败（未装 adapters / 子进程起不来 / 列工具为空）都整段回退到
   tools.get_tools() 的进程内 @tool 直连——工具名、参数、{"ok": ...} 返回契约

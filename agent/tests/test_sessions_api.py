@@ -31,9 +31,9 @@ logging.disable(logging.INFO)
 from fastapi.testclient import TestClient  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
 
-import checkpointer  # noqa: E402
-import main  # noqa: E402
-import sessions as sessions_mod  # noqa: E402
+from core import checkpointer  # noqa: E402
+from app import main  # noqa: E402
+from core import sessions as sessions_mod  # noqa: E402
 
 USER = "u_42"
 SID = "sess_1761234567890_k3j2h1a9z"

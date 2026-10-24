@@ -19,11 +19,11 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from pydantic import BaseModel, Field
 
-from llm import get_llm, get_small_llm
-from state import AgentState, recent_turns
+from core.llm import get_llm, get_small_llm
+from core.state import AgentState, recent_turns
 from config import RAG_THRESHOLD
-from retriever import build_retriever
-from prompts.parse import render
+from rag.retriever import build_retriever
+from core.template import render
 from subgraphs import emit
 
 logger = logging.getLogger("stocka.agent")

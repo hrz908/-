@@ -17,7 +17,7 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 
 	"stock-agent-server/internal/httpclient"
-	"stock-agent-server/internal/stock"
+	"stock-agent-server/internal/domain/stockcode"
 )
 
 // quoteAPIBase 自建行情服务的基地址（配置项 quote_api）。

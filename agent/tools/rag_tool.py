@@ -16,7 +16,7 @@ _RETRIEVER_K = 8
 def _get_retriever():
     global _retriever
     if _retriever is None:
-        from retriever import build_retriever
+        from rag.retriever import build_retriever
 
         _retriever = build_retriever(k=_RETRIEVER_K)
     return _retriever

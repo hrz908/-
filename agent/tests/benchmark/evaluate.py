@@ -101,7 +101,7 @@ def _judge_model():
 async def llm_judge(case, result: dict) -> dict:
     """LLM 评委：五维打分 + issues + suggestion。异常时返回全 None 的占位。"""
     from langchain_core.messages import HumanMessage, SystemMessage
-    from llm import get_llm
+    from core.llm import get_llm
 
     final = result.get("final", {})
     query = " -> ".join(t["query"] for t in result.get("turns", []))

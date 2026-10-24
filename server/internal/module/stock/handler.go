@@ -11,7 +11,7 @@ import (
 	"stock-agent-server/internal/deps"
 	"stock-agent-server/internal/quote"
 	"stock-agent-server/internal/resp"
-	"stock-agent-server/internal/stock"
+	"stock-agent-server/internal/domain/stockcode"
 )
 
 // searchCacheTTL 搜索结果缓存 1 小时。

@@ -6,7 +6,7 @@
 因此这里绕开 `Server.run()`（它先 setup_event_loop 再 asyncio.run），
 直接在自己的 SelectorEventLoop 里 `await server.serve()`。
 
-Docker/Linux 无此问题，生产仍用 `uvicorn main:app --host 0.0.0.0 --port 8000`
+Docker/Linux 无此问题，生产仍用 `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 （见 Dockerfile），不需要本脚本。
 
 用法（agent/ 目录下）：
@@ -28,7 +28,7 @@ def _port() -> int:
 
 
 def main() -> None:
-    config = uvicorn.Config("main:app", host="127.0.0.1", port=_port(), log_level="info")
+    config = uvicorn.Config("app.main:app", host="127.0.0.1", port=_port(), log_level="info")
     server = uvicorn.Server(config)
     if sys.platform == "win32":
         # 直接调 serve()，避开 Server.run() 内部硬编码的 ProactorEventLoop

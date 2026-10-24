@@ -8,7 +8,7 @@ import re
 import json
 from functools import lru_cache
 
-_PROMPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROMPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "prompts")
 
 
 @lru_cache(maxsize=None)

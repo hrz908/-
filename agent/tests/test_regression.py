@@ -27,7 +27,7 @@ os.environ["STOCK_MCP_ENABLED"] = "0"
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from config import MAX_INPUT_TOKENS
-from llm import count_message_tokens, is_context_overflow
+from core.llm import count_message_tokens, is_context_overflow
 from subgraphs.stock import (
     _DATA_ABBR_RE,
     _OVERFLOW_REPLY,
@@ -545,7 +545,7 @@ def test_graceful_empty_fallback():
 
 def test_fewshot_examples_wired():
     print("\n[P8] few-shot 示例接入三个提示词")
-    from prompts.parse import render, load_template
+    from core.template import render, load_template
 
     for name in ("stock_examples.xml", "router_examples.xml", "toolcall_examples.xml"):
         text = load_template(name)
@@ -570,7 +570,7 @@ def test_fewshot_examples_wired():
 def test_history_trim_and_session_utils():
     print("\n[P9] 消息窗口裁剪与会话注册表工具")
     from nodes.guardrail import _trim_history
-    from sessions import thread_id_of, valid_session_id
+    from core.sessions import thread_id_of, valid_session_id
 
     # 窗口内不裁
     msgs = [HumanMessage(content=f"q{i}") for i in range(10)]

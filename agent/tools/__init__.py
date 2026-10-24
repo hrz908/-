@@ -9,7 +9,7 @@ go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive），自行解 Go
 - akshare（东财/新浪）：估值 / 资金流 / 财报 / 资讯 / 龙虎榜 / 机构研报
 - baostock：历史日 K（15 个交易日窗口）
 三者都不需要 token，工具全部无条件注册（原 Tushare 的积分门控已删除）。
-2026-10-23 起本函数同时是 MCP 工具源（mcp_servers/stock_server.py 经
+2026-10-23 起本函数同时是 MCP 工具源（mcp/stock_server.py 经
  tools/mcp_loader.py 加载）的兜底来源：MCP 子进程失败时整段回退到这里，
 工具名 / 参数 / 返回契约保持一致。
 """

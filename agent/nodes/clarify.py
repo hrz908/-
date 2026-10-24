@@ -7,7 +7,7 @@
 """
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from llm import get_small_llm
+from core.llm import get_small_llm
 from subgraphs import emit
 
 _BLOCK_REPLY = "抱歉，我无法处理该请求。如果你有股票行情或投研相关的问题，欢迎换个方式告诉我。"

@@ -24,7 +24,7 @@ from typing import Literal
 
 from langgraph.graph import StateGraph, START, END
 
-from state import AgentState
+from core.state import AgentState
 from nodes import guardrail, rewrite, classify, clarify, refuse, post
 from subgraphs.stock import build_stock_subgraph
 from subgraphs.rag import build_rag_subgraph
@@ -97,7 +97,7 @@ async def get_graph():
     """惰性构建带 checkpointer 的全局图单例。"""
     global _graph
     if _graph is None:
-        from checkpointer import get_checkpointer
+        from core.checkpointer import get_checkpointer
         cp = await get_checkpointer()
         _graph = build_graph(cp)
     return _graph

@@ -6,7 +6,7 @@ tools/mcp_loader.py（langchain-mcp-adapters）加载：
 - 返回统一 {"ok": True, "data": ...} / {"ok": False, "error": ...} 信封，
   JSON 可序列化（MCP content 走 JSON 文本）。
 
-启动：`python mcp_servers/stock_server.py`——通常由 mcp_loader 以 stdio
+启动：`python mcp/stock_server.py`——通常由 mcp_loader 以 stdio
 子进程拉起（同镜像、同环境变量，无需额外端口）；也可手动运行配合 MCP
 Inspector 调试。部署形态延续设计文档开放问题 1 的 stdio 方案。
 """
@@ -14,7 +14,7 @@ import functools
 import sys
 from pathlib import Path
 
-# 脚本方式运行时 sys.path 里只有 mcp_servers/，补上 agent 根目录才能 import tools
+# 脚本方式运行时 sys.path 里只有 mcp/，补上 agent 根目录才能 import tools
 _AGENT_DIR = str(Path(__file__).resolve().parent.parent)
 if _AGENT_DIR not in sys.path:
     sys.path.insert(0, _AGENT_DIR)

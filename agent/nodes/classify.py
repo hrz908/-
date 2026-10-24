@@ -21,8 +21,8 @@ from pydantic import BaseModel, Field
 
 from langchain_core.messages import HumanMessage
 
-from llm import get_small_llm
-from prompts.parse import render, parse_route, load_template
+from core.llm import get_small_llm
+from core.template import render, parse_route, load_template
 from nodes.rewrite import _format_history
 
 _CONF_MIN = 0.6

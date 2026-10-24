@@ -148,7 +148,7 @@ async def session_messages(user_id: str, session_id: str) -> list:
     的 AIMessage 对前端没有意义，还会破坏消息配对。结构化卡片不持久化
     （checkpoint 里只有文本），恢复的会话以文本气泡呈现。
     """
-    from checkpointer import get_checkpointer
+    from core.checkpointer import get_checkpointer
 
     cp = await get_checkpointer()
     tn = await cp.aget_tuple(
@@ -187,7 +187,7 @@ async def delete_session(user_id: str, session_id: str) -> bool:
 async def _drop_thread(thread_id: str) -> None:
     """清掉一个 thread 的 checkpoint 与滚动摘要。失败只记日志。"""
     try:
-        from checkpointer import get_checkpointer
+        from core.checkpointer import get_checkpointer
 
         cp = await get_checkpointer()
         if hasattr(cp, "adelete_thread"):
