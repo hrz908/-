@@ -199,10 +199,20 @@ env_missing_keys() {
     comm -23 <(env_keys "$DEPLOY_DIR/deploy/.env.production.example") <(env_keys "$1")
 }
 
-cmd_env_check() {
+# .env 是 root:600，非 root 跑会把「读不到」当成「键全缺」：env-check 报 31 项全缺，
+# env-append 直接把整套键重复追加一遍。前置校验必须放在比对之前。
+env_guard() {
     local env_file="$DEPLOY_DIR/deploy/.env"
     local tpl="$DEPLOY_DIR/deploy/.env.production.example"
+    [ -f "$tpl" ] || die "模板缺失：$tpl"
     [ -f "$env_file" ] || die "$env_file 不存在，先执行 deploy"
+    [ -r "$env_file" ] || die "$env_file 不可读（root:600），用 sudo 重跑：sudo bash scripts/deploy.sh $1"
+}
+
+cmd_env_check() {
+    env_guard env-check
+    local env_file="$DEPLOY_DIR/deploy/.env"
+    local tpl="$DEPLOY_DIR/deploy/.env.production.example"
     local miss
     miss=$(env_missing_keys "$env_file")
     if [ -z "$miss" ]; then
@@ -221,14 +231,21 @@ cmd_env_check() {
 cmd_env_append() {
     require_root env-append
     require_repo
+    env_guard env-append
     local env_file="$DEPLOY_DIR/deploy/.env"
     local tpl="$DEPLOY_DIR/deploy/.env.production.example"
-    [ -f "$env_file" ] || die "$env_file 不存在，先执行 deploy"
     local miss
     miss=$(env_missing_keys "$env_file")
     if [ -z "$miss" ]; then
         log "无缺失项，未改动 .env"
         return 0
+    fi
+    # 兜底：缺失数 ≈ 模板键数，几乎只可能是读到了空 .env；宁可中止也不能重复追加一整份
+    local total miss_n
+    total=$(env_keys "$tpl" | grep -c . || true)
+    miss_n=$(printf '%s\n' "$miss" | grep -c . || true)
+    if [ "$miss_n" -ge "$total" ]; then
+        die "缺失 $miss_n 项等于模板键数 $total，疑似 .env 读取失败，已中止（文件未改动）"
     fi
     # 只留一份 .env.bak（每次覆盖）：追加是纯尾部追加、不改原有行，备份只是兜底；
     # 带时间戳会攒出一堆含生产密钥的副本，反而扩大泄露面
