@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from core.llm import get_llm, get_small_llm
 from core.state import AgentState, recent_turns
-from config import RAG_THRESHOLD, RERANK_THRESHOLD
+from config import RAG_THRESHOLD, RERANK_THRESHOLD, RAG_TOP_K
 from rag.retriever import build_retriever
 from core.template import render
 from subgraphs import emit
@@ -34,7 +34,7 @@ _retriever = None
 def _get_retriever():
     global _retriever
     if _retriever is None:
-        _retriever = build_retriever(k=6)
+        _retriever = build_retriever(k=RAG_TOP_K)
     return _retriever
 
 

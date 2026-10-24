@@ -606,6 +606,53 @@ def test_history_trim_and_session_utils():
           not valid_session_id("a b") and not valid_session_id("x" * 65) and not valid_session_id(""))
 
 
+# ===== P10：检索候选池与上线数量（2026-10-25）=====
+def test_retrieval_knobs():
+    print("\n[P10] 候选池 N / 上线数量 k 的接线与裁剪")
+    from langchain_core.documents import Document
+    from config import RERANK_CANDIDATES
+    from rag.retriever import build_retriever, _apply_rerank_filter, _clean_docs
+
+    r = build_retriever(k=4, candidates=30)
+    check("k 与 candidates 可分别配置", r.k == 4 and r.candidates == 30, f"{r.k}/{r.candidates}")
+    check("candidates 默认取 RERANK_CANDIDATES",
+          build_retriever(k=6).candidates == RERANK_CANDIDATES,
+          f"{build_retriever(k=6).candidates} vs {RERANK_CANDIDATES}")
+
+    def doc(i, title, rs, head=None):
+        return Document(page_content=(head or i) + "x" * 60, metadata={
+            "id": i, "title": title, "similarity": 0.8, "rerank_score": rs})
+
+    docs = [doc("a", "t1", 0.9), doc("b", "t1", 0.8), doc("c", "t1", 0.7), doc("d", "t2", 0.1)]
+    check("裁剪关闭时原样返回", len(_apply_rerank_filter(docs, 0.5, enabled=False)) == 4)
+    check("裁剪开启时按阈值过滤",
+          [x.metadata["id"] for x in _apply_rerank_filter(docs, 0.5, enabled=True)] == ["a", "b", "c"])
+    # 重排分缺失（重排关闭/失败）时不能把候选裁空，否则误判为「检索不足」
+    nod = [Document(page_content="z" * 60, metadata={"id": "e", "title": "t3", "similarity": 0.8})]
+    check("无重排分时不裁空", len(_apply_rerank_filter(nod, 0.5, enabled=True)) == 1)
+    check("per_title 限制同文档条数",
+          [x.metadata["id"] for x in _clean_docs(docs, per_title=2)] == ["a", "b", "d"])
+
+    # 去重键必须用归一化全文。ingest 给每个 chunk 注入「[标题路径]」前缀，
+    # 同标题兄弟片段前 40 字完全一致，按前缀比对会把不同段落整条误删
+    # （等价于把 per_title 压成 1）——下面两组前 40 字刻意相同。
+    prefix = "[投教手册 > 估值指标 > 市盈率的适用边界] " + "零" * 40
+
+    def seg(i, body):
+        return Document(page_content=prefix + body, metadata={
+            "id": i, "title": "t1", "similarity": 0.8, "rerank_score": 0.9})
+
+    sib = [seg("f", "甲段正文内容"), seg("g", "乙段正文内容")]
+    kept = [x.metadata["id"] for x in _clean_docs(sib, per_title=2)]
+    check("同标题同前缀不同正文都保留", kept == ["f", "g"], str(kept))
+    dup = [seg("h", "同一段正文"), seg("i", "同一段正文")]
+    check("不同 id 的同一段正文被去重", len(_clean_docs(dup, per_title=2)) == 1)
+    ws = [seg("k", "同一段 正文"), seg("l", "同一段\n\n正文")]
+    check("仅空白长度差异也判为同一段", len(_clean_docs(ws, per_title=2)) == 1)
+    same_id = [seg("j", "甲"), seg("j", "乙")]
+    check("同 id 重复被去重", len(_clean_docs(same_id, per_title=2)) == 1)
+
+
 def main():
     print("=" * 62)
     print("AI 对话故障回归测试")
@@ -632,6 +679,7 @@ def main():
     test_graceful_empty_fallback()
     test_fewshot_examples_wired()
     test_history_trim_and_session_utils()
+    test_retrieval_knobs()
     print("\n" + "=" * 62)
     if _FAILED:
         print(f"FAILED: {len(_FAILED)} 项 -> {_FAILED}")

@@ -33,6 +33,11 @@ RERANK_MODEL = os.getenv("RERANK_MODEL", "Qwen/Qwen3-Reranker-0.6B")
 RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "20"))
 RERANK_THRESHOLD = float(os.getenv("RERANK_THRESHOLD", "0.5"))
 RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "8"))
+# 进上下文的片段数（上线数量）；重排候选池见上面的 RERANK_CANDIDATES
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "6"))
+# 重排后按 RERANK_THRESHOLD 再裁一次上下文。默认关：历史行为是「只判是否命中，
+# 不裁剪片段」，开启后低分片段不再进 prompt/sources，代价是可能裁到 <2 条触发升级
+RAG_RERANK_FILTER = os.getenv("RAG_RERANK_FILTER", "false").strip().lower() in ("1", "true", "yes", "on")
 # Go 网关地址（工具调用回现有后端获取行情）
 GO_SERVER_URL = os.getenv("GO_SERVER_URL", "http://127.0.0.1:8080")
 # 调 Go 网关受保护接口用的服务间 token（Agent 作为可信内部服务）

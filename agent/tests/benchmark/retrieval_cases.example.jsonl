@@ -1,0 +1,4 @@
+{"qid": "R-000", "query": "市盈率低是不是就代表股票便宜", "rewritten": "市盈率低是不是就代表股票便宜", "gold_chunk_ids": ["<chunks.id>"], "difficulty": "medium", "category": "retrieval", "source_title": "<documents.title>", "sample": true}
+{"qid": "R-000b", "query": "TTM 市盈率和静态市盈率差在哪", "rewritten": "TTM 市盈率和静态市盈率有什么区别", "gold_chunk_ids": ["<chunks.id>", "<另一个也答得出的 chunks.id>"], "difficulty": "hard", "category": "retrieval", "source_title": "<documents.title>", "sample": true}
+{"qid": "R-000c", "query": "可转债强制赎回是什么意思", "rewritten": "可转债强制赎回是什么意思", "gold_chunk_ids": ["<chunks.id>"], "difficulty": "easy", "category": "retrieval", "source_title": "<documents.title>", "sample": true}
+{"qid": "N-000", "query": "比特币今天多少钱一枚", "rewritten": "比特币今天多少钱一枚", "gold_chunk_ids": [], "negative": true, "difficulty": "easy", "category": "retrieval", "source_title": "", "sample": true}

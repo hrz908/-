@@ -8,6 +8,8 @@
 #   sudo bash scripts/deploy.sh restart          # 重启全部服务
 #   sudo bash scripts/deploy.sh logs [服务名]    # 看日志（server/agent/postgres/redis）
 #   sudo bash scripts/deploy.sh ps               # 看容器状态
+#   sudo bash scripts/deploy.sh env-check        # 对比 .env 与模板的键差异（只读）
+#   sudo bash scripts/deploy.sh env-append       # 把模板里新增的键补进 .env（会先备份）
 #
 # 前置条件：已 git clone 本仓库到 /opt/stock-agent（见 deploy/README.prod.md 第 1 步）。
 
@@ -137,6 +139,8 @@ cmd_deploy() {
     done
     [ -z "$missing" ] || die ".env 缺少必填项：$missing"
 
+    cmd_env_check
+
     gen_self_signed_cert
 
     log "安装 nginx 配置..."
@@ -172,12 +176,73 @@ cmd_update() {
     git fetch origin "$BRANCH"
     git pull --ff-only origin "$BRANCH"
 
+    # 新版本可能引入新配置项：模板变了但已存在的 .env 不会被更新，这里提示差异
+    cmd_env_check
+
     log "重建并重启..."
     cd "$DEPLOY_DIR/deploy"
     docker compose -f "$COMPOSE_FILE" up -d --build
     docker image prune -f
 
     log "更新完成。状态：sudo bash scripts/deploy.sh ps"
+}
+
+# ---------------------------------------------------------------- .env 一致性
+# 模板只在首次部署时 cp 一次，之后 git pull 不会同步到已存在的 .env：新增配置项
+# 不会自动出现在生产（代码有默认值，功能不受影响，但运维看不到开关）。
+# 这里只做只读比对；补写必须显式跑 env-append，避免 update 静默改生产配置。
+env_keys() {
+    grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | cut -d= -f1 | sort -u || true
+}
+
+env_missing_keys() {
+    comm -23 <(env_keys "$DEPLOY_DIR/deploy/.env.production.example") <(env_keys "$1")
+}
+
+cmd_env_check() {
+    local env_file="$DEPLOY_DIR/deploy/.env"
+    local tpl="$DEPLOY_DIR/deploy/.env.production.example"
+    [ -f "$env_file" ] || die "$env_file 不存在，先执行 deploy"
+    local miss
+    miss=$(env_missing_keys "$env_file")
+    if [ -z "$miss" ]; then
+        log ".env 键集合与模板一致"
+        return 0
+    fi
+    warn ".env 缺少模板里的这些键（代码有默认值，不补也能跑）："
+    while read -r k; do
+        [ -n "$k" ] || continue
+        echo "    $(grep -E "^${k}=" "$tpl" | tail -1)"
+    done <<< "$miss"
+    warn "补齐：sudo bash scripts/deploy.sh env-append（补完 restart 生效）"
+    return 0
+}
+
+cmd_env_append() {
+    require_root env-append
+    require_repo
+    local env_file="$DEPLOY_DIR/deploy/.env"
+    local tpl="$DEPLOY_DIR/deploy/.env.production.example"
+    [ -f "$env_file" ] || die "$env_file 不存在，先执行 deploy"
+    local miss
+    miss=$(env_missing_keys "$env_file")
+    if [ -z "$miss" ]; then
+        log "无缺失项，未改动 .env"
+        return 0
+    fi
+    # 只留一份 .env.bak（每次覆盖）：追加是纯尾部追加、不改原有行，备份只是兜底；
+    # 带时间戳会攒出一堆含生产密钥的副本，反而扩大泄露面
+    cp -a "$env_file" "${env_file}.bak"
+    {
+        echo ""
+        echo "# ===== 自动补齐自 .env.production.example（$(date +%F)）====="
+        while read -r k; do
+            [ -n "$k" ] || continue
+            grep -E "^${k}=" "$tpl" | tail -1 || true
+        done <<< "$miss"
+    } >> "$env_file"
+    log "已追加到 $env_file：$(echo "$miss" | tr '\n' ' ')"
+    warn "补的是模板默认值，与线上实际不符请手改，然后 restart"
 }
 
 # ---------------------------------------------------------------- 其它
@@ -208,8 +273,10 @@ case "${1:-}" in
     restart)        shift; cmd_restart "$@" ;;
     logs)           shift; cmd_logs "$@" ;;
     ps)             shift; cmd_ps "$@" ;;
+    env-check)      shift; cmd_env_check "$@" ;;
+    env-append)     shift; cmd_env_append "$@" ;;
     *)
-        echo "用法: sudo bash scripts/deploy.sh {install-docker|deploy|update|restart|logs [服务]|ps}"
+        echo "用法: sudo bash scripts/deploy.sh {install-docker|deploy|update|restart|logs [服务]|ps|env-check|env-append}"
         exit 1
         ;;
 esac

@@ -124,6 +124,7 @@ ssl_certificate_key /etc/nginx/ssl/stock-agent.key;
   3. `sudo bash scripts/deploy.sh restart`。轮换后不填 `.env` 的后果：企业微信推送失败，小程序内 WebSocket 提醒不受影响。
 - **自签名证书只用于阶段一调试**，别用于正式版。
 - `.env` 含全部生产密钥，只在服务器上存在；仓库里只有 `.env.production.example` 模板。
+- **模板不会自动同步到 `.env`**：`.env` 仅在首次部署时从模板复制一次，之后 `update` 只做 `git pull + 重建`，模板里新增的配置项不会自己出现在生产。`deploy` / `update` 会顺手跑一次 `env-check` 打印差异，确认后执行 `sudo bash scripts/deploy.sh env-append` 补齐（先备份，补的是模板默认值）。
 - Go server 的 8080 只绑 `127.0.0.1`；postgres/redis 无宿主端口映射——保持这个设计，别为了方便暴露出去。
 
 ## 9. 常见问题
@@ -134,3 +135,4 @@ ssl_certificate_key /etc/nginx/ssl/stock-agent.key;
 4. **migrations 不生效**：`/docker-entrypoint-initdb.d` 只在 postgres 数据卷**为空**时执行。改表请新增 `server/migrations/00X_*.sql`，已在跑的库要手工执行。
 5. **agent 行情工具 401**：`GO_SERVER_TOKEN` 没配。先正常部署，用小程序登录后从 `deploy.sh logs server` 或接口响应里拿一个 JWT 填进 `.env`，`restart` 一次即可；不填不影响对话和行情卡。
 6. **改防火墙后 SSH 断了**：`install-docker` 的 ufw 步骤先 allow OpenSSH 再 allow 80/443；若已被锁，用云厂商 VNC 进服务器 `ufw allow OpenSSH`。
+7. **`env-check` 提示 `.env` 缺键**：新版本在模板里加了配置项，而 `.env` 是首次部署时复制的、不会被 `git pull` 更新。不补也能跑（代码里有同名默认值），只是运维看不到这些开关；要补就 `sudo bash scripts/deploy.sh env-append`，之后 `restart`。
