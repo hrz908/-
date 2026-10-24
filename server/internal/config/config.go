@@ -81,16 +81,26 @@ type HubConfig struct {
 	MaxTotal   int `mapstructure:"max_total"`
 }
 
+// TencentASRConfig 腾讯云实时语音识别（WebSocket）凭据。
+// 三项凭据缺一不可；未配置时 /ws/asr 返回 503，小程序自动回退整段上传识别。
+type TencentASRConfig struct {
+	AppID     string `mapstructure:"app_id"`
+	SecretID  string `mapstructure:"secret_id"`
+	SecretKey string `mapstructure:"secret_key"`
+	Engine    string `mapstructure:"engine"`
+	MaxConns  int    `mapstructure:"max_conns"`
+}
+
 // Config 运行期配置。顶层键保持与旧环境变量同名（addr/dsn/jwt_secret…），
 // 分组键经 replacer 映射为下划线环境变量（server.read_timeout -> SERVER_READ_TIMEOUT）。
 type Config struct {
-	Addr          string `mapstructure:"addr"` // HTTP 监听地址
-	DSN           string `mapstructure:"dsn"`  // PostgreSQL 连接串
-	JWTSecret     string `mapstructure:"jwt_secret"`
+	Addr          string        `mapstructure:"addr"` // HTTP 监听地址
+	DSN           string        `mapstructure:"dsn"`  // PostgreSQL 连接串
+	JWTSecret     string        `mapstructure:"jwt_secret"`
 	JWTTTL        time.Duration `mapstructure:"jwt_ttl"` // 登录 token 有效期
-	RedisAddr     string `mapstructure:"redis_addr"`
-	RedisPassword string `mapstructure:"redis_password"`
-	RedisDB       int    `mapstructure:"redis_db"`
+	RedisAddr     string        `mapstructure:"redis_addr"`
+	RedisPassword string        `mapstructure:"redis_password"`
+	RedisDB       int           `mapstructure:"redis_db"`
 
 	QuoteAPI     string `mapstructure:"quote_api"`     // 行情接口基地址；为空时用内置腾讯源
 	WechatAppID  string `mapstructure:"wechat_appid"`  // 小程序 appid；与 Secret 同时为空时，dev 下登录退化为演示账号
@@ -107,6 +117,8 @@ type Config struct {
 	ASRBaseURL   string `mapstructure:"asr_base_url"`   // 语音转文字上游基地址（OpenAI 兼容的 /audio/transcriptions）
 	ASRAPIKey    string `mapstructure:"asr_api_key"`    // 上游密钥；为空时 /asr/transcribe 直接返回「未配置」
 	ASRModel     string `mapstructure:"asr_model"`      // 上游 ASR 模型名
+
+	TencentASR TencentASRConfig `mapstructure:"tencent_asr"` // 腾讯云实时语音识别（流式）
 
 	Server            ServerConfig    `mapstructure:"server"`
 	DB                DBConfig        `mapstructure:"db"`
@@ -185,6 +197,14 @@ func setDefaults() {
 	d("asr_base_url", "https://api.siliconflow.cn/v1")
 	d("asr_api_key", "")
 	d("asr_model", "FunAudioLLM/SenseVoiceSmall")
+
+	// 腾讯云实时语音识别（小程序按住说话的分片流式识别）：
+	// 走 wss://asr.cloud.tencent.com，密钥只在服务端，绝不下发到小程序包
+	d("tencent_asr.app_id", "")
+	d("tencent_asr.secret_id", "")
+	d("tencent_asr.secret_key", "")
+	d("tencent_asr.engine", "16k_zh")
+	d("tencent_asr.max_conns", 64)
 
 	// HTTP 服务器（原 main.go 硬编码）
 	d("server.read_header_timeout", 5*time.Second)

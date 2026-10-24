@@ -40,8 +40,8 @@
   "packOptions": {
     "ignore": [
       {
-        "type": "folder",
-        "value": "tests"
+        "value": "tests",
+        "type": "folder"
       }
     ],
     "include": []

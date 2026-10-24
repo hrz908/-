@@ -94,6 +94,9 @@ func main() {
 
 	// 语音转文字：同样要在 router.New 之前注入，否则 handler 读到空配置
 	asr.Init(cfg.ASRBaseURL, cfg.ASRAPIKey, cfg.ASRModel, cfg.HTTP.ASRTimeout)
+	// 实时语音识别：腾讯云 WebSocket 凭据与连接闸门（未配置时该路由返回 503）
+	asr.InitStream(cfg.TencentASR.AppID, cfg.TencentASR.SecretID, cfg.TencentASR.SecretKey,
+		cfg.TencentASR.Engine, cfg.TencentASR.MaxConns)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

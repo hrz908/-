@@ -66,6 +66,8 @@ func New(cfg config.Config) *gin.Engine {
 	// 下面这个允许 query token 的中间件。故这里直接挂在 api 上，只用 AuthAllowQueryToken。
 	api.GET("/ws", middleware.AuthAllowQueryToken(), ws.Serve)
 	api.GET("/ws/agent", middleware.AuthAllowQueryToken(), agent.ServeWS)
+	// 实时语音识别：小程序把录音分片以二进制帧直传，这里转发腾讯云并回识别结果
+	api.GET("/ws/asr", middleware.AuthAllowQueryToken(), asr.ServeStream)
 
 	// 受保护路由：统一挂 auth（Header Bearer），user_id 由中间件注入
 	authorized := api.Group("")

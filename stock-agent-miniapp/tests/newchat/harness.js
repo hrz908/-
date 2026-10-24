@@ -150,6 +150,22 @@ function createChatPage(opts) {
 
   const modules = {
     '../../services/agent': { default: agent },
+    '../../services/asr': {
+      transcribe: () => Promise.resolve(''),
+      // 流式识别的替身：本套用例不触发录音，只保证模块导入时能取到构造器
+      AsrStream: class {
+        open() {
+          return Promise.resolve();
+        }
+        push() {}
+        finish() {}
+        cancel() {}
+        close() {}
+        broken() {
+          return false;
+        }
+      }
+    },
     '../../services/sessions': {
       listSessions: () => {
         calls.listSessions.push(true);

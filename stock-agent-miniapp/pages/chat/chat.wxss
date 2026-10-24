@@ -411,35 +411,6 @@
   box-sizing: border-box;
 }
 
-/* 实时转写浮层：浮在胶囊上方，不参与输入栏布局（输入栏是底部锚定的，
-   插进流里会把胶囊整体顶高）。pointer-events 关闭，避免挡住对话区的滚动 */
-.voice-live {
-  position: absolute;
-  left: var(--sp-3);
-  right: var(--sp-3);
-  bottom: 100%;
-  /* 与胶囊之间留一档间距；bottom:100% 已越过容器上边距，这里只补视觉间距 */
-  margin-bottom: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--surface);
-  border: var(--hairline);
-  border-radius: var(--r-tag);
-  box-shadow: var(--shadow-pop);
-  pointer-events: none;
-}
-
-/* 最多三行：中间结果越来越长，超出部分省略，避免浮层无限长高盖住对话区 */
-.voice-live-text {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-  font-size: var(--fs-body);
-  line-height: 1.6;
-  color: var(--ink);
-  word-break: break-word;
-}
-
 /* 胶囊本体：一条圆角条，左端模式键、右端发送键，中间是输入区或「按住说话」 */
 .sender-bar {
   position: relative;
@@ -508,6 +479,47 @@
   /* 背景切换不做渐变：从语音退回键盘时深色层还在向右撤，
      若慢慢渐变回黑底，白图标会先露在浅底上闪一下，必须瞬时恢复 */
   transition: background 0s;
+}
+
+/* ===== 语音输入 ===== */
+/* 实时转写浮层：贴在输入栏正上方（sender-wrap 是绝对定位容器，
+   bottom:100% 即容器上沿），不占布局高度；最多三行，超出省略
+   浮层刚出现时从下往上淡入，避免文字突然糊上来 */
+.voice-live {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: 100%;
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: var(--hairline);
+  border-radius: var(--r-tag);
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  animation: voice-live-in 160ms ease both;
+}
+
+.voice-live-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+@keyframes voice-live-in {
+  from {
+    opacity: 0;
+    transform: translateY(8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* 语音态：胶囊描边随深色底同步 */

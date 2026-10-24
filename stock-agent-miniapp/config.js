@@ -9,8 +9,10 @@
 
 const ENV_CONFIG = {
   develop: {
-    apiBase: 'http://127.0.0.1:8080',
-    wsBase: 'ws://127.0.0.1:8080'
+    // 远程服务器（ubuntu@tearsinrain.top）：开发版直连 HTTPS，需在开发者工具里
+    // 勾选「不校验合法域名、TLS 版本以及 HTTPS 证书」（project.config.json 的 urlCheck 已为 false）
+    apiBase: 'https://tearsinrain.top',
+    wsBase: 'wss://tearsinrain.top'
   },
   trial: {
     apiBase: 'https://trial-api.example.com',
@@ -39,6 +41,11 @@ function currentConfig() {
 const config = currentConfig();
 
 export const apiBase = config.apiBase;
+
+// 实时语音识别的 WebSocket 基地址（server 侧 /api/v1/ws/asr）：
+// 小程序录音分片直传网关，网关转发腾讯云实时 ASR，边说边出字。
+// 正式环境必须是 wss，且域名要在小程序后台的 socket 合法域名里登记。
+export const wsBase = config.wsBase;
 
 // AI 对话的 SSE 流式通道（server 侧 agent stream）：每次提问一个独立
 // POST 请求，响应 text/event-stream 逐帧下发，走 Header Bearer 鉴权

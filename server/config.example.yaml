@@ -27,6 +27,16 @@
 #asr_api_key: ""     # 留空回退 OPENAI_API_KEY
 #asr_model: "FunAudioLLM/SenseVoiceSmall"
 
+# 腾讯云实时语音识别（流式）：小程序录音分片直传网关，网关转发到腾讯云 WebSocket。
+# app_id / secret_id / secret_key 三项缺一不可；未配置时 /ws/asr 返回 503，
+# 小程序会自动回退成整段录音上传识别（/asr/transcribe），不会报错阻断输入。
+#tencent_asr:
+#  app_id: ""
+#  secret_id: ""
+#  secret_key: ""
+#  engine: "16k_zh"   # 中文通用；电话场景用 8k_zh
+#  max_conns: 64      # 进程内同时存活的流式连接上限
+
 server:
   read_header_timeout: 5s
   read_timeout: 15s
