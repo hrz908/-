@@ -15,7 +15,7 @@
 
 ## 0. 前置准备
 
-1. **本地代码已全部 push**：服务器从 `https://github.com/hrz908/-.git`（main 分支）拉取。先在本地 `git status` 确认没有未提交改动。
+1. **本地代码已全部 push**：服务器从 `https://github.com/hrz908/stock-agent-rag.git`（main 分支）拉取。先在本地 `git status` 确认没有未提交改动。
 2. **微信 AppSecret**：mp.weixin.qq.com → 开发管理 → 开发设置 → AppSecret（重置后只显示一次，先复制）。
 3. **硅基流动 API Key**（LLM + 语音识别）：`OPENAI_API_KEY`。
 4. **云厂商安全组放行**：22（SSH）、80、443。ufw 由脚本自动配置。
@@ -24,7 +24,7 @@
 
 ```bash
 ssh root@<服务器IP>
-git clone https://github.com/hrz908/-.git /opt/stock-agent
+git clone https://github.com/hrz908/stock-agent-rag.git /opt/stock-agent
 cd /opt/stock-agent
 ```
 

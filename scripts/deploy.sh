@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/hrz908/-.git"
+REPO_URL="https://github.com/hrz908/stock-agent-rag.git"
 BRANCH="main"
 DEPLOY_DIR="/opt/stock-agent"
 COMPOSE_FILE="docker-compose.prod.yml"
