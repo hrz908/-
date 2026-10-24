@@ -150,7 +150,6 @@ function createChatPage(opts) {
 
   const modules = {
     '../../services/agent': { default: agent },
-    '../../services/asr': { transcribe: () => Promise.resolve('') },
     '../../services/sessions': {
       listSessions: () => {
         calls.listSessions.push(true);

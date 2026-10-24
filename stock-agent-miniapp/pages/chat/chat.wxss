@@ -294,63 +294,6 @@
   color: var(--down);
 }
 
-/* ===== 语音消息气泡 =====
-   颜色跟着 user 气泡走：一律 inherit / currentColor */
-.bubble--voice {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 240rpx;
-}
-
-.voice-wave {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  height: 36rpx;
-  opacity: 0.6;
-}
-
-.voice-bar {
-  width: 4rpx;
-  border-radius: 4rpx; /* 形状条例外：语音波形迷你条，尺寸小于 --r-tag 档位 */
-  background: currentColor;
-}
-
-/* 播放中整条点亮并轻微跳动 */
-.bubble--voice-playing .voice-wave {
-  opacity: 1;
-}
-
-.bubble--voice-playing .voice-bar {
-  animation: voice-bar-pulse 1s ease-in-out infinite;
-}
-
-/* 错开一点相位，看起来像在连续跳动而不是整排一起闪 */
-.bubble--voice-playing .voice-bar:nth-child(3n) {
-  animation-delay: 0.15s;
-}
-
-.bubble--voice-playing .voice-bar:nth-child(3n + 1) {
-  animation-delay: 0.3s;
-}
-
-@keyframes voice-bar-pulse {
-  0%,
-  100% {
-    transform: scaleY(0.6);
-  }
-  50% {
-    transform: scaleY(1.3);
-  }
-}
-
-.voice-duration {
-  font-size: var(--fs-aux);
-  color: inherit;
-  opacity: 0.85;
-}
-
 /* ===== 状态提示（正在思考 / 工具查询 / 重连） =====
    与 AI 气泡同一套视觉语言：卡片面、左上直角，挂在列表底部 */
 .status-tip {
@@ -466,6 +409,35 @@
   /* 胶囊与屏幕两侧留白；下内边距由内联样式给：键盘弹起时为 0，否则让出安全区 */
   padding: var(--sp-2) var(--sp-3) 0;
   box-sizing: border-box;
+}
+
+/* 实时转写浮层：浮在胶囊上方，不参与输入栏布局（输入栏是底部锚定的，
+   插进流里会把胶囊整体顶高）。pointer-events 关闭，避免挡住对话区的滚动 */
+.voice-live {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: 100%;
+  /* 与胶囊之间留一档间距；bottom:100% 已越过容器上边距，这里只补视觉间距 */
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: var(--hairline);
+  border-radius: var(--r-tag);
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+}
+
+/* 最多三行：中间结果越来越长，超出部分省略，避免浮层无限长高盖住对话区 */
+.voice-live-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--ink);
+  word-break: break-word;
 }
 
 /* 胶囊本体：一条圆角条，左端模式键、右端发送键，中间是输入区或「按住说话」 */

@@ -28,35 +28,10 @@
     >
       <view class="chat-inner">
         <block wx:for="{{messages}}" wx:for-item="msg" wx:key="index">
-          <!-- ===== 用户消息：右对齐蓝灰气泡 ===== -->
-          <view wx:if="{{msg.role === 'user' && !msg.card}}" class="msg msg--user">
+          <!-- ===== 用户消息（含语音识别结果）：右对齐主色气泡 ===== -->
+          <view wx:if="{{msg.role === 'user'}}" class="msg msg--user">
             <view class="bubble bubble--user">
               <text class="bubble-text" selectable="{{true}}">{{msg.content[0].data}}</text>
-            </view>
-          </view>
-
-          <!-- ===== 语音消息：user 角色的卡片消息，播放入口 ===== -->
-          <view wx:elif="{{msg.role === 'user' && msg.card === 'voice'}}" class="msg msg--user">
-            <view
-              class="bubble bubble--user bubble--voice {{msg.voice.playing ? 'bubble--voice-playing' : ''}}"
-              data-index="{{index}}"
-              bindtap="playVoice"
-            >
-              <!-- antd 图标集没有 pause：播放中改用实心麦克风（配合波形动画），停着是播放三角 -->
-              <ant-icon
-                type="{{msg.voice.playing ? 'AudioFill' : 'PlayOutline'}}"
-                style="font-size:40rpx;color:var(--ink);"
-              />
-              <view class="voice-wave">
-                <view
-                  class="voice-bar"
-                  wx:for="{{msg.voice.bars}}"
-                  wx:for-item="b"
-                  wx:key="*this"
-                  style="height: {{b}}rpx;"
-                ></view>
-              </view>
-              <text class="voice-duration num">{{msg.voice.duration}}"</text>
             </view>
           </view>
 
@@ -283,6 +258,12 @@
     style="padding-bottom: {{senderPadBottom}}px; bottom: {{keyboardOffset}}px;"
     bindtouchstart="onSenderTouchStart"
   >
+    <!-- 实时转写浮层：按住说话时把插件回传的中间识别结果显示在胶囊上方。
+         绝对定位、不参与输入栏布局；pointer-events 关闭，避免挡住对话区滚动 -->
+    <view wx:if="{{voiceMode && recording}}" class="voice-live">
+      <text class="voice-live-text">{{voiceText || '正在聆听…'}}</text>
+    </view>
+
     <view class="sender-bar {{voiceMode ? 'sender-bar--voice' : ''}}">
       <!-- 模式键：键盘态显示语音图标，语音态显示键盘图标。
            无 hover-class：需求要求点它不要有「暗一下」的按压特效 -->
@@ -321,8 +302,8 @@
       </view>
 
       <!-- 语音态：胶囊整宽中央的「按住说话」（以含模式键的全宽居中），上滑可取消。
-           按住即录、抬起即发（不是开关式 toggle）；按下不加任何
-           灰阶/缩放反馈，观感与手机键盘一致。
+           按住即录、边说边转文字（浮层实时回显），松手把最终文字填进输入框、等用户确认；
+           不是开关式 toggle，按下不加灰阶/缩放反馈，观感与手机键盘一致。
            这里可以用 catch：本节点没有需要点击的子元素 -->
       <view
         wx:else
