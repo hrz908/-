@@ -38,7 +38,11 @@ services:
     image: redis:7-alpine
     container_name: stock-agent-redis
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    # maxmemory 是硬约束：embedding 缓存全量攒会涨到 GB 级，且与限流/会话共用同一实例。
+    # 不设上限时 noeviction 写满会连登录一起崩；allkeys-lru 淘汰最久未用的，缓存命中
+    # 掉了只是重算几分钱。
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}",
+              "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redisdata:/data
     healthcheck:
@@ -116,6 +120,8 @@ services:
       WATCH_DIR: /data/docs
     volumes:
       - ingestdata:/data/docs
+      # 解析副本：原件淘汰后 reembed 的唯一依据，必须落在卷里，否则容器重建即失
+      - parseddata:/data/parsed
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,3 +135,4 @@ volumes:
   redisdata:
   uploads:
   ingestdata:
+  parseddata:

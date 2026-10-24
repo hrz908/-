@@ -38,6 +38,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: stock-agent-redis
+    # 与生产一致：缓存总量封顶，避免全量灌库时把内存吃光
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - '6379:6379'
     volumes:
@@ -103,6 +105,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ingestdata:/data/docs
+      # 解析副本：原件淘汰后 reembed 的唯一依据
+      - parseddata:/data/parsed
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,3 +119,4 @@ volumes:
   pgdata:
   redisdata:
   ingestdata:
+  parseddata:

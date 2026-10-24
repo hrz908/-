@@ -1,5 +1,6 @@
 """Ingest 服务全局配置。所有配置项均可通过环境变量覆盖。"""
 import os
+from pathlib import Path
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stock_agent")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -30,3 +31,13 @@ LOCK_TTL = int(os.getenv("LOCK_TTL", "300"))
 
 # 嵌入批大小
 EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "32"))
+
+# ---- 原件淘汰（磁盘保护）----
+# 原始 PDF 全市场一年 60~120GB，而库里的向量 + 解析副本每块仅 ~20KB。
+# 开启后入库即淘汰原件，只保留解析出的 Markdown 供 reembed 重建。
+DELETE_RAW_AFTER_INGEST = os.getenv("DELETE_RAW_AFTER_INGEST", "true").lower() in ("1", "true", "yes")
+# 解析副本目录：默认与 WATCH_DIR 同级（本地 ./data/parsed，容器 /data/parsed），
+# 必须在监听目录之外，否则副本会被当成新文档重新入库。
+PARSED_DIR = os.getenv("PARSED_DIR", str(Path(WATCH_DIR).parent / "parsed"))
+# 墓碑 TTL：要覆盖 watchdog 去抖(2s) + 删除回调排队，120s 足够
+TOMBSTONE_TTL = int(os.getenv("TOMBSTONE_TTL", "120"))

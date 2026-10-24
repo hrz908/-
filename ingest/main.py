@@ -8,7 +8,7 @@ import redis
 
 from config import DATABASE_URL, OFFLINE_EMBED_MODEL, REDIS_URL, SUPPORTED_EXTENSIONS, WATCH_DIR
 from embedder import Embedder
-from pipeline import delete_file, process_file
+from pipeline import delete_file, process_file, reembed_document
 from store import Store
 from watcher import start_watcher
 
@@ -95,7 +95,7 @@ async def cmd_watch():
         await process_file(path, store, embedder, redis_client)
 
     async def on_delete(path: str):
-        await delete_file(path, store)
+        await delete_file(path, store, redis_client)
 
     observer = start_watcher(WATCH_DIR, loop, on_process, on_delete)
 
@@ -158,34 +158,29 @@ async def cmd_reembed(model: str):
     await store.ensure_tables()
 
     embedder = Embedder()
-    redis_client = _get_redis()
 
     stale_docs = await store.get_stale_documents(model)
     logger.info("发现 %d 个陈旧文档需要重新嵌入", len(stale_docs))
 
     success_count = 0
+    skip_count = 0
     fail_count = 0
 
     for doc in stale_docs:
         source_path = doc["source_path"]
-        p = Path(source_path)
-        if not p.exists():
-            logger.warning("文件已不存在，删除记录: %s", source_path)
-            await store.delete_document_by_path(source_path)
-            continue
-
         try:
-            result = await process_file(source_path, store, embedder, redis_client)
-            if result:
+            # 原件可能已被淘汰，reembed_document 内部会回落到解析副本
+            if await reembed_document(doc, store, embedder):
                 success_count += 1
                 logger.info("重嵌入成功: %s", source_path)
             else:
+                skip_count += 1
                 logger.info("跳过: %s", source_path)
         except Exception as e:
             logger.error("重嵌入失败: %s - %s", source_path, e)
             fail_count += 1
 
-    logger.info("Reembed 完成: 成功=%d, 失败=%d", success_count, fail_count)
+    logger.info("Reembed 完成: 成功=%d, 跳过=%d, 失败=%d", success_count, skip_count, fail_count)
     await store.close()
 
 
@@ -212,6 +207,8 @@ Ingest 文档入库服务
   EMBED_DIM       输出维度 (默认: 1536，须与数据库 vector(N) 一致)
   CHUNK_SIZE      分块大小 tokens (默认: 512)
   CHUNK_OVERLAP   分块重叠 tokens (默认: 64)
+  DELETE_RAW_AFTER_INGEST  入库后淘汰原件 (默认: true，设 0 保留)
+  PARSED_DIR      解析副本目录 (默认: WATCH_DIR 同级 /parsed)，原件淘汰后 reembed 靠它
 """)
 
 
