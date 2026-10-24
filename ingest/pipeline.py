@@ -204,6 +204,11 @@ async def reembed_document(
     原件默认已被淘汰，所以必须先找副本；两者都没有才认定文档真的没了。
     """
     source_path = doc["source_path"]
+    if source_path.startswith("ashare://"):
+        # A股语料没有本地原件，重嵌由 ashare.cli reembed 负责；这里若继续会删库
+        logger.info("跳过 A股语料（交给 ashare reembed）：%s", source_path)
+        return False
+
     p = Path(source_path)
 
     if p.exists():

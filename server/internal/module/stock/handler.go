@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"stock-agent-server/internal/deps"
+	"stock-agent-server/internal/domain/stockcode"
 	"stock-agent-server/internal/quote"
 	"stock-agent-server/internal/resp"
-	"stock-agent-server/internal/domain/stockcode"
 )
 
 // searchCacheTTL 搜索结果缓存 1 小时：股票代码不会快速增减，
@@ -56,6 +56,16 @@ func SearchStock(c *gin.Context) {
 	}
 
 	results := quote.Search(ctx, q, limit)
+	source := "tencent"
+	// 上游挂掉或确实无结果时用本地主数据兜底：搜索是加自选的第一道入口，
+	// 第三方抽风不该让用户一只股票都搜不到。DB 出错时 SearchLocal 自己吞掉返回 nil
+	if len(results) == 0 {
+		results = SearchLocal(ctx, q, limit)
+		source = "db"
+	}
+	if len(results) == 0 {
+		source = "empty"
+	}
 	// 永远返回非 nil 切片，前端 map/foreach 不用判空
 	if results == nil {
 		results = []quote.SearchResult{}
@@ -75,6 +85,7 @@ func SearchStock(c *gin.Context) {
 	}
 
 	c.Header("X-Cache", "MISS")
+	c.Header("X-Search-Source", source)
 	c.Data(200, "application/json; charset=utf-8", body)
 }
 
@@ -114,6 +125,57 @@ func GetQuote(c *gin.Context) {
 	}
 	if deps.RDB != nil {
 		_ = deps.RDB.Set(ctx, cacheKey, body, quoteCacheTTL).Err()
+	}
+
+	c.Header("X-Cache", "MISS")
+	c.Data(200, "application/json; charset=utf-8", body)
+}
+
+// profileCacheTTL 主数据一天一更，缓存 1 小时足够，免得热门股票把库打热
+const profileCacheTTL = time.Hour
+
+// GetProfile GET /api/v1/stocks/profile?code=600519
+// 股票主数据：名称 / 板块 / 行业 / 概念 / 上市退市，来自迁移 008 的三张表。
+// 行情、估值不在这里——那是实时数据，走 /api/v1/stock/quote。
+func GetProfile(c *gin.Context) {
+	normalized, ok := stock.NormalizeCode(c.Query("code"))
+	if !ok {
+		resp.Fail(c, resp.CodeBadRequest, "股票代码格式不正确，应为 SH/SZ/BJ + 6 位数字")
+		return
+	}
+	code := normalized[2:]
+
+	cacheKey := "stock:profile:" + code
+	ctx := c.Request.Context()
+
+	if deps.RDB != nil {
+		if cached, err := deps.RDB.Get(ctx, cacheKey).Bytes(); err == nil && len(cached) > 0 {
+			c.Header("X-Cache", "HIT")
+			c.Data(200, "application/json; charset=utf-8", cached)
+			return
+		}
+	}
+
+	profile, err := FetchProfile(ctx, code)
+	if err != nil {
+		log.Printf("fetch stock profile failed: code=%s err=%v", code, err)
+		resp.Fail(c, resp.CodeInternal, "主数据查询失败，请稍后重试")
+		return
+	}
+	if profile == nil {
+		// 表已建但没同步，或代码确实不在清单里；两种情况都按 404 处理，不猜
+		resp.Fail(c, resp.CodeNotFound, "没有该股票的主数据，请先执行 sync-master")
+		return
+	}
+
+	body, err := resp.JSONBytes(resp.CodeOK, "ok", profile)
+	if err != nil {
+		log.Printf("marshal stock profile failed: %v", err)
+		resp.Fail(c, resp.CodeInternal, "序列化失败")
+		return
+	}
+	if deps.RDB != nil {
+		_ = deps.RDB.Set(ctx, cacheKey, body, profileCacheTTL).Err()
 	}
 
 	c.Header("X-Cache", "MISS")

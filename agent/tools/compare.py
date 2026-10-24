@@ -5,14 +5,16 @@
 市盈率 PE(TTM)、市净率 PB、总市值——不碰任何历史序列与财务接口，
 不消耗 Tushare 配额，快照在网关还有 30s Redis 缓存。
 
-peers 由模型按行业常识给代码（不知道代码时先调 symbol_search），
-最多 2 家同行（前端对比卡固定「本股 + 2 家」三列）。
+peers 优先由模型按行业判断给出（不知道代码时先调 symbol_search / get_industry_peers），
+最多 2 家同行（前端对比卡固定「本股 + 2 家」三列）；留空时用主数据表按同一东财行业补，
+只是兜底——按代码序取的前两家不一定是最合适的可比公司。
 """
 import asyncio
 
 from langchain_core.tools import tool
 
 from tools import call_tool_safe, go_get, to_ts_code
+from tools.market import digits
 
 # 前端 compare 卡固定三列：本股 + 最多两家同行
 _MAX_PEERS = 2
@@ -51,6 +53,17 @@ async def _fetch_one(code: str) -> dict:
     }
 
 
+async def _auto_peers(code: str) -> list[str]:
+    """peers 留空时按同一东财行业补候选；主数据不可用则返回空（退化为只比本股）。"""
+    try:
+        from repo.stock import industry_peers
+
+        data = await industry_peers(digits(code), limit=_MAX_PEERS)
+    except Exception:  # noqa: BLE001 - 兜底失败不能把对比工具一起拖挂
+        return []
+    return [p["code"] for p in (data.get("peers") or []) if p.get("code")][:_MAX_PEERS]
+
+
 @tool
 async def get_peer_compare(code: str, peers: str = "") -> dict:
     """同业对比：本股 + 最多 2 家同行，仅取当日行情快照对比
@@ -59,15 +72,27 @@ async def get_peer_compare(code: str, peers: str = "") -> dict:
     Args:
         code: 本股代码，如 "600519"。
         peers: 同行代码，逗号分隔（如 "000858,600809"），最多 2 家；
-               只有名称不知道代码时，先调 symbol_search 查代码。
+               只有名称不知道代码时先调 symbol_search；
+               想挑规模相近的同行时先调 get_industry_peers 再传进来——
+               留空会自动按同行业补两家，但那只是兜底，不一定是最合适的比较对象。
 
     Returns:
-        {"ok": True, "data": {items: [{name, price, changePct, pe, pb, totalMv}...]}}
+        {"ok": True, "data": {items: [{name, price, changePct, pe, pb, totalMv}...],
+        ts_code, peers_source}}；
         成功（items 首位是本股）；单只失败时该项带 error，不影响其余标的。
     """
     codes = [code] + _split_peers(peers)
+    source = "explicit" if len(codes) > 1 else "industry"
+    if len(codes) == 1:
+        codes += await _auto_peers(code)
+    if len(codes) == 1:
+        source = "none"
+
     items = await asyncio.gather(*[_fetch_one(c) for c in codes])
     ok_items = [it for it in items if "error" not in it]
     if not ok_items:
         return {"ok": False, "error": "行情快照全部获取失败，无法对比"}
-    return {"ok": True, "data": {"items": items, "ts_code": to_ts_code(code)}}
+    return {
+        "ok": True,
+        "data": {"items": items, "ts_code": to_ts_code(code), "peers_source": source},
+    }

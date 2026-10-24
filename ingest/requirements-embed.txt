@@ -1,0 +1,12 @@
+# 本地向量化依赖（离线部署需要；不跑 ashare 的纯文件 ingest 不必安装）
+#
+# torch 体积约 1GB，国内默认源拿到的是 CUDA 版。CPU 机器建议先单独装：
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# 再安装本文件，避免把 CUDA 运行库打进镜像。
+torch>=2.2.0
+sentence-transformers>=3.0.0
+# Qwen3-Embedding 需要 4.51+ 才有对应模型类，低版本会回落到 AutoModel 并报错
+transformers>=4.51.0
+
+# 可选：bge-m3 等 BGE 模型（原生 1024 维，装之前先确认 chunks.embedding 维度）
+# FlagEmbedding>=1.2.0

@@ -3,6 +3,14 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stock_agent")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# ===== 主数据只读连接池 =====
+# 与 checkpointer / 会话 / 审计的写连接分开：池内连接固定 default_transaction_read_only=on，
+# 工具即使写错语句也改不了数据。没有单独建 ROLE，因为 LLM 不持有凭据、也没有 SQL 通道，
+# 这一层防的是「我们自己的代码写错」。
+DB_RO_POOL_MAX = int(os.getenv("DB_RO_POOL_MAX", "4"))
+# 建池超时：库不可用时快速失败，交给工具层降级，不拖住整轮对话
+DB_RO_TIMEOUT = float(os.getenv("DB_RO_TIMEOUT", "5"))
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
@@ -35,6 +43,8 @@ RERANK_THRESHOLD = float(os.getenv("RERANK_THRESHOLD", "0.5"))
 RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "8"))
 # 进上下文的片段数（上线数量）；重排候选池见上面的 RERANK_CANDIDATES
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "6"))
+# 同一文档最多进几块：按 doc_id 限流（按标题会把一篇年报压到 2 块）
+RAG_PER_DOC = int(os.getenv("RAG_PER_DOC", "3"))
 # 重排后按 RERANK_THRESHOLD 再裁一次上下文。默认关：历史行为是「只判是否命中，
 # 不裁剪片段」，开启后低分片段不再进 prompt/sources，代价是可能裁到 <2 条触发升级
 RAG_RERANK_FILTER = os.getenv("RAG_RERANK_FILTER", "false").strip().lower() in ("1", "true", "yes", "on")

@@ -7,6 +7,12 @@ pandas>=2.0.0
 python-docx>=1.0.0
 python-pptx>=0.6.21
 openai>=1.0.0
+# ===== A股文本语料采集（ashare 子包）=====
+# akshare 只用于快讯/新闻的公开页面接口；公告与研报走各自的 JSON 接口（net.py）
+akshare>=1.17.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
 # numpy / tabulate 曾声明但代码零引用（numpy 仅 embedder 里一个未使用的 import，
 # tabulate 从未 import），已移除；二者仍是 pandas 的传递依赖，不影响运行
 # 可选（需 GPU 或较大内存）：

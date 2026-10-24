@@ -58,6 +58,7 @@ _MAX_TOOL_CHARS = 6000
 _TOOL_LABELS = {
     "get_quote": "实时行情",
     "symbol_search": "股票搜索",
+    "get_industry_peers": "同行业公司",
     "get_valuation": "估值指标",
     "get_financial_indicator": "财务指标",
     "get_financial_report": "财报数据",
@@ -369,6 +370,9 @@ def _infer_tool_by_args(args: dict):
         return "symbol_search"
     if "peers" in args:
         return "get_peer_compare"
+    # top_n 是 get_industry_peers 独有参数：code+limit 会被判成资讯，所以它不用 limit 命名
+    if "top_n" in args:
+        return "get_industry_peers"
     if "start_time" in args or "end_time" in args:
         return "get_stock_news"
     if "code" in args:

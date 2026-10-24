@@ -64,8 +64,9 @@ curl -s http://127.0.0.1:8080/healthz
 数值型配置（`REDIS_DB` 等）解析失败会直接终止启动：写错环境变量时静默回退默认值，
 问题会藏到运行期才暴露，不如启动时就报错。
 
-启动时会自动建表（AutoMigrate）。表结构见 `migrations/`（001 建表、002 用户表、
-003 alert_rule 升级、004 提醒规则唯一索引）。
+启动时会自动建表（AutoMigrate，只覆盖用户 / 自选 / 提醒）。`migrations/` 里 005 之后
+（向量库、A股语料、A股主数据、财务指标）都由 SQL 迁移持有，不进 AutoMigrate；
+已有库改表请新增迁移文件并手工执行（initdb 只在空数据卷跑）。
 
 ---
 
@@ -86,7 +87,7 @@ server/
     middleware/middleware.go    # Recovery / RequestID / CORS / Auth / AuthAllowQueryToken / RateLimit / AccessLog
     ws/hub.go                   # WebSocket 连接中心 + Push
     hook/hook.go                # 模块间事件（行情已更新）
-    stock/code.go               # 股票代码归一化 / 展示格式
+    domain/stockcode/code.go    # 股票代码归一化 / 展示格式
     util/amount.go              # 金额与涨跌幅格式化
     module/                     # 业务模块：一个页面一个包，自带 model/handler/route
       auth/
@@ -100,11 +101,17 @@ server/
         model.go                # AlertRule + 条件枚举
         handler.go              # 提醒 CRUD + checkAlerts
         route.go
+      stock/
+        handler.go              # 搜索 / 行情快照 / 主数据资料
+        master.go               # 主数据只读查询（stock_basic、v_stock_profile）
+        route.go
     router/router.go            # 只负责挂载各模块
   migrations/001_init.sql       # 建表 SQL
   migrations/002_users.sql      # 用户表
   migrations/003_alert_rule.sql # alert_rule 升级：对齐「新增提醒」弹窗字段
   migrations/004_alert_unique.sql # 提醒规则唯一索引（去重后建）
+  migrations/008_stock_master.sql # A股主数据：清单/行业/概念 + v_stock_profile
+  migrations/009_stock_finance_indicator.sql # 报告期财务宽表（P1，可选启用）
 ```
 
 **分层约定**：`internal/` 下除 `module/` 外都是与具体页面无关的共享基础设施；
@@ -128,6 +135,9 @@ server/
 | 方法 | 路径 | 作用 | 需登录 |
 |---|---|---|---|
 | POST | `/api/v1/auth/login` | 登录发 JWT | 否 |
+| GET | `/api/v1/stocks/search` | 股票搜索（腾讯 smartbox 优先，本地主数据兜底） | 是 |
+| GET | `/api/v1/stocks/profile` | 股票主数据：板块 / 行业 / 概念 / 上市退市 | 是 |
+| GET | `/api/v1/stock/quote` | 单只行情快照（30s Redis 缓存） | 是 |
 | GET | `/api/v1/watchlist` | 列表（含盈亏、排序） | 是 |
 | POST | `/api/v1/watchlist` | 添加 / 更新成本与数量 | 是 |
 | POST | `/api/v1/watchlist/refresh` | 手动刷新 + 提醒检查 | 是 |
@@ -137,6 +147,19 @@ server/
 | PUT | `/api/v1/alerts/:id` | 修改提醒 | 是 |
 | DELETE | `/api/v1/alerts/:id` | 删除提醒 | 是 |
 | GET | `/api/v1/ws` | WebSocket 长连接 | 是 |
+
+### 主数据（迁移 008）
+
+`stock_basic` / `stock_industry` / `stock_concept` 三张表 + 视图 `v_stock_profile`，
+由 `ingest` 的 `python -m ashare.cli sync-master` 灌数（日更清单、周更行业与概念）。
+
+- `GET /stocks/search`：先打腾讯 smartbox；上游失败或返回空时用 `stock_basic` 兜底
+  （代码前缀 + 名称/拼音三元组匹配）。响应头 `X-Search-Source` 标明本次来源
+  （`tencent` / `db` / `empty`），排查「搜不到」时先看它。
+- `GET /stocks/profile?code=`：读 `v_stock_profile`，Redis 缓存 1 小时；表里没有该股票
+  返回 404（多为 `sync-master` 还没跑）。代码可传 `600519` / `SH600519` / `600519.SH`。
+- **行情与估值不在这两张表里**：它们是每日变动的快照，走 `/stock/quote` 的实时源 + 30s 缓存。
+- 这两张表刻意不进 `AutoMigrate`：结构与索引由 SQL 迁移持有，避免 GORM 与迁移脚本分叉。
 
 ### Agent WS 事件契约（`/api/v1/ws/agent`）
 
@@ -151,7 +174,7 @@ server/
 | `card` | `fundflow_card` | 东财资金流行经发射层换算（字段名沿用 moneyflow 契约：buy/sell_sm/md/lg/elg_amount、net_mf_amount；**金额单位万元**，由净额正负拆分而来）；
 命中龙虎榜时并入 `lhb`（`[{seat, buy, sell}]`，仅此三个量，**万元**）与 `lhb_date` | 资金流向卡（含龙虎榜区块） |
 | `card` | `report_card` | `{indicator, income, cashflow}` 三表合并（新浪报表+财务指标，各为单行 dict，可缺表；**金额单位元**） | 财报速览卡 |
-| `card` | `compare_card` | `{items, ts_code}`；items 为 `[{name, price, changePct, pe, pb, totalMv}]`（**当日快照，元口径**，最多本股 + 2 家同行） | 同业对比卡 |
+| `card` | `compare_card` | `{items, ts_code, peers_source}`；items 为 `[{name, price, changePct, pe, pb, totalMv}]`（**当日快照，元口径**，最多本股 + 2 家同行）；`peers_source` = `explicit`（模型指定）/ `industry`（按行业自动补）/ `none`（只比本股） | 同业对比卡 |
 | `card` | `research_card` | 东财研报单行（org/rating/report_type/publish_date/summary/source_name/source_url/industry/eps_forecast/pe_forecast；**数据源无目标价**，targetPrice 恒空） | 研报观点卡 |
 | `card` | `event_card` | `{events, range, note}`；events 为 `[{type, date, title, desc, important, source_url, source_name}]`（由 `get_stock_news` 当日资讯确定性归纳，不做语义推断） | 公司事件卡 |
 | `table` | `symbol_list` | 股票搜索候选行数组 | 搜索候选列表 |
@@ -170,7 +193,8 @@ server/
    近期未上榜时优雅降级（fundflow 卡不带 lhb 区块）。北向/南向/融资融券工具保持下线；
 5. `compare_card` 由 `get_peer_compare` 提供，五个维度全部来自 Go 网关当日行情快照
    （腾讯源）；历史分位、行业均值、一致预期等字段仍**没有数据源**，
-   卡片按缺失降级，不编造。
+   卡片按缺失降级，不编造。`peers` 留空时会按东财行业自动补两家（`peers_source=industry`），
+   只是兜底；要挑规模相近的同行，模型应先调 `get_industry_peers` 再显式传 `peers`。
 6. **数据源（2026-10-23 起）**：卡片数据 = akshare（东财/新浪，免 token）+ baostock（历史日 K，免 token），
    原 Tushare 通道已删除（实测 token 对 moneyflow/top_list 等接口无权限 40203）；
    quote/search/compare 仍走 Go 网关腾讯快照。

@@ -461,7 +461,10 @@ def test_mcp_loader_fallback():
 
     tools = asyncio.run(mcp_loader.aload_stock_tools())
     names = [t.name for t in tools]
-    check("回退直连工具（10 个）", len(names) == 10, str(names))
+    # 不写死数量：新增取数工具不该每次都改这条断言，对齐 get_tools 才是这条用例的本意
+    from tools import get_tools
+
+    check("回退直连工具与 get_tools 一致", names == [t.name for t in get_tools()], str(names))
     check("工具标签表齐全", all(n in _TOOL_LABELS for n in names), str(names))
 
     check("知识库检索工具可构造", search_knowledge_base.name == "search_knowledge_base")
@@ -610,8 +613,16 @@ def test_history_trim_and_session_utils():
 def test_retrieval_knobs():
     print("\n[P10] 候选池 N / 上线数量 k 的接线与裁剪")
     from langchain_core.documents import Document
-    from config import RERANK_CANDIDATES
-    from rag.retriever import build_retriever, _apply_rerank_filter, _clean_docs
+    from config import RAG_PER_DOC, RERANK_CANDIDATES
+    from rag.retriever import (
+        build_retriever,
+        _apply_rerank_filter,
+        _build_search_sql,
+        _clean_docs,
+        _normalize_since,
+        _normalize_source_type,
+        _normalize_stock_code,
+    )
 
     r = build_retriever(k=4, candidates=30)
     check("k 与 candidates 可分别配置", r.k == 4 and r.candidates == 30, f"{r.k}/{r.candidates}")
@@ -630,12 +641,39 @@ def test_retrieval_knobs():
     # 重排分缺失（重排关闭/失败）时不能把候选裁空，否则误判为「检索不足」
     nod = [Document(page_content="z" * 60, metadata={"id": "e", "title": "t3", "similarity": 0.8})]
     check("无重排分时不裁空", len(_apply_rerank_filter(nod, 0.5, enabled=True)) == 1)
-    check("per_title 限制同文档条数",
-          [x.metadata["id"] for x in _clean_docs(docs, per_title=2)] == ["a", "b", "d"])
+    check("per_doc 限制同文档条数（无 doc_id 时回落标题）",
+          [x.metadata["id"] for x in _clean_docs(docs, per_doc=2)] == ["a", "b", "d"])
+    check("per_doc 默认取 RAG_PER_DOC", build_retriever(k=6).per_doc == RAG_PER_DOC)
+
+    # 同标题不同 doc_id（年报标题在库里高度重复）：按 doc_id 限流，不能互相挤掉
+    def ddoc(i, doc_id, title="2025年年度报告"):
+        return Document(page_content=i + "y" * 60, metadata={
+            "id": i, "doc_id": doc_id, "title": title, "similarity": 0.8, "rerank_score": 0.9})
+
+    multi = [ddoc("m1", "docA"), ddoc("m2", "docA"), ddoc("m3", "docA"), ddoc("m4", "docB")]
+    kept_doc = [x.metadata["id"] for x in _clean_docs(multi, per_doc=2)]
+    check("同标题不同文档各自计数", kept_doc == ["m1", "m2", "m4"], str(kept_doc))
+
+    # 过滤下推到 vec/lex 两路；非法值被忽略，不能把 SQL 拼坏
+    plain_sql, plain_params = _build_search_sql()
+    check("无过滤时不 join 语料表", "ashare_documents" not in plain_sql and not plain_params,
+          plain_sql[:80])
+    check("过滤值归一化", (
+        _normalize_stock_code("sh600519") == "600519"
+        and _normalize_source_type("研报") == "research_report"
+        and _normalize_source_type("不存在") == ""
+        and _normalize_since("2025-1-1") == ""
+        and _normalize_since("2025-01-01") == "2025-01-01 00:00:00+08:00"
+    ))
+    filt_sql, filt_params = _build_search_sql("600519", "research_report", "2025-01-01 00:00:00+08:00")
+    check("过滤条件覆盖两路召回",
+          filt_sql.count("a.stock_codes") == 2 and filt_sql.count("a.source_type") == 2
+          and filt_sql.count("a.pub_time") == 2, filt_sql)
+    check("过滤参数只传一份", set(filt_params) == {"code", "stype", "since"}, str(filt_params))
 
     # 去重键必须用归一化全文。ingest 给每个 chunk 注入「[标题路径]」前缀，
     # 同标题兄弟片段前 40 字完全一致，按前缀比对会把不同段落整条误删
-    # （等价于把 per_title 压成 1）——下面两组前 40 字刻意相同。
+    # （等价于把 per_doc 压成 1）——下面两组前 40 字刻意相同。
     prefix = "[投教手册 > 估值指标 > 市盈率的适用边界] " + "零" * 40
 
     def seg(i, body):
@@ -643,14 +681,14 @@ def test_retrieval_knobs():
             "id": i, "title": "t1", "similarity": 0.8, "rerank_score": 0.9})
 
     sib = [seg("f", "甲段正文内容"), seg("g", "乙段正文内容")]
-    kept = [x.metadata["id"] for x in _clean_docs(sib, per_title=2)]
+    kept = [x.metadata["id"] for x in _clean_docs(sib, per_doc=2)]
     check("同标题同前缀不同正文都保留", kept == ["f", "g"], str(kept))
     dup = [seg("h", "同一段正文"), seg("i", "同一段正文")]
-    check("不同 id 的同一段正文被去重", len(_clean_docs(dup, per_title=2)) == 1)
+    check("不同 id 的同一段正文被去重", len(_clean_docs(dup, per_doc=2)) == 1)
     ws = [seg("k", "同一段 正文"), seg("l", "同一段\n\n正文")]
-    check("仅空白长度差异也判为同一段", len(_clean_docs(ws, per_title=2)) == 1)
+    check("仅空白长度差异也判为同一段", len(_clean_docs(ws, per_doc=2)) == 1)
     same_id = [seg("j", "甲"), seg("j", "乙")]
-    check("同 id 重复被去重", len(_clean_docs(same_id, per_title=2)) == 1)
+    check("同 id 重复被去重", len(_clean_docs(same_id, per_doc=2)) == 1)
 
 
 def main():

@@ -9,13 +9,19 @@ WORKDIR /app
 # pip 源：国内构建默认走清华源，海外可传 --build-arg 覆盖
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
-COPY requirements.txt .
+COPY requirements.txt requirements-embed.txt ./
 RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
+
+# 本地向量化依赖（torch 近 1GB）：只有跑 ashare profile 才需要，默认不装
+ARG INSTALL_EMBED=0
+RUN if [ "$INSTALL_EMBED" = "1" ]; then \
+        pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements-embed.txt; \
+    fi
 
 COPY . .
 
-# 创建默认监听目录
-RUN mkdir -p /app/data/docs
+# 创建默认监听目录与 A股语料目录
+RUN mkdir -p /app/data/docs /app/data/ashare
 
 ENV WATCH_DIR=/app/data/docs
 ENV PYTHONUNBUFFERED=1

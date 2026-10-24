@@ -4,7 +4,7 @@ call_tool_safe 统一封装「8s 超时 + 重试 1 次 + 失败降级」，工�
 而是返回 {"ok": False, "error": ...}；go_get 复用共享 httpx.AsyncClient（连接池 + keep-alive）并自解 Go 信封。
 
 数据源：Go 网关（实时行情/搜索）、akshare（东财/新浪：估值/资金流/财报/资讯/龙虎榜/研报）、
-baostock（历史日 K），均免 token，工具全部无条件注册。
+baostock（历史日 K）、PG 主数据表（股票清单/行业/概念，只读），均免 token，工具全部无条件注册。
 本模块同时是 MCP 工具源（mcp/stock_server.py 经 tools/mcp_loader.py 加载）的兜底来源：
 MCP 子进程失败时整段回退到这里，工具名 / 参数 / 返回契约保持一致。
 """
@@ -144,22 +144,23 @@ def get_tools() -> list:
     所有数据源（Go 网关 / akshare / baostock）均免 token，无条件注册；
     个别接口失败时由 call_tool_safe 降级，不影响其余工具。
     """
-    from tools.quote import get_quote
-    from tools.search import symbol_search
     from tools.compare import get_peer_compare
     from tools.fundamental import (
-        get_valuation,
         get_financial_indicator,
         get_financial_report,
+        get_valuation,
     )
-    from tools.moneyflow import get_money_flow
-    from tools.news import get_stock_news
     from tools.history import get_history_daily
     from tools.lhb import get_top_list
+    from tools.moneyflow import get_money_flow
+    from tools.news import get_stock_news
+    from tools.peers import get_industry_peers
+    from tools.quote import get_quote
     from tools.research import get_research_reports
+    from tools.search import symbol_search
 
     return [
-        get_quote, symbol_search, get_peer_compare,
+        get_quote, symbol_search, get_industry_peers, get_peer_compare,
         get_valuation, get_financial_indicator, get_financial_report,
         get_money_flow, get_stock_news, get_history_daily, get_top_list,
         get_research_reports,

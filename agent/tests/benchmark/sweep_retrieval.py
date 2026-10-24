@@ -3,7 +3,7 @@
 """候选池 × 上线数量 扫描：collect → latency → replay → report。
 
 为什么只打一遍接口就能扫全部组合：SEARCH_SQL 里 vec/lex 各 LIMIT 50 与外层
-LIMIT $3 相互独立，RRF 分由窗口函数算出、与截断无关，所以 limit=N 的结果
+LIMIT %(limit)s 相互独立，RRF 分由窗口函数算出、与截断无关，所以 limit=N 的结果
 恒等于 limit=50 结果的前 N 条。于是只需以 N=50 采集一次候选池，其余
 (N, k) 组合全部在本地切片重放。重放顺序必须与线上一致：
 切 RRF 前 N 条 → 按重排分排序 → 阈值裁剪（可选）→ _clean_docs → 切 k。
@@ -39,7 +39,7 @@ sys.path.insert(0, str(HERE.parents[0]))          # agent/tests/
 RUNS_DIR = HERE / "runs"
 DEFAULT_CASES = HERE / "retrieval_cases.jsonl"
 POOL_N = 50          # 采集用的候选池上限，必须 >= 所有待测 N
-PER_TITLE = 2        # _clean_docs 默认值，作为主口径
+PER_DOC = 3          # _clean_docs 默认值（RAG_PER_DOC），作为主口径
 DEFAULT_NS = [10, 20, 30, 50]
 DEFAULT_KS = [3, 4, 5, 6, 8]
 
@@ -163,6 +163,7 @@ def _dump(obj, path: Path) -> None:
 def _pool_item(d) -> dict:
     return {
         "chunk_id": str(d.metadata.get("id", "")),
+        "doc_id": str(d.metadata.get("doc_id", "")),
         "title": d.metadata.get("title", ""),
         "rrf": float(d.metadata.get("score", 0.0) or 0.0),
         "similarity": float(d.metadata.get("similarity", 0.0) or 0.0),
@@ -284,7 +285,7 @@ async def cmd_latency(args, pools: list = None) -> dict:
 
 # ===== replay：离线切片重放 =====
 
-def _eval_one(rec: dict, n: int, k: int, filt: bool, per_title: int,
+def _eval_one(rec: dict, n: int, k: int, filt: bool, per_doc: int,
               th: float, min_chunks: int, tok_cache: dict) -> dict:
     """按线上顺序复现一次检索：切 RRF 前 N → 重排排序 → 裁阈值 → clean → 切 k。"""
     from langchain_core.documents import Document
@@ -293,6 +294,7 @@ def _eval_one(rec: dict, n: int, k: int, filt: bool, per_title: int,
     sub = rec["pool"][:n]
     docs = [Document(page_content=p["content"], metadata={
         "id": p["chunk_id"],
+        "doc_id": p.get("doc_id", ""),
         "title": p["title"],
         "score": p["rrf"],
         "similarity": p["similarity"],
@@ -300,7 +302,7 @@ def _eval_one(rec: dict, n: int, k: int, filt: bool, per_title: int,
     }) for p in sub]
     docs.sort(key=lambda d: d.metadata.get("rerank_score") or 0.0, reverse=True)
     docs = rg._apply_rerank_filter(docs, th, enabled=filt)
-    ctx = rg._clean_docs(docs, per_title=per_title)[:k]
+    ctx = rg._clean_docs(docs, per_doc=per_doc)[:k]
 
     gold = set(rec["gold"])
     ctx_ids = {d.metadata["id"] for d in ctx}
@@ -360,15 +362,15 @@ def cmd_replay(args) -> dict:
     tok_cache: dict = {}
     matrix = []
     for filt in (False, True):
-        for pt in args.per_titles:
+        for pd in args.per_docs:
             for n in args.ns:
                 for k in args.ks:
-                    rows = [_eval_one(r, n, k, filt, pt, th, args.min_chunks, tok_cache) for r in pos]
-                    neg_rows = [_eval_one(r, n, k, filt, pt, th, args.min_chunks, tok_cache) for r in neg]
+                    rows = [_eval_one(r, n, k, filt, pd, th, args.min_chunks, tok_cache) for r in pos]
+                    neg_rows = [_eval_one(r, n, k, filt, pd, th, args.min_chunks, tok_cache) for r in neg]
                     agg = _aggregate(rows)
                     neg_esc = [1.0 if r["escalate"] else 0.0 for r in neg_rows]
                     agg.update({
-                        "n": n, "k": k, "filter": filt, "per_title": pt,
+                        "n": n, "k": k, "filter": filt, "per_doc": pd,
                         "threshold": th,
                         # 负样本误命中 = 没升级（闸没拦住）
                         "false_hit": (1 - _mean(neg_esc)) if neg else None,
@@ -381,7 +383,7 @@ def cmd_replay(args) -> dict:
         "tag": args.tag,
         "ts": datetime.now().isoformat(timespec="seconds"),
         "cases": {"positive": len(pos), "negative": len(neg)},
-        "params": {"ns": args.ns, "ks": args.ks, "per_titles": args.per_titles,
+        "params": {"ns": args.ns, "ks": args.ks, "per_docs": args.per_docs,
                    "threshold": th, "min_chunks": args.min_chunks, "pool": POOL_N},
         "matrix": matrix,
     }
@@ -408,12 +410,12 @@ def _decide(matrix: list, ns: list, ks: list, latency: dict = None) -> dict:
         return (cur - ref) <= LAT_SLACK_MS
     base_key = (20, 6, False)
     base = next((r for r in matrix
-                 if (r["n"], r["k"], r["filter"]) == base_key and r["per_title"] == PER_TITLE), None)
+                 if (r["n"], r["k"], r["filter"]) == base_key and r["per_doc"] == PER_DOC), None)
     n_max = max(ns)
 
     plans = []
     for filt in (False, True):
-        rows = [r for r in matrix if r["filter"] == filt and r["per_title"] == PER_TITLE]
+        rows = [r for r in matrix if r["filter"] == filt and r["per_doc"] == PER_DOC]
         by = {(r["n"], r["k"]): r for r in rows}
         rec_of = {r["n"]: r["recall"] for r in rows if r["k"] == ks[0]}
         rec_max = rec_of.get(n_max)
@@ -508,7 +510,7 @@ def render_report(sweep: dict, decision: dict, latency: dict) -> str:
     add(f"# 检索候选池 / 上线数量 扫描报告（{sweep['tag']}）\n")
     add(f"- 时间：{sweep['ts']}")
     add(f"- 评测集：正样本 {sweep['cases']['positive']} 条，负样本 {sweep['cases']['negative']} 条")
-    add(f"- 采集候选池：N={sweep['params']['pool']}｜重排阈值：{th}｜per_title 主口径：{PER_TITLE}")
+    add(f"- 采集候选池：N={sweep['params']['pool']}｜重排阈值：{th}｜per_doc 主口径：{PER_DOC}")
     add("")
 
     # ---------- 结论 ----------
@@ -573,7 +575,7 @@ def render_report(sweep: dict, decision: dict, latency: dict) -> str:
     rows = []
     for n in ns:
         r = next((x for x in m if x["n"] == n and x["k"] == k_ref
-                  and not x["filter"] and x["per_title"] == PER_TITLE), None)
+                  and not x["filter"] and x["per_doc"] == PER_DOC), None)
         if not r:
             continue
         lat = (latency or {}).get(str(n), {})
@@ -596,7 +598,7 @@ def render_report(sweep: dict, decision: dict, latency: dict) -> str:
         rows = []
         for k in ks:
             r = next((x for x in m if x["n"] == p["n"] and x["k"] == k and x["filter"] == filt
-                      and x["per_title"] == PER_TITLE), None)
+                      and x["per_doc"] == PER_DOC), None)
             if not r:
                 continue
             mark = " ✅" if k == p["k"] else ""
@@ -624,24 +626,24 @@ def render_report(sweep: dict, decision: dict, latency: dict) -> str:
         add("注：数据库侧开销与 N 无关（vec/lex 各 LIMIT 50 恒定），N 的成本只体现在重排耗时与上下文长度上。\n")
 
     # ---------- 敏感性 ----------
-    pts = sorted({x["per_title"] for x in m})
+    pts = sorted({x["per_doc"] for x in m})
     if len(pts) > 1:
-        add("## 六、per_title 敏感性\n")
+        add("## 六、per_doc 敏感性\n")
         rows = []
         for pt in pts:
-            r = next((x for x in m if x["per_title"] == pt and x["n"] == decision["plans"][0]["n"]
+            r = next((x for x in m if x["per_doc"] == pt and x["n"] == decision["plans"][0]["n"]
                       and x["k"] == decision["plans"][0]["k"] and not x["filter"]), None)
             if r:
                 rows.append([str(pt), _fmt(r["hit"], True), _fmt(r["coverage"], True),
                              _fmt(r["noise"], True), _fmt(r["tokens"], False, 0)])
-        L += _table(["per_title", "Hit@k", "Coverage", "Noise@k", "tokens"], rows)
+        L += _table(["per_doc", "Hit@k", "Coverage", "Noise@k", "tokens"], rows)
         add("")
 
     # ---------- 适用条件 ----------
     add("## 七、适用条件与失效情形\n")
     add("- 语料规模：若 chunks 总数远小于 50（融合后唯一候选取不到 N），N 之间等价，N 维免调；"
         "若超过 5 万，HNSW 默认 ef_search 会先成为召回瓶颈，需同步调 `SET hnsw.ef_search`。")
-    add("- 单一文档密集：某主题只有 1–2 篇长文时 `per_title` 是真实瓶颈，此时该调 per_title 而不是 k。")
+    add("- 单一文档密集：某主题只有 1–2 篇长文时 `per_doc` 是真实瓶颈，此时该调 per_doc 而不是 k。")
     add(f"- 阈值变动：RERANK_THRESHOLD 改动后 Noise@k 与「开启裁剪」方案的有效条数全变，结论需重跑"
         f"（当前口径 {th}）。")
     add("- 换重排模型：分数尺度不可跨模型比较，整份结论失效。")
@@ -691,7 +693,7 @@ def main():
 
     p_rep = sub.add_parser("replay", help="离线切片重放 + 选优")
     common(p_rep)
-    p_rep.add_argument("--per-titles", type=_ints, default=[PER_TITLE], help="per_title 档位，如 2,3")
+    p_rep.add_argument("--per-docs", type=_ints, default=[PER_DOC], help="per_doc 档位，如 2,3")
     p_rep.add_argument("--threshold", type=float, default=None, help="重排阈值，默认取 RERANK_THRESHOLD")
     p_rep.add_argument("--min-chunks", type=int, default=2, help="与 _MIN_CHUNKS 对齐")
 
@@ -700,7 +702,7 @@ def main():
     p_all.add_argument("--pool", type=int, default=POOL_N)
     p_all.add_argument("--concurrency", type=int, default=4)
     p_all.add_argument("--latency-queries", type=int, default=20)
-    p_all.add_argument("--per-titles", type=_ints, default=[PER_TITLE, PER_TITLE + 1])
+    p_all.add_argument("--per-docs", type=_ints, default=[PER_DOC, PER_DOC + 1])
     p_all.add_argument("--threshold", type=float, default=None)
     p_all.add_argument("--min-chunks", type=int, default=2)
 

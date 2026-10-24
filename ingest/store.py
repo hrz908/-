@@ -86,6 +86,7 @@ class Store:
                        embed_model, status, chunk_count, error, updated_at
                 FROM documents
                 WHERE embed_model != %s AND status = 'ok'
+                  AND NOT starts_with(source_path, 'ashare://')
                 ORDER BY updated_at ASC
                 """,
                 (current_model,),

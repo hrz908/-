@@ -32,6 +32,7 @@ from langchain_core.messages import HumanMessage
 from core.state import initial_state
 from core.graph import get_graph
 from core.checkpointer import close_checkpointer, prune_thread_checkpoints
+from db import close_pool as close_ro_pool
 from nodes import log_agent_run
 from core.sessions import (
     delete_session,
@@ -73,6 +74,11 @@ async def lifespan(app: FastAPI):
         logger.warning("ensure chat_sessions failed: %s", e)
     yield
     await close_checkpointer()
+    # 主数据只读池：与 checkpointer 分开收尾，任一失败不影响其它资源释放
+    try:
+        await close_ro_pool()
+    except Exception as e:  # noqa: BLE001 - 收尾失败不影响进程退出
+        logger.warning("close read-only pool failed: %s", e)
     await close_http_client()
     # MCP 工具会话（stdio 子进程）退出时断开，失败静默
     try:

@@ -130,9 +130,46 @@ services:
     profiles:
       - ingest
 
+  # 可选：A股文本语料采集 + 离线向量化。需要时加 --profile ashare 启动
+  #
+  # 模型权重不打进镜像：宿主机目录只读挂到 /models，容器内禁网拉取。
+  # 首次部署前把模型放到 ${ASHARE_MODEL_DIR}/${ASHARE_MODEL_NAME}，例如
+  #   /opt/stock-agent/models/Qwen3-Embedding-4B
+  ashare:
+    build:
+      context: ../ingest
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        # 1 = 镜像内装 torch/sentence-transformers（离线必需）
+        INSTALL_EMBED: ${ASHARE_INSTALL_EMBED:-1}
+    container_name: stock-agent-ashare
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: "postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stock_agent?sslmode=disable"
+      ASHARE_DATA_DIR: /data/ashare
+      # 与 agent/ingest 的 embedding 保持同一模型同一维度，否则写入和检索落在两个向量空间
+      ASHARE_EMBED_MODEL: ${OFFLINE_EMBED_MODEL:-Qwen/Qwen3-Embedding-4B}
+      ASHARE_EMBED_DIM: ${EMBED_DIM:-1536}
+      ASHARE_MODEL_PATH: /models/${ASHARE_MODEL_NAME:-Qwen3-Embedding-4B}
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - asharedata:/data/ashare
+      - ${ASHARE_MODEL_DIR:-../models}:/models:ro
+      # init-db 子命令直接读这份迁移，避免在容器里再造一份 SQL
+      - ../server/migrations:/app/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - ashare
+
 volumes:
   pgdata:
   redisdata:
   uploads:
   ingestdata:
   parseddata:
+  asharedata:
