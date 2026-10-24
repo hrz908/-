@@ -104,6 +104,8 @@ type Config struct {
 	WeComCorpID  string `mapstructure:"wecom_corp_id"` // 企业微信企业 ID（corpid）
 	WeComSecret  string `mapstructure:"wecom_secret"`
 	WeComAgentID int    `mapstructure:"wecom_agent_id"`
+	// WeComWebhook 群机器人地址：不需要 access_token 与可信 IP，与应用消息并行推送
+	WeComWebhook string `mapstructure:"wecom_webhook"`
 
 	UploadDir    string `mapstructure:"upload_dir"`
 	Env          string `mapstructure:"env"`           // dev（默认）/ prod；prod 强制校验 JWT_SECRET 与微信凭据
@@ -179,6 +181,7 @@ func setDefaults() {
 	d("wecom_corp_id", "wwb79b9d374733e09e")
 	d("wecom_secret", "2XyncvexPia7u-EIUr3xGerRrbluXw-oRmvdTW23NaA")
 	d("wecom_agent_id", 1000002)
+	d("wecom_webhook", "")
 	d("upload_dir", "./uploads")
 	d("env", "dev")
 	d("allow_origins", "*")

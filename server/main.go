@@ -69,8 +69,8 @@ func main() {
 		cfg.HTTP.QuoteFetchLimit, cfg.HTTP.QuoteBatchSize, cfg.HTTP.QuoteMgetChunk)
 	// 小程序凭据：两个都有值时登录走微信 code2session，否则退化为演示账号
 	wechat.Init(cfg.WechatAppID, cfg.WechatSecret, cfg.HTTP.WechatTimeout)
-	// 企业微信凭据：三项齐全时，命中的提醒会额外推给企业成员（@all），与小程序内 WS 提醒并存
-	wecom.Init(cfg.WeComCorpID, cfg.WeComSecret, cfg.WeComAgentID, cfg.HTTP.WecomTimeout)
+	// 企业微信：应用消息（@all，需可信 IP）与群机器人 Webhook 两条旁路通道，均与 WS 提醒并存
+	wecom.Init(cfg.WeComCorpID, cfg.WeComSecret, cfg.WeComAgentID, cfg.WeComWebhook, cfg.HTTP.WecomTimeout)
 	// 行情提醒 WS hub 连接上限（每用户 / 全局）
 	ws.Configure(cfg.Hub.MaxPerUser, cfg.Hub.MaxTotal)
 	if err := upload.Init(cfg.UploadDir); err != nil {

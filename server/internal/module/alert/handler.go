@@ -419,21 +419,16 @@ func checkAlerts(userID int64, ctx context.Context) {
 			"time":            now.Format(time.RFC3339),
 		})
 
-		// 企业微信消息与 WS 提醒并存：异步发送避免同步 HTTP 阻塞刷新循环，失败只记日志。
-		// 独立 goroutine 不经过 gin 的 Recovery，必须自带 panic 兜底，否则一次 panic 会击穿整个进程
-		if wecom.Enabled() {
+		// 企业微信两条通道与 WS 提醒并存：应用消息（@all，需可信 IP）与群机器人（Webhook）。
+		// 异步发送避免同步 HTTP 阻塞刷新循环，失败只记日志
+		if wecom.Enabled() || wecom.WebhookEnabled() {
 			content := buildWecomText(snap, r, now)
-			stockCode := r.StockCode
-			go func() {
-				defer func() {
-					if p := recover(); p != nil {
-						log.Printf("wecom push panic: code=%s err=%v", stockCode, p)
-					}
-				}()
-				if err := wecom.SendTextToAll(content); err != nil {
-					log.Printf("wecom push failed: code=%s err=%v", stockCode, err)
-				}
-			}()
+			if wecom.Enabled() {
+				go safeWecomPush("app", r.StockCode, func() error { return wecom.SendTextToAll(content) })
+			}
+			if wecom.WebhookEnabled() {
+				go safeWecomPush("webhook", r.StockCode, func() error { return wecom.SendTextToWebhook(content) })
+			}
 		}
 
 		if err := deps.DB.WithContext(ctx).Model(&AlertRule{}).
@@ -511,6 +506,19 @@ func delAlertLock(ctx context.Context, userID int64, r AlertRule) {
 	}
 	if err := deps.RDB.Del(ctx, alertLockKey(userID, r)).Err(); err != nil {
 		log.Printf("del alert lock failed: code=%s err=%v", r.StockCode, err)
+	}
+}
+
+// safeWecomPush 企业微信旁路推送：独立 goroutine 不经过 gin 的 Recovery，
+// 必须自带 panic 兜底，否则一次 panic 会击穿整个进程
+func safeWecomPush(channel, stockCode string, send func() error) {
+	defer func() {
+		if p := recover(); p != nil {
+			log.Printf("wecom %s push panic: code=%s err=%v", channel, stockCode, p)
+		}
+	}()
+	if err := send(); err != nil {
+		log.Printf("wecom %s push failed: code=%s err=%v", channel, stockCode, err)
 	}
 }
 

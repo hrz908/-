@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,21 +32,24 @@ const (
 	fallbackTokenTTL = 2 * time.Hour
 )
 
-// 企业微信自建应用凭据，由 main 通过 Init 注入（同 wechat.Init）。
-// 任一为空 / 为 0 表示「未接入企业微信」，提醒只走 WebSocket。
+// 企业微信凭据，由 main 通过 Init 注入（同 wechat.Init）。
+// 应用消息三项任一为空 / 为 0 表示「未接入」，群机器人未配置时该通道静默跳过。
 var (
 	CorpID  string // 企业 ID（corpid）
 	Secret  string // 自建应用的 secret
 	AgentID int    // 自建应用的 agentid
+	// webhookURL 群机器人地址：不需要 access_token，也不受「企业可信 IP」限制
+	webhookURL string
 	// httpClient 复用连接，提醒推送是低频短请求
 	httpClient = httpclient.New(5 * time.Second)
 )
 
-// Init 注入企业微信凭据与上游超时，main 启动时调用一次。
-func Init(corpID, secret string, agentID int, timeout time.Duration) {
+// Init 注入企业微信凭据、群机器人 Webhook 与上游超时，main 启动时调用一次。
+func Init(corpID, secret string, agentID int, webhook string, timeout time.Duration) {
 	CorpID = corpID
 	Secret = secret
 	AgentID = agentID
+	webhookURL = strings.TrimSpace(webhook)
 	if timeout > 0 {
 		httpClient = httpclient.New(timeout)
 	}
@@ -77,6 +81,9 @@ func doJSON(method, url string, body io.Reader, out any) error {
 
 // Enabled 是否已配置企业微信凭据；未配置时不要调接口，否则每条提醒都白等一次网络失败。
 func Enabled() bool { return CorpID != "" && Secret != "" && AgentID != 0 }
+
+// WebhookEnabled 群机器人是否已配置；与应用消息相互独立。
+func WebhookEnabled() bool { return webhookURL != "" }
 
 // access_token 内存缓存：有效期内复用。单实例足够；
 // 企业微信对同一应用重复获取会返回相同 token，多实例各自缓存也互不影响。
@@ -176,4 +183,45 @@ func SendTextToAll(content string) error {
 		return fmt.Errorf("send message failed: errcode=%d errmsg=%s", out.ErrCode, out.ErrMsg)
 	}
 	return nil
+}
+
+// SendTextToWebhook 向群机器人推送一条文本消息。
+// 群机器人不需要 access_token，也不受「企业可信 IP」限制，可作为应用消息不可用时的替代通道；
+// 未配置时静默跳过并返回 nil。
+func SendTextToWebhook(content string) error {
+	if webhookURL == "" {
+		return nil
+	}
+	if content == "" {
+		return errors.New("empty content")
+	}
+
+	buf, err := json.Marshal(map[string]any{
+		"msgtype": "text",
+		"text":    map[string]any{"content": content},
+	})
+	if err != nil {
+		return err
+	}
+
+	var out struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	if err := doJSON(http.MethodPost, webhookURL, bytes.NewReader(buf), &out); err != nil {
+		// webhook URL 里的 key 等同密码，错误文本会带上完整 URL，必须脱敏后再往外抛
+		return errors.New(maskWebhook(err.Error()))
+	}
+	if out.ErrCode != 0 {
+		return fmt.Errorf("webhook send failed: errcode=%d errmsg=%s", out.ErrCode, out.ErrMsg)
+	}
+	return nil
+}
+
+// maskWebhook 把文本里的 webhook key 替换掉，避免日志泄露
+func maskWebhook(msg string) string {
+	if webhookURL == "" {
+		return msg
+	}
+	return strings.ReplaceAll(msg, webhookURL, "<webhook>")
 }
