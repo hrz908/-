@@ -16,7 +16,8 @@ Python Agent (agent/)  ──LangGraph 主图
    ├─ 意图路由：guardrail → rewrite → classify → route_by_intent
    ├─ 子图：rag（RAG 漏斗）/ stock（MCP 工具取数）/ chat
    ├─ 工具层 tools/：行情/搜索/财务/资金流/龙虎榜/资讯/历史K线/研报 + MCP
-   └─ 检索 rag/retriever：pgvector 相似度 + 阈值/LLM 两级判定
+   └─ 检索 rag/retriever：pgvector 向量 + 全文 RRF 融合 → 交叉编码器重排
+        → sufficiency_check：重排分阈值 + LLM 判读两级（不足则 escalate 到 stock 子图）
         │
         ▼
 PostgreSQL(pgvector) + Redis  ← ingest/ 写入文档向量；网关/agent 共用连接
